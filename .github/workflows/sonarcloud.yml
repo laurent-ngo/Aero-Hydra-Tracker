@@ -39,7 +39,7 @@ permissions:
   pull-requests: read # allows SonarCloud to decorate PRs with analysis results
 
 jobs:
-  Analysis:
+  sonarcloud:
     runs-on: ubuntu-latest
 
     steps:
@@ -48,6 +48,19 @@ jobs:
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
           
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+         
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-mock requests-mock pytest-cov
+
+      - name: Run tests and generate coverage
+        run: |
+          pytest --cov=. --cov-report=xml
+
       - name: Analyze with SonarCloud
 
         # You can pin the exact commit or the version.

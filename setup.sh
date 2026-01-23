@@ -10,3 +10,4 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githu
 sudo apt update
 sudo apt install jq gh -y
 
+pip install pytest pytest-cov
