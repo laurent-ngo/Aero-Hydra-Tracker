@@ -78,6 +78,7 @@ jobs:
             -Dsonar.organization=laurent-ngo
             -Dsonar.qualitygate.wait=true
 
+            -Dsonar.coverage.exclusions=**/*
             -Dsonar.python.coverage.reportPaths= # Leaves this empty to ignore coverage
             #-Dsonar.python.coverage.reportPaths=coverage.xml # Leaves this empty to ignore coverage
 
