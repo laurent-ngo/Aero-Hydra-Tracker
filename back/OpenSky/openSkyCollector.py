@@ -1,54 +1,50 @@
 import requests
-import time
+import os
 
-class OpenSkyCollector:
-    def __init__(self, icao_list):
+
+class FirefleetCollector:
+    def __init__(self, token):
         self.url = "https://opensky-network.org/api/states/all"
-        self.fleet = icao_list
+        self.token = token
 
-    def fetch_fleet_status(self):
-        # We query by specific ICAO24 hex codes
-        params = {'icao24': self.fleet}
+    def get_positions(self, icao_list):
+        # Construct the query parameters
+        params = [('icao24', icao) for icao in icao_list]
+        
+        # New Header Format for OAuth2 / JWT
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json"
+        }
         
         try:
-            response = requests.get(self.url, params=params, timeout=10)
-            response.raise_for_status() # Diplomatic handling of API errors
+            response = requests.get(
+                self.url, 
+                headers=headers, # Switched from auth= to headers=
+                params=params, 
+                timeout=15
+            )
+            response.raise_for_status()
+            
             data = response.json()
-            
-            states = data.get('states')
-            if not states:
-                print("No active flights found for the specified fleet.")
-                return []
+            print("Successfully connected to OpenSky!")
+            return data.get('states', [])
 
-            extracted_data = []
-            for s in states:
-                # Mapping OpenSky indices to readable names
-                plane_data = {
-                    "icao24": s[0],
-                    "callsign": s[1].strip() if s[1] else "N/A",
-                    "longitude": s[5],
-                    "latitude": s[6],
-                    "baro_altitude": s[7], # Altitude in metres
-                    "velocity": s[9],      # Speed in m/s
-                    "last_contact": s[4]
-                }
-                extracted_data.append(plane_data)
-            
-            return extracted_data
-
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching data: {e}")
+        except requests.exceptions.HTTPError as e:
+            print(f"Auth Error: {e.response.status_code} - Check if the token has expired.")
             return []
 
-# --- Usage ---
+# --- Local Test ---
 if __name__ == "__main__":
-    # Example ICAO24s for common water bombers (e.g., Canadair CL-415)
-    # You will replace these with your actual list
-    MY_FLEET = ["FRAFR" ] 
-    
-    collector = OpenSkyCollector(MY_FLEET)
-    results = collector.fetch_fleet_status()
+    # In GitLab, we will use os.getenv('OPENSKY_CLIENT_SECRET')
+    TOKEN = os.getenv('OPENSKY_CLIENT_SECRET')
 
-    for plane in results:
-        print(f"Found {plane['icao24']} ({plane['callsign']}) at {plane['latitude']}, {plane['longitude']}")
-        print(f"  > Altitude: {plane['baro_altitude']}m | Speed: {plane['velocity']}m/s\n")
+    print(f"DEBUG: Token found: {'Yes' if TOKEN else 'No'}")
+    
+    ICAO_TARGETS = ["3b760a", "3b760b"] # Example water bombers
+
+    collector = FirefleetCollector(TOKEN)
+    fleet_status = collector.get_positions(ICAO_TARGETS)
+    
+    for plane in fleet_status:
+        print(f"Unit {plane['icao24']} | Alt: {plane['alt']}m | Spd: {plane['velocity']}m/s")
