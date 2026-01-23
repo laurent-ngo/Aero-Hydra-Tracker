@@ -34,6 +34,45 @@ class FirefleetCollector:
             print(f"Auth Error: {e.response.status_code} - Check if the token has expired.")
             return []
 
+    def get_by_icao24(self, icao_list):
+        # Force everything to lowercase to meet OpenSky requirements
+        clean_icao = [str(icao).lower() for icao in icao_list]
+        
+        # Construct the query parameters correctly
+        params = [('icao24', icao) for icao in clean_icao]
+        
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json"
+        }
+        
+        try:
+            response = requests.get(self.url, headers=headers, params=params, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+                
+            states = data.get('states', [])
+            
+            # Filtering in Python
+            # Callsigns in OpenSky are 8 chars long, often padded with spaces
+            matched_fleet = []
+            for s in states:
+                raw_icao24 = s[0].strip()
+                if raw_icao24 in clean_icao:
+                    matched_fleet.append({
+                        "icao24": raw_icao24,
+                        "callsign": s[1],
+                        "country": s[2],
+                        "lat": s[6],
+                        "lon": s[5],
+                        "alt": s[7]
+                    })
+            return matched_fleet
+        
+        except Exception as e:
+            print(f"Error: {e}")
+            return []
+    
     def get_by_callsigns(self, target_callsigns):
             """Fetches all states and filters by a list of callsigns."""
             headers = {"Authorization": f"Bearer {self.token}"}
@@ -55,6 +94,7 @@ class FirefleetCollector:
                         matched_fleet.append({
                             "icao24": s[0],
                             "callsign": raw_callsign,
+                            "country": s[2],
                             "lat": s[6],
                             "lon": s[5],
                             "alt": s[7]
@@ -67,15 +107,22 @@ class FirefleetCollector:
             
 # --- Local Test ---
 if __name__ == "__main__":
-    # In GitLab, we will use os.getenv('OPENSKY_CLIENT_SECRET')
-    TOKEN = os.getenv('OPENSKY_CLIENT_SECRET')
+    # In GitLab, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
+    TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
 
     print(f"DEBUG: Token found: {'Yes' if TOKEN else 'No'}")
     
-    MY_CALLSIGNS = ["FRBAQ", "PHBVK", "N937MA", "CAT724"] # Example water bombers
+    MY_CALLSIGNS = ["MILAN7V"] # Example water bombers
+    
+    # All Canadair and Dash (Securité civile)
+    MY_ICAO24S = ["3B7B70", "3B7B71", "3B7B72", "3B7B73", "3B7B74", "3B7B75", "3B7B76", "3B7B6B", "3B7B6C", "3B7B6D", "3B7B6E", "3B7B6F", "3B7B39", "3B7B3A", "3B7B3D", "3B7B3E", "3B7B3F", "3B7B63", "3B7B85", "3B7B86" ]
+    # For test
+    MY_ICAO24S = ["3F59F3"]   
 
     collector = FirefleetCollector(TOKEN)
-    fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)(MY_CALLSIGNS)
+    
+    #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
+    fleet_status = collector.get_by_icao24(MY_ICAO24S)
     
     for plane in fleet_status:
         print(f"Unit {plane}")
