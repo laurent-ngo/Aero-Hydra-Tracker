@@ -57,12 +57,13 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Generate a token on Sonarcloud.io, add it to the secrets of this repo with the name SONAR_TOKEN (Settings > Secrets > Actions > add new repository secret)
         with:
           # Additional arguments for the SonarScanner CLI
-          #args:
+          args:
             # Unique keys of your project and organization. You can find them in SonarCloud > Information (bottom-left menu)
             # mandatory
                         
-            #-Dsonar.projectKey=
-            #-Dsonar.organization=
+            -Dsonar.projectKey=laurent-ngo_Aero-Hydra-Tracker
+            -Dsonar.organization=laurent-ngo
+            -Dsonar.qualitygate.wait=true
 
             # Comma-separated paths to directories containing main source files.
             #-Dsonar.sources= # optional, default is project base directory
@@ -73,15 +74,3 @@ jobs:
           # When you need the analysis to take place in a directory other than the one from which it was launched, default is .
           
           projectBaseDir: .
-
-      - name: SonarCloud Scan
-        uses: sonarsource/sonarqube-scan-action@master # or your current version
-        with:
-          args: >
-            -Dsonar.projectKey=your_project_key
-            -Dsonar.organization=your_org_key
-            -Dsonar.qualitygate.wait=true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          
