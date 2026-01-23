@@ -2,7 +2,7 @@
 
 LOCAL_ENVS="./local.sh"
 
-if [ -x "$LOCAL_ENVS" ]; then
+if [[ -x "$LOCAL_ENVS" ]]; then
     echo "Loading local variables..."
     bash "$LOCAL_ENVS"
 fi
