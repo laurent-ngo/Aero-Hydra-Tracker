@@ -11,3 +11,4 @@ sudo apt update
 sudo apt install jq gh -y
 
 pip install pytest pytest-cov
+pip install requests

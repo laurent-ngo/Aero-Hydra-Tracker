@@ -19,6 +19,6 @@ TOKEN=$(curl -s -X POST "$AUTH_URL" \
   -d "client_secret=$CLIENT_SECRET" | jq -r .access_token)
   
 # Output result (Fixed variable name from $TOKE to $TOKEN)
-echo "Access Token saved under OPENSKY_CLIENT_SECRET"
-export OPENSKY_CLIENT_SECRET="$TOKEN"
+echo "Access Token saved under OPENSKY_CLIENT_TOKEN"
+export OPENSKY_CLIENT_TOKEN="$TOKEN"
 
