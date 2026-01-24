@@ -117,7 +117,7 @@ if __name__ == "__main__":
     # All Canadair and Dash (Securité civile)
     MY_ICAO24S = ["3B7B70", "3B7B71", "3B7B72", "3B7B73", "3B7B74", "3B7B75", "3B7B76", "3B7B6B", "3B7B6C", "3B7B6D", "3B7B6E", "3B7B6F", "3B7B39", "3B7B3A", "3B7B3D", "3B7B3E", "3B7B3F", "3B7B63", "3B7B85", "3B7B86" ]
     # For test
-    MY_ICAO24S = ["3F59F3"]   
+    #MY_ICAO24S = ["3F59F3"]   
 
     collector = FirefleetCollector(TOKEN)
     

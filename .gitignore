@@ -3,3 +3,4 @@ coverage.xml
 .coverage
 *.pyc
 local.sh
+.vscode/settings.json
