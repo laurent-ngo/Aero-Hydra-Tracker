@@ -50,7 +50,7 @@ case "$1" in
     migrate)
         info "Running database migrations..."
         #source "$SCRIPT_DIR/.venv/bin/activate"
-        python3 "$SCRIPT_DIR/migrate.py"
+        python3 "$SCRIPT_DIR/src/migrate.py"
 
         if [ $? -eq 0 ]; then
             info "Deployment successful! System is ready."
