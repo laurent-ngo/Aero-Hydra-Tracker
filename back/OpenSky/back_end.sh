@@ -9,7 +9,7 @@ LOCAL_ENVS="$SCRIPT_DIR/local.sh"
 
 
 usage() {
-    echo "Usage: $0 {start|stop|status|migrate|token|clean}"
+    echo "Usage: $0 {start|stop|status|migrate|load|token|clean}"
     exit 1
 }
 
@@ -49,7 +49,6 @@ case "$1" in
 
     migrate)
         info "Running database migrations..."
-        #source "$SCRIPT_DIR/.venv/bin/activate"
         python3 "$SCRIPT_DIR/src/migrate.py"
 
         if [ $? -eq 0 ]; then
@@ -61,7 +60,14 @@ case "$1" in
         info "Querying database for table list..."
         docker exec -i aero-hydra-db psql -U ${DB_USER} -d ${DB_NAME} -c "\dt"
         ;;
-
+    load)
+        if [[ -f "$AIRCRAFT_FLEET_CSV" ]]; then
+            info "Loading aircraft from ${AIRCRAFT_FLEET_CSV}..."
+            python3 "$SCRIPT_DIR/src/loadCSV.py" "${SCRIPT_DIR}/${AIRCRAFT_FLEET_CSV}"
+        else
+            error "${AIRCRAFT_FLEET_CSV} not found!"
+        fi
+        ;;
     token)
         info "Generating OpenSky Token..."
         # Check if env vars are provided

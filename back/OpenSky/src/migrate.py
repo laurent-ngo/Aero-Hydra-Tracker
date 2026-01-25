@@ -16,7 +16,8 @@ class TrackedAircraft(Base):
     country = Column(String(50))
     owner = Column(String(100))
     payload_capacity_kg = Column(Integer)
-    aircraft_type = Column(String(15))
+    aircraft_model = Column(String(50))
+    aircraft_type = Column(String(50))
 
     __table_args__ = (
         CheckConstraint(aircraft_type.in_(['airplane', 'helicopter']), name='type_check'),

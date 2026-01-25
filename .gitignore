@@ -4,3 +4,4 @@ coverage.xml
 *.pyc
 local.sh
 .vscode/settings.json
+back/OpenSky/data/aircrafts.csv
