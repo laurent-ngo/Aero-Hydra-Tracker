@@ -110,14 +110,14 @@ class FirefleetCollector:
                 print(f"Error: {e}")
                 return []
             
-    def get_aircraft_track(self, icao24):
+    def get_aircraft_track(self, icao24, target_time=0):
         """
         Fetches the track for a specific aircraft at a specific time.
         target_time: Python datetime object or UNIX timestamp
         """
         params = {
             'icao24': icao24.lower(),
-            'time': 0
+            'time': target_time
         }
         
         headers = {

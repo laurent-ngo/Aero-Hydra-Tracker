@@ -1,6 +1,6 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, CheckConstraint, text
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean,  DateTime, CheckConstraint, text, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 
@@ -22,6 +22,21 @@ class TrackedAircraft(Base):
     __table_args__ = (
         CheckConstraint(aircraft_type.in_(['airplane', 'helicopter']), name='type_check'),
     )
+
+class FlightTelemetry(Base):
+    __tablename__ = 'flight_telemetry'
+    
+    # Composite Primary Key
+    icao24 = Column(String(6), primary_key=True)
+    timestamp = Column(Integer, primary_key=True)
+    
+    lat = Column(Float)
+    lon = Column(Float)
+    baro_altitude = Column(Float)
+    true_track = Column(Float)
+    on_ground = Column(Boolean)
+
+    aircraft_id = Column(String(6), ForeignKey('tracked_aircraft.icao24'))
 
 def run_migration():
     # Construct Connection String
