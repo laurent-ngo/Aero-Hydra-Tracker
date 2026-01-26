@@ -1,10 +1,15 @@
 import requests
 import os
+from datetime import datetime
+import time
 
 
 class FirefleetCollector:
     def __init__(self, token):
         self.url = "https://opensky-network.org/api/states/all"
+        self.track_url = "https://opensky-network.org/api/tracks/all"
+        self.history_url = "https://opensky-network.org/api/flights/aircraft"
+
         self.token = token
 
     def get_positions(self, icao_list):
@@ -105,24 +110,63 @@ class FirefleetCollector:
                 print(f"Error: {e}")
                 return []
             
+    def get_aircraft_track(self, icao24):
+        """
+        Fetches the track for a specific aircraft at a specific time.
+        target_time: Python datetime object or UNIX timestamp
+        """
+        params = {
+            'icao24': icao24.lower(),
+            'time': 0
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json"
+        }
+
+        try:
+            response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
+            response.raise_for_status()
+            return response.json() # Returns a full track object with path points
+        except Exception as e:
+            print(f"Error fetching historical track for {icao24}: {e}")
+            return None
+
 # --- Local Test ---
 if __name__ == "__main__":
-    # In GitLab, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
+    # In Github, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
 
     print(f"DEBUG: Token found: {'Yes' if TOKEN else 'No'}")
+
     
+    collector = FirefleetCollector(TOKEN)
+
+       
     MY_CALLSIGNS = ["MILAN7V"] # Example water bombers
     
     # All Canadair and Dash (Securité civile)
     MY_ICAO24S = ["3B7B70", "3B7B71", "3B7B72", "3B7B73", "3B7B74", "3B7B75", "3B7B76", "3B7B6B", "3B7B6C", "3B7B6D", "3B7B6E", "3B7B6F", "3B7B39", "3B7B3A", "3B7B3D", "3B7B3E", "3B7B3F", "3B7B63", "3B7B85", "3B7B86" ]
     # For test
-    #MY_ICAO24S = ["3F59F3"]   
-
-    collector = FirefleetCollector(TOKEN)
-    
     #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
     fleet_status = collector.get_by_icao24(MY_ICAO24S)
     
     for plane in fleet_status:
         print(f"Unit {plane}")
+    
+
+    # Example: Check where a plane was over the past 60 seconds
+    target_icao = "3b7b39" # A specific Canadair
+    
+    track = collector.get_aircraft_track(target_icao)
+    
+    if track:
+        print(f"History for {target_icao} found!")
+        # The 'path' contains [time, lat, lon, altitude, heading, on_ground]
+        print ( track.get('startTime'))
+        print ( track.get('endTime'))
+        print ( len( track.get('path')))
+        for point in track.get('path', []): # Print first 5 points
+            print(f"Time: {point[0]} | Pos: {point[1]}, {point[2]}, {point}")
+    
