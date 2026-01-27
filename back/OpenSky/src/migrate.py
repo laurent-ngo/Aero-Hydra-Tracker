@@ -35,14 +35,13 @@ class TrackedAircraft(Base):
 
 class FlightTelemetry(Base):
     __tablename__ = 'flight_telemetry'
-    icao24 = Column(String(6), primary_key=True)
+    icao24 = Column(String(6), ForeignKey('tracked_aircraft.icao24'), primary_key=True)
     timestamp = Column(Integer, primary_key=True)
     lat = Column(Float)
     lon = Column(Float)
     baro_altitude = Column(Float)
     true_track = Column(Float)
     on_ground = Column(Boolean)
-    aircraft_id = Column(String(6), ForeignKey('tracked_aircraft.icao24'))
 
 # --- Migration Logic ---
 def run_migration():
