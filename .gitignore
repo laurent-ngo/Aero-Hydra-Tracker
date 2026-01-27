@@ -5,3 +5,4 @@ coverage.xml
 local.sh
 .vscode/settings.json
 back/OpenSky/data/aircrafts.csv
+cron.txt
