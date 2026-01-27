@@ -14,3 +14,4 @@ pip install pytest pytest-cov
 pip install requests
 pip install sqlalchemy
 pip install psycopg2-binary
+pip install tqdm

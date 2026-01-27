@@ -1,16 +1,26 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean,  DateTime, CheckConstraint, text, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, text, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime
 
-# Import your color helpers if you decide to make a python version, 
-# but for now, we'll use simple prints.
+# 1. Setup Connection Configuration (with safe defaults)
+user = os.getenv('DB_USER', 'postgres')
+password = os.getenv('DB_PASSWORD', 'postgres')
+db_name = os.getenv('DB_NAME', 'aero_hydra')
+db_port = os.getenv('DB_PORT', '5432') # Use string first
+db_host = os.getenv('DB_HOST', 'localhost')
+
+db_url = f"postgresql://{user}:{password}@{db_host}:{db_port}/{db_name}"
+
+# 2. Create the Engine and Session Factory
+# These must be at the top level so dataCollector.py can import them
+engine = create_engine(db_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# --- Your Models ---
 class TrackedAircraft(Base):
     __tablename__ = 'tracked_aircraft'
-    
     icao24 = Column(String(6), primary_key=True)
     registration = Column(String(10), nullable=False)
     country = Column(String(50))
@@ -25,36 +35,23 @@ class TrackedAircraft(Base):
 
 class FlightTelemetry(Base):
     __tablename__ = 'flight_telemetry'
-    
-    # Composite Primary Key
     icao24 = Column(String(6), primary_key=True)
     timestamp = Column(Integer, primary_key=True)
-    
     lat = Column(Float)
     lon = Column(Float)
     baro_altitude = Column(Float)
     true_track = Column(Float)
     on_ground = Column(Boolean)
-
     aircraft_id = Column(String(6), ForeignKey('tracked_aircraft.icao24'))
 
+# --- Migration Logic ---
 def run_migration():
-    # Construct Connection String
-    user = os.getenv('DB_USER')
-    password = os.getenv('DB_PASSWORD')
-    db_name = os.getenv('DB_NAME')
-    db_port = os.getenv('DB_PORT')
-    
-    # Use 'localhost' for WSL2 to Docker, or 'db' if running inside Docker
-    db_url = f"postgresql://{user}:{password}@localhost:{db_port}/{db_name}"
-    
     try:
-        engine = create_engine(db_url)
         # Create all tables defined in Base
         Base.metadata.create_all(engine)
-        print("[INFO] Database migration completed successfully.")
+        print("\033[0;32m[INFO]\033[0m Database migration completed successfully.")
     except Exception as e:
-        print(f"[ERROR] Migration failed: {e}")
+        print(f"\033[0;31m[ERROR]\033[0m Migration failed: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
