@@ -81,7 +81,7 @@ case "$1" in
             exit 1
         fi
 
-        source ./OAuth2ClientCredential.sh $OPEN_SKY_CLIENT_ID $OPEN_SKY_CLIENT_SECRET
+        source $SCRIPT_DIR/OAuth2ClientCredential.sh $OPEN_SKY_CLIENT_ID $OPEN_SKY_CLIENT_SECRET
         ;;
 
     clean)
