@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Aero-Hydra Fleet Map</title>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
+    <style>
+        body { margin: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; background: #1a252f; }
+        #sidebar { width: 320px; background: #2c3e50; color: white; display: flex; flex-direction: column; }
+        #sidebar header { padding: 20px; background: #1a252f; border-bottom: 1px solid #34495e; }
+        
+        /* Controls */
+        .controls { padding: 10px 20px; background: #34495e; display: flex; align-items: center; gap: 10px; }
+        
+        #aircraft-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        .aircraft-item { 
+            padding: 12px 20px; border-bottom: 1px solid #3e5871; display: flex; align-items: center; gap: 15px; cursor: pointer;
+        }
+        .aircraft-item:hover { background: #3e5871; }
+        .aircraft-item input[type="checkbox"] { transform: scale(1.3); cursor: pointer; }
+
+        #map { 
+            flex-grow: 1; 
+            height: 100vh; /* Ensure it takes the full viewport height */
+            min-width: 0;   /* Prevents the map from pushing the sidebar out */
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <header>
+        <h2>Aero-Hydra</h2>
+        <small>Multi-Flight Tracker</small>
+    </header>
+    <div class="time-filters" style="padding: 15px; background: #1a252f; border-bottom: 1px solid #34495e;">
+        <label><small>Start Date:</small></label>
+        <input type="datetime-local" id="start-date" style="width: 100%; margin-bottom: 10px;">
+        
+        <label><small>End Date:</small></label>
+        <input type="datetime-local" id="end-date" style="width: 100%; margin-bottom: 10px;">
+        
+        <button onclick="updateFleetByTime()" style="width: 100%; padding: 8px; background: #3498db; color: white; border: none; cursor: pointer;">
+            Update Fleet List
+        </button>
+    </div>
+    <div class="controls">
+        <input type="checkbox" id="select-all" onclick="toggleAll(this)">
+        <label for="select-all"><strong>Select All Assets</strong></label>
+    </div>
+    <ul id="aircraft-list"></ul>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([46.3833, 6.2348], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    const activeLayers = {};
+    let autoRefreshInterval = null;
+
+    // --- 1. SIDEBAR LOADING ---
+    async function loadSidebar() {
+        try {
+            const response = await fetch('http://localhost:8000/aircraft');
+            const aircraft = await response.json();
+            renderSidebarList(aircraft);
+        } catch (e) { console.error("Failed to load sidebar:", e); }
+    }
+
+    // --- 2. TIME FILTERING ---
+    async function updateFleetByTime() {
+        const startVal = document.getElementById('start-date').value;
+        const stopVal = document.getElementById('end-date').value;
+
+        if (!startVal || !stopVal) {
+            alert("Please select both a start and end date.");
+            return;
+        }
+
+        const startUnix = Math.floor(new Date(startVal).getTime() / 1000);
+        const stopUnix = Math.floor(new Date(stopVal).getTime() / 1000);
+
+        try {
+            const response = await fetch(`http://localhost:8000/aircraft/active?start=${startUnix}&stop=${stopUnix}`);
+            const aircraft = await response.json();
+            renderSidebarList(aircraft);
+        } catch (e) { console.error("Filter failed:", e); }
+    }
+
+    // --- 3. RENDERING ---
+    function renderSidebarList(aircraft) {
+        const listContainer = document.getElementById('aircraft-list');
+        listContainer.innerHTML = '';
+
+        if (aircraft.length === 0) {
+            listContainer.innerHTML = '<li class="aircraft-item">No aircraft found.</li>';
+            return;
+        }
+
+        aircraft.forEach(ac => {
+            const li = document.createElement('li');
+            li.className = 'aircraft-item';
+            li.innerHTML = `
+                <input type="checkbox" class="ac-checkbox" data-icao="${ac.icao24}" id="check-${ac.icao24}">
+                <label for="check-${ac.icao24}" style="cursor:pointer">
+                    <strong>${ac.registration || ac.icao24}</strong><br>
+                    <small>${ac.model || 'Unknown'}</small>
+                </label>`;
+            
+            li.onclick = (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const cb = li.querySelector('input');
+                    cb.checked = !cb.checked;
+                    handleToggle(ac.icao24, cb.checked);
+                }
+            };
+            li.querySelector('input').onchange = (e) => handleToggle(ac.icao24, e.target.checked);
+            listContainer.appendChild(li);
+        });
+    }
+
+    // --- 4. MAP TOGGLING ---
+    async function handleToggle(icao24, isChecked) {
+        if (isChecked) {
+            if (activeLayers[icao24]) return;
+
+            // --- NEW: Grab the time filters ---
+            const startVal = document.getElementById('start-date').value;
+            const stopVal = document.getElementById('end-date').value;
+            
+            let url = `http://localhost:8000/telemetry/${icao24}`;
+            
+            // If dates are set, append them to the URL
+            if (startVal && stopVal) {
+                const startUnix = Math.floor(new Date(startVal).getTime() / 1000);
+                const stopUnix = Math.floor(new Date(stopVal).getTime() / 1000);
+                url += `?start=${startUnix}&stop=${stopUnix}`;
+            }
+
+            const response = await fetch(url);
+            
+            const data = await response.json();
+            if (data.length === 0) return;
+
+            const latest = data[0]; // Most recent point
+            const latLngs = data.map(p => [p.lat, p.lon]);
+            
+            // Pick the color ONCE
+            const aircraftColor = getRandomColor();
+
+            // Create the Path with that color
+            const path = L.polyline(latLngs, {color: aircraftColor, weight: 3}).addTo(map);
+
+            // 2. Define a clean SVG Airplane Icon
+            // The path below is a standard airplane shape pointing UP (North/0 degrees)
+            const planeSvg = `
+                <svg viewBox="0 0 512 512" width="30" height="30" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="white" d="M448 336v-40L288 192V79.2c0-22.1-17.9-40-40-40s-40 17.9-40 40V192L48 296v40l160-48v113.6l-48 31.2V472l88-24 88 24v-31.2l-48-31.2V288l160 48z"/>
+                </svg>`;
+
+            const track = latest.true_track || 0;
+            const bigSize = 50;
+            const halfSize = bigSize / 2;
+
+            const planeIcon = L.divIcon({
+            html: `
+                <div style="transform: rotate(${track}deg); width: ${bigSize}px; height: ${bigSize}px;">
+                    <svg viewBox="0 0 512 512" width="${bigSize}" height="${bigSize}" xmlns="http://www.w3.org/2000/svg">
+                        <path fill="${aircraftColor}" d="M448 336v-40L288 192V79.2c0-22.1-17.9-40-40-40s-40 17.9-40 40V192L48 296v40l160-48v113.6l-48 31.2V472l88-24 88 24v-31.2l-48-31.2V288l160 48z"/>
+                    </svg>
+                </div>`,
+            iconSize: [bigSize, bigSize],
+            iconAnchor: [halfSize, halfSize],
+            className: 'plane-icon-container'
+        });
+
+            const marker = L.marker([latest.lat, latest.lon], { icon: planeIcon }).addTo(map);
+            activeLayers[icao24] = { path, marker, color: aircraftColor };
+
+        } else {
+            if (activeLayers[icao24]) {
+                map.removeLayer(activeLayers[icao24].path);
+                map.removeLayer(activeLayers[icao24].marker);
+                delete activeLayers[icao24];
+            }
+        }
+    }
+
+    // --- 5. UTILITIES & REFRESH ---
+    function toggleAll(masterCb) {
+        document.querySelectorAll('.ac-checkbox').forEach(cb => {
+            if (cb.checked !== masterCb.checked) {
+                cb.checked = masterCb.checked;
+                handleToggle(cb.dataset.icao, cb.checked);
+            }
+        });
+    }
+
+    function getRandomColor() {
+        const colors = ['#3498db', '#2ecc71', '#f1c40f', '#e67e22', '#9b59b6', '#1abc9c'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    async function refreshActiveData() { 
+        const activeIcaos = Object.keys(activeLayers);
+        for (const icao24 of activeIcaos) {
+
+            const response = await fetch(`http://localhost:8000/telemetry/${icao24}`);
+            const data = await response.json();
+            if (data.length > 0) {
+                const latest = data[0];
+                const latLngs = data.map(p => [p.lat, p.lon]);
+                const aircraftColor = activeLayers[icao24].color; // Retrieve the saved color
+                
+                const bigSize = 60;
+                const halfSize = bigSize / 2;
+                const newTrack = latest.true_track || 0;
+
+                const newIcon = L.divIcon({
+                    html: `
+                        <div style="transform: rotate(${newTrack}deg); width: ${bigSize}px; height: ${bigSize}px;">
+                            <svg viewBox="0 0 512 512" width="${bigSize}" height="${bigSize}" xmlns="http://www.w3.org/2000/svg">
+                                <path fill="${aircraftColor}" d="M448 336v-40L288 192V79.2c0-22.1-17.9-40-40-40s-40 17.9-40 40V192L48 296v40l160-48v113.6l-48 31.2V472l88-24 88 24v-31.2l-48-31.2V288l160 48z"/>
+                            </svg>
+                        </div>`,
+                    iconSize: [bigSize, bigSize],
+                    iconAnchor: [halfSize, halfSize],
+                    className: 'plane-icon-container'
+                });
+
+                activeLayers[icao24].marker.setIcon(newIcon);
+                activeLayers[icao24].path.setLatLngs(latLngs);
+                activeLayers[icao24].marker.setLatLng([latest.lat, latest.lon]);
+            }
+        }
+    }
+
+    function startAutoRefresh() {
+        autoRefreshInterval = setInterval(refreshActiveData, 30000); 
+    }
+
+    // Initialize everything
+    loadSidebar();
+    startAutoRefresh();
+</script>
+</body>
+</html>
