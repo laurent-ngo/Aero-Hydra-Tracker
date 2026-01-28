@@ -6,3 +6,5 @@ local.sh
 .vscode/settings.json
 back/OpenSky/data/aircrafts.csv
 cron.txt
+back/OpenSky/logs/api_logs.txt
+back/OpenSky/nohup.out
