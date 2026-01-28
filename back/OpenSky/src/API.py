@@ -83,4 +83,19 @@ def get_telemetry(
         query = query.filter(migrate.FlightTelemetry.timestamp <= stop)
 
     points = query.order_by(migrate.FlightTelemetry.timestamp.desc()).limit(limit).all()
-    return points
+
+    # Create a list of dictionaries with the added altitude in feet
+    results = []
+    for p in points:
+        # Convert the SQLAlchemy model instance to a dictionary
+        p_dict = {column.name: getattr(p, column.name) for column in p.__table__.columns}
+        
+        # Add the calculated feet (1 meter = 3.28084 feet)
+        if p_dict.get("baro_altitude") is not None:
+            p_dict["baro_altitude_ft"] = round(p_dict["baro_altitude"] * 3.28084)
+        else:
+            p_dict["baro_altitude_ft"] = None
+            
+        results.append(p_dict)
+
+    return results

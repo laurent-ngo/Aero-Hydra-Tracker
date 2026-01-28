@@ -40,8 +40,15 @@ class FlightTelemetry(Base):
     lat = Column(Float)
     lon = Column(Float)
     baro_altitude = Column(Float)
+    baro_altitude_ft = Column(Float)
     true_track = Column(Float)
     on_ground = Column(Boolean)
+    
+    speed_kph = Column(Float)
+    vertical_speed_mmin = Column(Float)
+    speed_kt = Column(Float)
+    vertical_speed_ftmin = Column(Float)
+    
 
 # --- Migration Logic ---
 def run_migration():

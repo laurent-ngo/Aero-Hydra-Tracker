@@ -13,3 +13,4 @@ export $(grep -v '^#' /home/lngo/projects/aero-hydra/.env | xargs)
 # 4. Run the script using the full path to the virtualenv python
 . /home/lngo/projects/aero-hydra/back/OpenSky/back_end.sh token 2>&1
 /home/lngo/projects/aero-hydra/.venv/bin/python dataCollector.py 2>&1
+/home/lngo/projects/aero-hydra/.venv/bin/python dataProcessor.py 2>&1
