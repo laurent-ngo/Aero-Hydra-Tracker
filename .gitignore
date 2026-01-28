@@ -9,3 +9,4 @@ cron.txt
 back/OpenSky/logs/api_logs.txt
 back/OpenSky/nohup.out
 front/index.html
+back/OpenSky/api.pid
