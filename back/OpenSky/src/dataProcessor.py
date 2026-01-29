@@ -114,9 +114,9 @@ def backfill_agl():
     print("Batch AGL backfill complete.")
     
 
-def label_low_passes(db_session, threshold_ft=500):
+def label_low_passes(threshold_ft=500):
     # Only process points where AGL has already been calculated
-    points = db_session.query(migrate.FlightTelemetry).filter(
+    points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.is_low_pass == False # Only check unlabelled
     ).all()
@@ -133,7 +133,7 @@ def label_low_passes(db_session, threshold_ft=500):
             p.is_low_pass = True
             count += 1
             
-    db_session.commit()
+    db.commit()
     print(f"Labeling complete: {count} points identified as low pass.")
 
 if __name__ == "__main__":

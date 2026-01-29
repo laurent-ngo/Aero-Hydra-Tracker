@@ -51,7 +51,7 @@ class FlightTelemetry(Base):
 
     altitude_agl_ft = Column(Float)
 
-    is_low_ass = Columnmn(Boolean, default=False)
+    is_low_pass = Column(Boolean, default=False)
     
 
 # --- Migration Logic ---
