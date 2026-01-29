@@ -7,6 +7,8 @@ from math import radians, cos, sin, asin, sqrt
 from collections import Counter
 import numpy as np
 from sklearn.cluster import DBSCAN
+from scipy.spatial import ConvexHull
+import json
 
 import requests
 
@@ -152,7 +154,7 @@ def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
     print(f"Labeling complete: {coun_over_water} points identified as over water.")
 
 
-def detect_regions_of_interest_clustered(min_samples=10, distance_meters=200):
+def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200):
     # 1. Fetch points
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.is_low_pass == True
@@ -170,35 +172,38 @@ def detect_regions_of_interest_clustered(min_samples=10, distance_meters=200):
     # 3. Perform Clustering
     dbscan = DBSCAN(eps=epsilon, min_samples=min_samples, algorithm='ball_tree', metric='haversine').fit(np.radians(coords))
     labels = dbscan.labels_
-
-    # -1 label is noise, we ignore it
     unique_labels = set(labels) - {-1}
     
-    # Diplomatic move: Reset old ROIs to replace with new clusters
     db.query(migrate.RegionOfInterest).delete()
 
     for k in unique_labels:
-        # Get all points in this cluster
         class_member_mask = (labels == k)
         cluster_points = coords[class_member_mask]
         
-        # 4. Calculate the Baricentre (Mean)
-        baricentre_lat = np.mean(cluster_points[:, 0])
-        baricentre_lon = np.mean(cluster_points[:, 1])
-        density = len(cluster_points)
+        # 4. Calculate the Convex Hull (The "Rubber Band" shape)
+        # We need at least 3 points to make a polygon
+        if len(cluster_points) >= 3:
+            hull = ConvexHull(cluster_points)
+            # Extract the coordinates of the vertices in order
+            hull_points = cluster_points[hull.vertices].tolist()
+        else:
+            # Fallback for very small clusters: just the points themselves
+            hull_points = cluster_points.tolist()
 
-        # 5. Save to Database
+        # 5. Save as JSON
+        # Note: You'll need a Text or JSON column in your DB for 'geometry'
         new_roi = migrate.RegionOfInterest(
-            lat=round(baricentre_lat, 5),
-            lon=round(baricentre_lon, 5),
-            density=density,
-            name=f"Cluster {k} ({density} pts)",
+            lat=np.mean(cluster_points[:, 0]),
+            lon=np.mean(cluster_points[:, 1]),
+            geometry=json.dumps(hull_points), # Store the list of coordinates
+            density=len(cluster_points),
+            name=f"Custom Area {k}",
             detected_at=datetime.now()
         )
         db.add(new_roi)
 
     db.commit()
-    print(f"Detected {len(unique_labels)} high-density clusters.")
+    print(f"Detected {len(unique_labels)} high-density areas with bounding boxes.")
 
 
 if __name__ == "__main__":
