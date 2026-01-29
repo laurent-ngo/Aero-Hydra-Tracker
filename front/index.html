@@ -48,6 +48,10 @@
             Update Fleet List
         </button>
     </div>
+    <div class="controls" style="border-top: 1px solid #3e5871;">
+        <input type="checkbox" id="show-rois" onclick="toggleROIs(this)">
+        <label for="show-rois"><strong>Show Hotspots (ROI)</strong></label>
+    </div>
     <div class="controls">
         <input type="checkbox" id="select-all" onclick="toggleAll(this)">
         <label for="select-all"><strong>Select All Assets</strong></label>
@@ -64,6 +68,48 @@
 
     const activeLayers = {};
     let autoRefreshInterval = null;
+
+    // --- NEW: ROI Layer Management ---
+    const roiLayerGroup = L.layerGroup().addTo(map);
+
+    async function toggleROIs(checkbox) {
+        if (checkbox.checked) {
+            try {
+                const response = await fetch('http://localhost:8000/api/regions-of-interest');
+                const rois = await response.json();
+                
+                roiLayerGroup.clearLayers(); // Clear old ones before adding fresh data
+
+                rois.forEach(roi => {
+                    // Scale radius: higher density = larger circle
+                    const radius = Math.sqrt(roi.density) * 15; 
+                    
+                    const circle = L.circle([roi.lat, roi.lon], {
+                        color: '#e74c3c', // Alizarin Red
+                        fillColor: '#ff7675',
+                        fillOpacity: 0.5,
+                        weight: 2,
+                        radius: radius*40
+                    });
+
+                    circle.bindPopup(`
+                        <div style="color: #2c3e50;">
+                            <strong>High Activity Zone</strong><br>
+                            Points Detected: ${roi.density}<br>
+                            <small>Last seen: ${new Date(roi.detected_at).toLocaleTimeString()}</small>
+                        </div>
+                    `);
+                    
+                    roiLayerGroup.addLayer(circle);
+                });
+            } catch (e) {
+                console.error("Failed to fetch ROIs:", e);
+                checkbox.checked = false;
+            }
+        } else {
+            roiLayerGroup.clearLayers();
+        }
+    }
 
     // --- 1. SIDEBAR LOADING ---
     async function loadSidebar() {
