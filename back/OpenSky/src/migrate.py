@@ -51,6 +51,8 @@ class FlightTelemetry(Base):
 
     altitude_agl_ft = Column(Float)
 
+    is_processed = Column(Boolean, default=False)
+
     is_low_pass = Column(Boolean, default=False)
     is_over_water = Column(Boolean, default=False)
     

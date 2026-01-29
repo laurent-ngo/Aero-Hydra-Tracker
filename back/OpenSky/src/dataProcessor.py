@@ -3,8 +3,11 @@ import time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
+from collections import Counter
 import requests
-import migrate # Your model file
+
+import migrate
+
 
 user = os.getenv('DB_USER', 'postgres')
 password = os.getenv('DB_PASSWORD', 'postgres')
@@ -119,7 +122,7 @@ def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
-        ( migrate.FlightTelemetry.is_low_pass == False and migrate.FlightTelemetry.is_over_water == False )# Only check unlabelled
+        ( migrate.FlightTelemetry.is_processed == False )# Only check unlabelled
     ).all()
 
     if not points:
@@ -138,9 +141,50 @@ def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
             p.is_low_pass = True
             count_low_pass += 1
             
+        p.is_processed = True
+        
     db.commit()
     print(f"Labeling complete: {count_low_pass} points identified as low pass.")
     print(f"Labeling complete: {coun_over_water} points identified as over water.")
+
+
+def detect_regions_of_interest( min_points=5, precision=3):
+    """
+    precision=3 is roughly 110m x 110m at the equator.
+    precision=2 is roughly 1.1km x 1.1km.
+    """
+    # 1. Fetch only points labeled as Low Pass
+    points = db.query(migrate.FlightTelemetry).filter(
+        migrate.FlightTelemetry.is_low_pass == True
+    ).all()
+
+    if not points:
+        print("No low pass data to analyze.")
+        return []
+
+    # 2. Group points into a grid by rounding Lat/Lon
+    # We create a 'key' for each grid cell
+    grid_cells = []
+    for p in points:
+        grid_key = (round(p.lat, precision), round(p.lon, precision))
+        grid_cells.append(grid_key)
+
+    # 3. Count occurrences in each cell
+    counts = Counter(grid_cells)
+
+    # 4. Filter cells that have more than 'min_points'
+    rois = [
+        {"lat": lat, "lon": lon, "density": count}
+        for (lat, lon), count in counts.items()
+        if count >= min_points
+    ]
+
+    # Sort by density so the 'hottest' areas are first
+    rois.sort(key=lambda x: x['density'], reverse=True)
+
+    print(f"Detected {len(rois)} Regions of Interest.")
+    return rois
+
 
 if __name__ == "__main__":
     backfill_telemetry()
