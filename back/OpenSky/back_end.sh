@@ -61,11 +61,13 @@ case "$1" in
         docker exec -i aero-hydra-db psql -U ${DB_USER} -d ${DB_NAME} -c "\dt"
         ;;
     load)
-        if [[ -f "$AIRCRAFT_FLEET_CSV" ]]; then
-            info "Loading aircraft from ${AIRCRAFT_FLEET_CSV}..."
-            python3 "$SCRIPT_DIR/src/loadCSV.py" "${SCRIPT_DIR}/${AIRCRAFT_FLEET_CSV}"
+        if [[ -f "$AIRCRAFT_FLEET_CSV" && -f "$AIRFIELDS_CSV" ]]; then
+            info "Loading aircrafts from ${AIRCRAFT_FLEET_CSV}..."
+            info "Loading airfields from ${AIRFIELDS_CSV}..."
+            python3 "$SCRIPT_DIR/src/loadCSV.py" "${SCRIPT_DIR}/${AIRCRAFT_FLEET_CSV}" "${SCRIPT_DIR}/${AIRFIELDS_CSV}"
         else
             error "${AIRCRAFT_FLEET_CSV} not found!"
+            error "${AIRFIELDS_CSV} not found!"
         fi
         ;;
     token)

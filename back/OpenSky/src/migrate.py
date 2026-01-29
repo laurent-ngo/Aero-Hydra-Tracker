@@ -1,6 +1,6 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, text, ForeignKey, func
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, Text, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Setup Connection Configuration (with safe defaults)
@@ -63,8 +63,19 @@ class RegionOfInterest(Base):
     name = Column(String, nullable=True)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
+    geometry = Column(Text, nullable=True)
+
     density = Column(Integer)  # Number of points found
     detected_at = Column(DateTime, default=func.now())
+
+class Airfield(Base):
+    __tablename__ = 'airfields'
+
+    id = Column(Integer, primary_key=True)
+    icao = Column(String(4), unique=True)
+    name = Column(String)
+    lat = Column(Float)
+    lon = Column(Float)
 
 
 # --- Migration Logic ---
