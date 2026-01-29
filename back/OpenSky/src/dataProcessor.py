@@ -1,7 +1,9 @@
 import os
+import time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
+import requests
 import migrate # Your model file
 
 user = os.getenv('DB_USER', 'postgres')
@@ -70,5 +72,71 @@ def backfill_telemetry():
         db.commit()
     print("Backfill complete!")
 
+
+def get_ground_elevation(lat, lon):
+    try:
+        # Using the Open-Elevation public API
+        url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        # Returns elevation in meters
+        return data['results'][0]['elevation']
+    except Exception as e:
+        print(f"Elevation lookup failed: {e}")
+        return 0 # Default to sea level if lookup fails
+
+def backfill_agl():
+    # 1. Fetch only records that have baro_altitude but missing AGL
+    # We process in batches to be gentle on the API and memory
+    points_to_fix = db.query(migrate.FlightTelemetry).filter(
+        migrate.FlightTelemetry.baro_altitude != None,
+        migrate.FlightTelemetry.altitude_agl_ft == None
+    ).limit(500).all() # Processing 500 at a time is safer
+
+    if not points_to_fix:
+        print("No pending AGL calculations found.")
+        return
+
+    print(f"Calculating AGL for {len(points_to_fix)} points...")
+
+    for p in points_to_fix:
+        # 2. Get the ground height from your new method
+        ground_m = get_ground_elevation(p.lat, p.lon)
+        
+        if ground_m is not None:
+            # 3. Calculation: MSL - Ground = AGL
+            agl_m = p.baro_altitude - ground_m
+            p.altitude_agl_ft = round(agl_m * 3.28084, 0)
+            
+            time.sleep(0.5) 
+
+    db.commit()
+    print("Batch AGL backfill complete.")
+    
+
+def label_low_passes(db_session, threshold_ft=500):
+    # Only process points where AGL has already been calculated
+    points = db_session.query(migrate.FlightTelemetry).filter(
+        migrate.FlightTelemetry.altitude_agl_ft != None,
+        migrate.FlightTelemetry.is_low_pass == False # Only check unlabelled
+    ).all()
+
+    if not points:
+        print("No new points to label for low passes.")
+        return
+
+    count = 0
+    for p in points:
+        # If the plane is below our threshold (e.g. 500ft AGL)
+        # and specifically NOT on the ground (if your data has that flag)
+        if p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
+            p.is_low_pass = True
+            count += 1
+            
+    db_session.commit()
+    print(f"Labeling complete: {count} points identified as low pass.")
+
 if __name__ == "__main__":
     backfill_telemetry()
+    backfill_agl()
+    label_low_passes()

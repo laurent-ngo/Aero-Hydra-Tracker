@@ -48,6 +48,10 @@ class FlightTelemetry(Base):
     vertical_speed_mmin = Column(Float)
     speed_kt = Column(Float)
     vertical_speed_ftmin = Column(Float)
+
+    altitude_agl_ft = Column(Float)
+
+    is_low_ass = Columnmn(Boolean, default=False)
     
 
 # --- Migration Logic ---
