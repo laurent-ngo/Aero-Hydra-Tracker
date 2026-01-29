@@ -1,9 +1,13 @@
 import os
 import time
+from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
 from collections import Counter
+import numpy as np
+from sklearn.cluster import DBSCAN
+
 import requests
 
 import migrate
@@ -142,51 +146,64 @@ def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
             count_low_pass += 1
             
         p.is_processed = True
-        
+
     db.commit()
     print(f"Labeling complete: {count_low_pass} points identified as low pass.")
     print(f"Labeling complete: {coun_over_water} points identified as over water.")
 
 
-def detect_regions_of_interest( min_points=5, precision=3):
-    """
-    precision=3 is roughly 110m x 110m at the equator.
-    precision=2 is roughly 1.1km x 1.1km.
-    """
-    # 1. Fetch only points labeled as Low Pass
+def detect_regions_of_interest_clustered(min_samples=10, distance_meters=200):
+    # 1. Fetch points
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.is_low_pass == True
     ).all()
 
-    if not points:
-        print("No low pass data to analyze.")
-        return []
+    if len(points) < min_samples:
+        print("Not enough points to cluster.")
+        return
 
-    # 2. Group points into a grid by rounding Lat/Lon
-    # We create a 'key' for each grid cell
-    grid_cells = []
-    for p in points:
-        grid_key = (round(p.lat, precision), round(p.lon, precision))
-        grid_cells.append(grid_key)
+    # 2. Prepare data for DBSCAN (Coordinates in radians for Haversine distance)
+    coords = np.array([[p.lat, p.lon] for p in points])
+    kms_per_radian = 6371.0088
+    epsilon = (distance_meters / 1000) / kms_per_radian
 
-    # 3. Count occurrences in each cell
-    counts = Counter(grid_cells)
+    # 3. Perform Clustering
+    dbscan = DBSCAN(eps=epsilon, min_samples=min_samples, algorithm='ball_tree', metric='haversine').fit(np.radians(coords))
+    labels = dbscan.labels_
 
-    # 4. Filter cells that have more than 'min_points'
-    rois = [
-        {"lat": lat, "lon": lon, "density": count}
-        for (lat, lon), count in counts.items()
-        if count >= min_points
-    ]
+    # -1 label is noise, we ignore it
+    unique_labels = set(labels) - {-1}
+    
+    # Diplomatic move: Reset old ROIs to replace with new clusters
+    db.query(migrate.RegionOfInterest).delete()
 
-    # Sort by density so the 'hottest' areas are first
-    rois.sort(key=lambda x: x['density'], reverse=True)
+    for k in unique_labels:
+        # Get all points in this cluster
+        class_member_mask = (labels == k)
+        cluster_points = coords[class_member_mask]
+        
+        # 4. Calculate the Baricentre (Mean)
+        baricentre_lat = np.mean(cluster_points[:, 0])
+        baricentre_lon = np.mean(cluster_points[:, 1])
+        density = len(cluster_points)
 
-    print(f"Detected {len(rois)} Regions of Interest.")
-    return rois
+        # 5. Save to Database
+        new_roi = migrate.RegionOfInterest(
+            lat=round(baricentre_lat, 5),
+            lon=round(baricentre_lon, 5),
+            density=density,
+            name=f"Cluster {k} ({density} pts)",
+            detected_at=datetime.now()
+        )
+        db.add(new_roi)
+
+    db.commit()
+    print(f"Detected {len(unique_labels)} high-density clusters.")
 
 
 if __name__ == "__main__":
     backfill_telemetry()
     backfill_agl()
     label_flight_phases()
+    detect_regions_of_interest_clustered()
+ 

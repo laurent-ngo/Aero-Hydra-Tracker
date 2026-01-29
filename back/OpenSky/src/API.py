@@ -99,3 +99,19 @@ def get_telemetry(
         results.append(p_dict)
 
     return results
+
+@app.get("/api/regions-of-interest")
+def get_all_rois(db: Session = Depends(get_db)):
+    rois = db.query(migrate.RegionOfInterest).all()
+    
+    # We return a list of dictionaries that FastAPI converts to JSON
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "lat": r.lat,
+            "lon": r.lon,
+            "density": r.density,
+            "detected_at": r.detected_at.isoformat() if r.detected_at else None
+        } for r in rois
+    ]

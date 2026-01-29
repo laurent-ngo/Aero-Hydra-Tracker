@@ -1,6 +1,6 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, text, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, text, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Setup Connection Configuration (with safe defaults)
@@ -56,6 +56,16 @@ class FlightTelemetry(Base):
     is_low_pass = Column(Boolean, default=False)
     is_over_water = Column(Boolean, default=False)
     
+class RegionOfInterest(Base):
+    __tablename__ = "regions_of_interest"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=True)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
+    density = Column(Integer)  # Number of points found
+    detected_at = Column(DateTime, default=func.now())
+
 
 # --- Migration Logic ---
 def run_migration():

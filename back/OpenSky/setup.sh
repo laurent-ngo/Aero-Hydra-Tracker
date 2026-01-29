@@ -16,3 +16,4 @@ pip install sqlalchemy
 pip install psycopg2-binary
 pip install tqdm
 pip install fastapi uvicorn
+pip install scikit-learn numpy
