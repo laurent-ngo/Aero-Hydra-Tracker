@@ -114,29 +114,35 @@ def backfill_agl():
     print("Batch AGL backfill complete.")
     
 
-def label_low_passes(threshold_ft=500):
+def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
     # Only process points where AGL has already been calculated
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
-        migrate.FlightTelemetry.is_low_pass == False # Only check unlabelled
+        migrate.FlightTelemetry.baro_altitude_ft != None,
+        ( migrate.FlightTelemetry.is_low_pass == False and migrate.FlightTelemetry.is_over_water == False )# Only check unlabelled
     ).all()
 
     if not points:
         print("No new points to label for low passes.")
         return
 
-    count = 0
+    count_low_pass = 0
+    coun_over_water = 0 
     for p in points:
         # If the plane is below our threshold (e.g. 500ft AGL)
         # and specifically NOT on the ground (if your data has that flag)
-        if p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
+        if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
+            p.is_over_water = True
+            coun_over_water += 1
+        elif p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
             p.is_low_pass = True
-            count += 1
+            count_low_pass += 1
             
     db.commit()
-    print(f"Labeling complete: {count} points identified as low pass.")
+    print(f"Labeling complete: {count_low_pass} points identified as low pass.")
+    print(f"Labeling complete: {coun_over_water} points identified as over water.")
 
 if __name__ == "__main__":
     backfill_telemetry()
     backfill_agl()
-    label_low_passes()
+    label_flight_phases()
