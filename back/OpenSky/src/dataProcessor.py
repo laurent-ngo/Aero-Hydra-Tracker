@@ -1,5 +1,7 @@
 import os
 import time
+from datetime import datetime, timedelta
+import math
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -81,7 +83,6 @@ def backfill_telemetry():
         db.commit()
     print("Backfill complete!")
 
-
 def get_ground_elevation(lat, lon):
     try:
         # Using the Open-Elevation public API
@@ -122,43 +123,95 @@ def backfill_agl():
     db.commit()
     print("Batch AGL backfill complete.")
     
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Returns distance in km between two points."""
+    R = 6371.0  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
 
-def label_flight_phases(threshold_ft=800, water_threshold_ft=50):
-    # Only process points where AGL has already been calculated
+def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=5.0, airfield_alt_threshold=1500):
+    # 1. Load all airfields into memory for fast lookup
+    airfields = db.query(migrate.Airfield).all()
+
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
-        ( migrate.FlightTelemetry.is_processed == False )# Only check unlabelled
-    ).all()
+        migrate.FlightTelemetry.is_processed == False 
+    ).order_by(migrate.FlightTelemetry.timestamp).all()
 
     if not points:
-        print("No new points to label for low passes.")
+        print("No new points to label.")
         return
+    
+    last_known_airfields = {}
 
     count_low_pass = 0
-    coun_over_water = 0 
+    count_over_water = 0 
+    count_at_airfield = 0
+
     for p in points:
-        # If the plane is below our threshold (e.g. 500ft AGL)
-        # and specifically NOT on the ground (if your data has that flag)
-        if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
-            p.is_over_water = True
-            coun_over_water += 1
-        elif p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
-            p.is_low_pass = True
-            count_low_pass += 1
-            
+        # 1. Proximity Check (Highest priority)
+        found_near_airfield = False
+
+        for af in airfields:
+            dist = calculate_distance(p.lat, p.lon, af.lat, af.lon)
+            if dist <= airfield_radius and p.altitude_agl_ft <= airfield_alt_threshold:
+                p.at_airfield = True
+                p.latest_airfield = af.icao
+                p.is_over_water = False
+                p.is_low_pass = False
+                
+                # Update our cache for this specific airplane
+                last_known_airfields[p.icao24] = af.icao
+                
+                count_at_airfield += 1
+                found_near_airfield = True
+                break
+
+        # 2. Inheritance Logic (If not currently at an airfield)
+        if not found_near_airfield:
+            p.at_airfield = False
+            # Check if we already found an airfield for this plane in this batch
+            if p.icao24 in last_known_airfields:
+                p.latest_airfield = last_known_airfields[p.icao24]
+            else:
+                # OPTIONAL: Query the database for the most recent processed point for this plane
+                # to get the airfield if it wasn't in this current batch.
+                prior_point = db.query(migrate.FlightTelemetry).filter(
+                    migrate.FlightTelemetry.icao24 == p.icao24,
+                    migrate.FlightTelemetry.latest_airfield != None
+                ).order_by(migrate.FlightTelemetry.timestamp.desc()).first()
+                
+                if prior_point:
+                    p.latest_airfield = prior_point.latest_airfield
+                    last_known_airfields[p.icao24] = prior_point.latest_airfield
+
+            # 3. Label Phase (Only if NOT at an airfield)
+            if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
+                p.is_over_water = True
+                count_over_water += 1
+            elif p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
+                p.is_low_pass = True
+                count_low_pass += 1
+        
         p.is_processed = True
 
     db.commit()
-    print(f"Labeling complete: {count_low_pass} points identified as low pass.")
-    print(f"Labeling complete: {coun_over_water} points identified as over water.")
+    print(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
+def detect_regions_of_interest_clustered(min_samples=4, distance_meters=200):
+    # 1. Calculate the cutoff (15 days ago from now)
+    cutoff_timestamp = int((datetime.now() - timedelta(days=15)).timestamp())
 
-def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200):
     # 1. Fetch points
     points = db.query(migrate.FlightTelemetry).filter(
-        migrate.FlightTelemetry.is_low_pass == True
+        migrate.FlightTelemetry.is_low_pass == True,
+        migrate.FlightTelemetry.timestamp >= cutoff_timestamp
     ).all()
+
 
     if len(points) < min_samples:
         print("Not enough points to cluster.")

@@ -55,6 +55,8 @@ class FlightTelemetry(Base):
 
     is_low_pass = Column(Boolean, default=False)
     is_over_water = Column(Boolean, default=False)
+    at_airfield = Column(Boolean, default=False)
+    latest_airfield = Column(String(4), nullable=True)
     
 class RegionOfInterest(Base):
     __tablename__ = "regions_of_interest"
