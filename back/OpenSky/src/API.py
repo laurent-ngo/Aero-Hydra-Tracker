@@ -29,8 +29,17 @@ def read_root():
 
 @app.get("/aircraft", response_model=List[dict])
 def list_aircraft(db: Session = Depends(get_db)):
-    aircraft = db.query(migrate.TrackedAircraft).all()
-    # Converting SQLAlchemy objects to simple dictionariesc
+    # 1. Use a Join to get the Airfield details linked to the aircraft
+    # isouter=True ensures we still get the aircraft even if the airfield is NULL
+    results = db.query(
+        migrate.TrackedAircraft, 
+        migrate.Airfield
+    ).outerjoin(
+        migrate.Airfield, 
+        migrate.TrackedAircraft.last_airfield == migrate.Airfield.icao
+    ).all()
+
+    # 2. Convert to dictionary including the new fields
     return [
         {
             "icao24": a.icao24, 
@@ -39,33 +48,44 @@ def list_aircraft(db: Session = Depends(get_db)):
             "owner": a.owner,
             "payload_capacity_kg": a.payload_capacity_kg,
             "model": a.aircraft_model,
-            "type": a.aircraft_type
-        } for a in aircraft
+            "type": a.aircraft_type,
+            # New fields:
+            "last_airfield": a.last_airfield, # The ICAO code (e.g., LSGG)
+            "airfield_name": af.name if af else "Unknown" # The full name
+        } for a, af in results
     ]
 
-@app.get("/aircraft/active")
-def get_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
-    # We query the TrackedAircraft table (which has registration/model)
-    # and join it to Telemetry to see who was active in that window
-    active_list = db.query(migrate.TrackedAircraft)\
-        .join(migrate.FlightTelemetry, migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24)\
-        .filter(migrate.FlightTelemetry.timestamp >= start)\
-        .filter(migrate.FlightTelemetry.timestamp <= stop)\
-        .distinct().all()
+@app.get("/aircraft/active", response_model=List[dict])
+def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
+    # 1. Get unique ICAOs from telemetry within the timeframe
+    active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
+        migrate.FlightTelemetry.timestamp >= start,
+        migrate.FlightTelemetry.timestamp <= stop
+    ).distinct().all()
     
+    icao_list = [i[0] for i in active_icaos]
+
+    # 2. Join TrackedAircraft with Airfield to get the names
+    results = db.query(
+        migrate.TrackedAircraft, 
+        migrate.Airfield
+    ).outerjoin(
+        migrate.Airfield, 
+        migrate.TrackedAircraft.last_airfield == migrate.Airfield.icao
+    ).filter(
+        migrate.TrackedAircraft.icao24.in_(icao_list)
+    ).all()
+
     return [
         {
             "icao24": a.icao24, 
-            "registration": a.registration, 
-            "country": a.country,
-            "owner": a.owner,
-            "payload_capacity_kg": a.payload_capacity_kg,
+            "registration": a.registration,
             "model": a.aircraft_model,
-            "type": a.aircraft_type
-        } for a in active_list
+            "last_airfield": a.last_airfield,
+            "airfield_name": af.name if af else "Unknown" # This is the missing piece!
+        } for a, af in results
     ]
-
-
+    
 @app.get("/telemetry/{icao24}")
 def get_telemetry(
     icao24: str, 
@@ -100,7 +120,7 @@ def get_telemetry(
 
     return results
 
-@app.get("/api/regions-of-interest")
+@app.get("/regions-of-interest")
 def get_all_rois(db: Session = Depends(get_db)):
     rois = db.query(migrate.RegionOfInterest).all()
     

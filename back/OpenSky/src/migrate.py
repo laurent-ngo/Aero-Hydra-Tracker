@@ -18,7 +18,6 @@ engine = create_engine(db_url)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# --- Your Models ---
 class TrackedAircraft(Base):
     __tablename__ = 'tracked_aircraft'
     icao24 = Column(String(6), primary_key=True)
@@ -28,6 +27,8 @@ class TrackedAircraft(Base):
     payload_capacity_kg = Column(Integer)
     aircraft_model = Column(String(50))
     aircraft_type = Column(String(50))
+    
+    last_airfield = Column(String(4), nullable=True)
 
     __table_args__ = (
         CheckConstraint(aircraft_type.in_(['airplane', 'helicopter']), name='type_check'),

@@ -313,12 +313,45 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0):
     db.commit()
     print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} ROIs.")
 
+def sync_aircraft_last_airfield():
+    print("Syncing last known airfields to aircraft fleet...")
+    
+    # 1. Fetch the most recent telemetry point for every aircraft that has an airfield assigned
+    # We use a subquery or a simple loop depending on your DB size. 
+    # For your scale, a loop through unique ICAO24s is very reliable.
+    aircraft_with_data = db.query(migrate.FlightTelemetry.icao24).filter(
+        migrate.FlightTelemetry.latest_airfield != None
+    ).distinct().all()
+
+    sync_count = 0
+    for (icao,) in aircraft_with_data:
+        # Get the very latest point for this specific aircraft
+        latest_point = db.query(migrate.FlightTelemetry).filter(
+            migrate.FlightTelemetry.icao24 == icao,
+            migrate.FlightTelemetry.latest_airfield != None
+        ).order_by(migrate.FlightTelemetry.timestamp.desc()).first()
+
+        if latest_point:
+            # Find the corresponding record in tracked_aircraft
+            ac_record = db.query(migrate.TrackedAircraft).filter(
+                migrate.TrackedAircraft.icao24 == icao
+            ).first()
+
+            if ac_record:
+                ac_record.last_airfield = latest_point.latest_airfield
+                sync_count += 1
+
+    db.commit()
+    print(f"Sync complete: Updated {sync_count} aircraft with their last known airfield.")
 
 if __name__ == "__main__":
     backfill_telemetry()
     backfill_agl()
     label_flight_phases()
+    sync_aircraft_last_airfield()
+
     detect_regions_of_interest_clustered()
     grow_and_level_up_rois(starting_level=1, buffer_km=1.0)
     grow_and_level_up_rois(starting_level=2, buffer_km=1.0)
+    grow_and_level_up_rois(starting_level=3, buffer_km=1.0)
  

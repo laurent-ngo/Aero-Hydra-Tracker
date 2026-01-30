@@ -75,7 +75,7 @@
     async function toggleROIs(checkbox) {
         if (checkbox.checked) {
             try {
-                const response = await fetch('http://localhost:8000/api/regions-of-interest');
+                const response = await fetch('http://localhost:8000/regions-of-interest');
                 const rois = await response.json();
                 
                 roiLayerGroup.clearLayers(); // Clear old ones before adding fresh data
@@ -159,11 +159,24 @@
         aircraft.forEach(ac => {
             const li = document.createElement('li');
             li.className = 'aircraft-item';
+            
+            // Logic for the airfield display
+            const hasAirfield = ac.airfield_name && ac.airfield_name !== "";
+            const labelText = hasAirfield ? ac.airfield_name : "Unknown";
+            const labelColor = hasAirfield ? "#e67e22" : "#7f8c8d"; // Orange for known, Gray for unknown
+
+            const airfieldDisplay = `<span style="background: ${labelColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; margin-left: 5px; white-space: nowrap;">
+                    <i class="fa-solid fa-location-dot" style="font-size: 0.9em;"></i> ${labelText}
+                </span>`;
+
             li.innerHTML = `
                 <input type="checkbox" class="ac-checkbox" data-icao="${ac.icao24}" id="check-${ac.icao24}">
-                <label for="check-${ac.icao24}" style="cursor:pointer">
-                    <strong>${ac.registration || ac.icao24}</strong><br>
-                    <small>${ac.model || 'Unknown'}</small>
+                <label for="check-${ac.icao24}" style="cursor:pointer; flex-grow: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <strong>${ac.registration || ac.icao24}</strong>
+                        ${airfieldDisplay}
+                    </div>
+                    <small style="color: #bdc3c7;">${ac.model || 'Unknown'}</small>
                 </label>`;
             
             li.onclick = (e) => {
