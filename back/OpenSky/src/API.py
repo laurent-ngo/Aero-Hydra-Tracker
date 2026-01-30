@@ -111,6 +111,7 @@ def get_all_rois(db: Session = Depends(get_db)):
             "name": r.name,
             "lat": r.lat,
             "lon": r.lon,
+            "level": r.level,
             "density": r.density,
             "detected_at": r.detected_at.isoformat() if r.detected_at else None,
             "geometry": r.geometry

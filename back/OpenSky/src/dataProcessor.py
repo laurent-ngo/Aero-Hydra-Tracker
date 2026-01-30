@@ -1,5 +1,7 @@
 import os
 import time
+import json
+import requests
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
@@ -10,12 +12,10 @@ from collections import Counter
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
-import json
-
-import requests
+from shapely.geometry import Polygon, MultiPolygon
+from shapely.ops import unary_union
 
 import migrate
-
 
 user = os.getenv('DB_USER', 'postgres')
 password = os.getenv('DB_PASSWORD', 'postgres')
@@ -29,7 +29,6 @@ db_url = f"postgresql://{user}:{password}@{db_host}:{db_port}/{db_name}"
 engine = create_engine(db_url)
 Session = sessionmaker(bind=engine)
 db = Session()
-
 
 ''' 
     Haversine: 
@@ -132,7 +131,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=5.0, airfield_alt_threshold=1500):
+def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=8.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
@@ -202,7 +201,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     db.commit()
     print(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
-def detect_regions_of_interest_clustered(min_samples=4, distance_meters=200):
+def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200):
     # 1. Calculate the cutoff (15 days ago from now)
     cutoff_timestamp = int((datetime.now() - timedelta(days=15)).timestamp())
 
@@ -251,12 +250,68 @@ def detect_regions_of_interest_clustered(min_samples=4, distance_meters=200):
             geometry=json.dumps(hull_points), # Store the list of coordinates
             density=len(cluster_points),
             name=f"Custom Area {k}",
-            detected_at=datetime.now()
+            detected_at=datetime.now(),
+            level=1
         )
         db.add(new_roi)
 
     db.commit()
     print(f"Detected {len(unique_labels)} high-density areas with bounding boxes.")
+
+def grow_and_level_up_rois(starting_level=1, buffer_km=1.0):
+    # 1. Fetch only ROIs at the specific starting level
+    rois = db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.level == starting_level
+    ).all()
+
+    if not rois:
+        print(f"No ROIs found at Level {starting_level} to grow.")
+        return
+
+    polygons = []
+    for roi in rois:
+        coords = json.loads(roi.geometry)
+        if len(coords) >= 3:
+            # Convert km to degrees (~111km per degree)
+            buffer_deg = buffer_km / 111.0
+            # Buffer (Grow) the polygon
+            poly = Polygon(coords).buffer(buffer_deg)
+            polygons.append(poly)
+
+    if not polygons:
+        return
+
+    # 2. REGROUP: Merge all overlapping expanded polygons
+    merged_geometry = unary_union(polygons)
+
+    # 3. Handle the result (Single Polygon or MultiPolygon)
+    if isinstance(merged_geometry, Polygon):
+        final_shapes = [merged_geometry]
+    else:
+        final_shapes = list(merged_geometry.geoms)
+
+    
+    # 4. SAVE the new higher-level ROIs
+    new_level = starting_level + 1
+    db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.level == new_level
+    ).delete()
+    for i, shape in enumerate(final_shapes):
+        merged_coords = list(shape.exterior.coords)
+        
+        new_roi = migrate.RegionOfInterest(
+            lat=shape.centroid.y,
+            lon=shape.centroid.x,
+            geometry=json.dumps(merged_coords),
+            density=0, # New levels represent area, not raw points
+            level=new_level,
+            name=f"Level {new_level} Zone - Area {i+1}",
+            detected_at=datetime.now()
+        )
+        db.add(new_roi)
+
+    db.commit()
+    print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} ROIs.")
 
 
 if __name__ == "__main__":
@@ -264,4 +319,6 @@ if __name__ == "__main__":
     backfill_agl()
     label_flight_phases()
     detect_regions_of_interest_clustered()
+    grow_and_level_up_rois(starting_level=1, buffer_km=1.0)
+    grow_and_level_up_rois(starting_level=2, buffer_km=1.0)
  

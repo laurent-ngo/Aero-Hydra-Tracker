@@ -66,9 +66,10 @@ class RegionOfInterest(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     geometry = Column(Text, nullable=True)
-
+    
     density = Column(Integer)  # Number of points found
     detected_at = Column(DateTime, default=func.now())
+    level = Column(Integer)
 
 class Airfield(Base):
     __tablename__ = 'airfields'
