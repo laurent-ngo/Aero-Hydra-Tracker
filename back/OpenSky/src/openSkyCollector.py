@@ -129,8 +129,14 @@ class FirefleetCollector:
             response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
             response.raise_for_status()
             return response.json() # Returns a full track object with path points
+        except requests.exceptions.HTTPError as e:
+            # Diplomatically ignore 404s, but report other issues (like 500 or 401)
+            if e.response.status_code != 404:
+                print(f"HTTP Error fetching track for {icao24}: {e}")
+            return None
         except Exception as e:
-            print(f"Error fetching historical track for {icao24}: {e}")
+            # Catch non-HTTP errors like timeouts or connection issues
+            print(f"Unexpected error fetching track for {icao24}: {e}")
             return None
 
 # --- Local Test ---
@@ -140,7 +146,6 @@ if __name__ == "__main__":
 
     print(f"DEBUG: Token found: {'Yes' if TOKEN else 'No'}")
 
-    
     collector = FirefleetCollector(TOKEN)
 
        
