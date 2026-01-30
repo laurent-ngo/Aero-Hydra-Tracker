@@ -120,11 +120,16 @@ def get_telemetry(
 
     return results
 
-@app.get("/regions-of-interest")
-def get_all_rois(db: Session = Depends(get_db)):
-    rois = db.query(migrate.RegionOfInterest).all()
+@app.get("/regions-of-interest") # Updated to match your frontend fetch URL
+def get_rois(level: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(migrate.RegionOfInterest)
     
-    # We return a list of dictionaries that FastAPI converts to JSON
+    # Filter if level is provided
+    if level is not None:
+        query = query.filter(migrate.RegionOfInterest.level == level)
+        
+    rois = query.all()
+    
     return [
         {
             "id": r.id,

@@ -49,8 +49,20 @@
         </button>
     </div>
     <div class="controls" style="border-top: 1px solid #3e5871;">
-        <input type="checkbox" id="show-rois" onclick="toggleROIs(this)">
-        <label for="show-rois"><strong>Show Hotspots (ROI)</strong></label>
+        <input type="checkbox" id="show-rois-l1" onclick="toggleROIs(this, 1)">
+        <label for="show-rois-l1"><strong>Show Clusters (L1)</strong></label>
+    </div>
+    <div class="controls">
+        <input type="checkbox" id="show-rois-l2" onclick="toggleROIs(this, 2)">
+        <label for="show-rois-l2"><strong>Show Regional (L3)</strong></label>
+    </div>
+    <div class="controls">
+        <input type="checkbox" id="show-rois-l3" onclick="toggleROIs(this, 3)">
+        <label for="show-rois-l3"><strong>Show Regional (L3)</strong></label>
+    </div>
+    <div class="controls">
+        <input type="checkbox" id="show-rois-l4" onclick="toggleROIs(this, 4)">
+        <label for="show-rois-l4"><strong>Show Regional (L3)</strong></label>
     </div>
     <div class="controls">
         <input type="checkbox" id="select-all" onclick="toggleAll(this)">
@@ -72,48 +84,57 @@
     // --- NEW: ROI Layer Management ---
     const roiLayerGroup = L.layerGroup().addTo(map);
 
-    async function toggleROIs(checkbox) {
+    const roiLayers = {
+        1: L.layerGroup().addTo(map),
+        2: L.layerGroup().addTo(map),
+        3: L.layerGroup().addTo(map),
+        4: L.layerGroup().addTo(map)
+    };
+
+    async function toggleROIs(checkbox, level) {
+        const layerGroup = roiLayers[level];
+
         if (checkbox.checked) {
             try {
-                const response = await fetch('http://localhost:8000/regions-of-interest');
+                const response = await fetch(`http://localhost:8000/regions-of-interest?level=${level}`);
                 const rois = await response.json();
                 
-                roiLayerGroup.clearLayers(); // Clear old ones before adding fresh data
+                layerGroup.clearLayers(); 
 
                 rois.forEach(roi => {
                     if (roi.geometry) {
-                        // Parse the string back into an array of [lat, lon]
                         const polygonPoints = JSON.parse(roi.geometry);
                         
                         if (polygonPoints.length > 0) {
-                            // 1. Create the custom polygon
+                            // Style based on level: Red for L1, Blue/Purple for L3
+                            const color = (level === 1) ? '#e74c3c' : '#9b59b6';
+                            const fillColor = (level === 1) ? '#ff7675' : '#a29bfe';
+
                             const poly = L.polygon(polygonPoints, {
-                                color: '#e74c3c',
-                                fillColor: '#ff7675',
-                                fillOpacity: 0.4,
+                                color: color,
+                                fillColor: fillColor,
+                                fillOpacity: 0.3,
                                 weight: 2
                             });
 
-                            // 2. Add the informative popup
                             poly.bindPopup(`
                                 <div style="color: #2c3e50;">
-                                    <strong>Detected Activity Zone</strong><br>
-                                    Density: ${roi.density} points<br>
-                                    <small>Last seen: ${new Date(roi.detected_at).toLocaleTimeString()}</small>
+                                    <strong>Level ${level} Zone</strong><br>
+                                    ${level === 1 ? `Density: ${roi.density} points` : 'Regional Buffer'}<br>
+                                    <small>Detected: ${new Date(roi.detected_at).toLocaleDateString()}</small>
                                 </div>
                             `);
 
-                            // 3. CORRECTED: Add the 'poly' object, NOT the 'polygonPoints' array
-                            roiLayerGroup.addLayer(poly);
+                            layerGroup.addLayer(poly);
                         }
                     }
                 });
             } catch (e) {
-                console.error("Failed to fetch ROIs:", e);
+                console.error(`Failed to fetch Level ${level} ROIs:`, e);
                 checkbox.checked = false;
             }
         } else {
-            roiLayerGroup.clearLayers();
+            layerGroup.clearLayers();
         }
     }
 
