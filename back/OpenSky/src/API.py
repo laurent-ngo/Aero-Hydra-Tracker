@@ -31,6 +31,7 @@ def read_root():
 def list_aircraft(db: Session = Depends(get_db)):
     # 1. Use a Join to get the Airfield details linked to the aircraft
     # isouter=True ensures we still get the aircraft even if the airfield is NULL
+    
     results = db.query(
         migrate.TrackedAircraft, 
         migrate.Airfield,
@@ -38,8 +39,8 @@ def list_aircraft(db: Session = Depends(get_db)):
     ).outerjoin(
         migrate.FlightTelemetry,
         and_(
-            migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp,
-            migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24
+            migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24,
+            migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp
         )
     ).outerjoin(
         migrate.Airfield, 
@@ -67,6 +68,7 @@ def list_aircraft(db: Session = Depends(get_db)):
         } for a, af, ft in results
     ]
 
+
 @app.get("/aircraft/active", response_model=List[dict])
 def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
     # 1. Get unique ICAOs from telemetry within the timeframe
@@ -80,10 +82,17 @@ def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
     # 2. Join TrackedAircraft with Airfield to get the names
     results = db.query(
         migrate.TrackedAircraft, 
-        migrate.Airfield
+        migrate.Airfield,
+        migrate.FlightTelemetry
+    ).outerjoin(
+        migrate.FlightTelemetry,
+        and_(
+            migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24,
+            migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp
+        )
     ).outerjoin(
         migrate.Airfield, 
-        migrate.TrackedAircraft.last_airfield == migrate.Airfield.icao
+        migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
     ).filter(
         migrate.TrackedAircraft.icao24.in_(icao_list)
     ).all()
@@ -91,11 +100,20 @@ def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
     return [
         {
             "icao24": a.icao24, 
-            "registration": a.registration,
+            "registration": a.registration, 
+            "country": a.country,
+            "owner": a.owner,
+            "payload_capacity_kg": a.payload_capacity_kg,
             "model": a.aircraft_model,
-            "last_airfield": a.last_airfield,
-            "airfield_name": af.name if af else "Unknown" # This is the missing piece!
-        } for a, af in results
+            "type": a.aircraft_type,
+           
+            "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
+            "airfield_name": af.name if af else "Unknown", # The full name
+            "last_lat": ft.lat if ft else None,
+            "last_lon": ft.lon if ft else None,
+            "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
+            "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
+        } for a, af, ft in results
     ]
     
 @app.get("/telemetry/{icao24}")

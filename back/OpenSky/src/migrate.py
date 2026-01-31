@@ -28,7 +28,6 @@ class TrackedAircraft(Base):
     aircraft_model = Column(String(50))
     aircraft_type = Column(String(50))
 
-    last_airfield = Column(String(4), nullable=True)
     last_seen = Column(Integer)
 
     __table_args__ = (
