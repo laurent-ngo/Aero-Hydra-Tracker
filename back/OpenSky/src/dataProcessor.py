@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
 from collections import Counter
@@ -344,13 +344,42 @@ def sync_aircraft_last_airfield():
     db.commit()
     print(f"Sync complete: Updated {sync_count} aircraft with their last known airfield.")
 
+def sync_aircraft_metadata():
+    print("Promoting latest telemetry metadata to aircraft table...")
+    
+    # Get the latest point for every aircraft
+    # This query finds the maximum ID for each ICAO24
+    latest_points = db.query(migrate.FlightTelemetry).distinct(
+        migrate.FlightTelemetry.icao24
+    ).order_by(
+        migrate.FlightTelemetry.icao24, 
+        desc(migrate.FlightTelemetry.timestamp)
+    ).all()
+
+
+    sync_count = 0
+    for p in latest_points:
+        # 2. Update the corresponding aircraft record
+        ac_record = db.query(migrate.TrackedAircraft).filter(
+            migrate.TrackedAircraft.icao24 == p.icao24
+        ).first()
+        
+        if ac_record:
+            ac_record.last_seen = p.timestamp
+            sync_count += 1
+
+    db.commit()
+    print(f"Sync complete: {sync_count} aircraft updated with their latest status.")
+
 if __name__ == "__main__":
     backfill_telemetry()
     backfill_agl()
     label_flight_phases()
     sync_aircraft_last_airfield()
+    sync_aircraft_metadata()
 
     detect_regions_of_interest_clustered()
+
     grow_and_level_up_rois(starting_level=1, buffer_km=1.0)
     grow_and_level_up_rois(starting_level=2, buffer_km=1.0)
     grow_and_level_up_rois(starting_level=3, buffer_km=1.0)

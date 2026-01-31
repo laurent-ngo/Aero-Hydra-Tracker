@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from typing import List, Optional
 import migrate # Importing your existing models and SessionLocal
 
@@ -33,10 +33,17 @@ def list_aircraft(db: Session = Depends(get_db)):
     # isouter=True ensures we still get the aircraft even if the airfield is NULL
     results = db.query(
         migrate.TrackedAircraft, 
-        migrate.Airfield
+        migrate.Airfield,
+        migrate.FlightTelemetry
+    ).outerjoin(
+        migrate.FlightTelemetry,
+        and_(
+            migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp,
+            migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24
+        )
     ).outerjoin(
         migrate.Airfield, 
-        migrate.TrackedAircraft.last_airfield == migrate.Airfield.icao
+        migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
     ).all()
 
     # 2. Convert to dictionary including the new fields
@@ -49,10 +56,15 @@ def list_aircraft(db: Session = Depends(get_db)):
             "payload_capacity_kg": a.payload_capacity_kg,
             "model": a.aircraft_model,
             "type": a.aircraft_type,
-            # New fields:
-            "last_airfield": a.last_airfield, # The ICAO code (e.g., LSGG)
-            "airfield_name": af.name if af else "Unknown" # The full name
-        } for a, af in results
+           
+            "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
+            "airfield_name": af.name if af else "Unknown", # The full name
+            "last_lat": ft.lat if ft else None,
+            "last_lon": ft.lon if ft else None,
+            "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
+            "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
+            
+        } for a, af, ft in results
     ]
 
 @app.get("/aircraft/active", response_model=List[dict])
