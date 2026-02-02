@@ -139,6 +139,7 @@ def get_rois(level: Optional[int] = None, db: Session = Depends(get_db)):
             "name": r.name,
             "lat": r.lat,
             "lon": r.lon,
+            "type": r.type,
             "level": r.level,
             "density": r.density,
             "detected_at": r.detected_at.isoformat() if r.detected_at else None,

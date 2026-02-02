@@ -69,9 +69,16 @@ class RegionOfInterest(Base):
     lon = Column(Float, nullable=False)
     geometry = Column(Text, nullable=True)
     
+    type = Column(String(50))
+    
     density = Column(Integer)  # Number of points found
     detected_at = Column(DateTime, default=func.now())
     level = Column(Integer)
+
+    
+    __table_args__ = (
+        CheckConstraint(type.in_(['fire', 'water']), name='type_check'),
+    )
 
 class Airfield(Base):
     __tablename__ = 'airfields'
