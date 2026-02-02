@@ -149,7 +149,6 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         migrate.FlightTelemetry.baro_altitude_ft != None,
         migrate.FlightTelemetry.is_processed == False 
     ).order_by(migrate.FlightTelemetry.timestamp).all()
-
     
     if not points:
         print("No new points to label.")
@@ -158,6 +157,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     last_known_airfields = db.query(
         migrate.FlightTelemetry.icao24,
         migrate.FlightTelemetry.latest_airfield,
+        migrate.FlightTelemetry.is_full,
         migrate.FlightTelemetry.timestamp
     ).filter(
         migrate.FlightTelemetry.latest_airfield.isnot(None)
@@ -169,6 +169,19 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     ).all()
     
     airfield_dict = {row.icao24: row.latest_airfield for row in last_known_airfields}
+    is_full_dict = {row.icao24: row.is_full for row in last_known_airfields}
+
+    water_bombers = db.query(
+        migrate.TrackedAircraft.icao24,
+        migrate.TrackedAircraft.payload_capacity_kg,
+        migrate.TrackedAircraft.last_seen
+    ).filter(
+        migrate.TrackedAircraft.payload_capacity_kg> 0
+    ).distinct(
+        migrate.TrackedAircraft.icao24
+    ).all()
+    
+    water_bombers_dict = {row.icao24: row.payload_capacity_kg for row in water_bombers}
 
     count_low_pass = 0
     count_over_water = 0 
@@ -181,8 +194,9 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         p.at_airfield = False
         p.is_over_water = False
         p.is_low_pass = False
-        p.is_full = True
-        
+
+        p.is_full = is_full_dict[p.icao24] # water_bombers_dict
+     
         # 1. Proximity Check (Highest priority)
         for af in airfields:
             dist = calculate_distance(p.lat, p.lon, af.lat, af.lon)
@@ -192,6 +206,8 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
                 
                 # Update our cache for this specific airplane
                 airfield_dict[p.icao24] = af.icao
+
+                p.is_full = True
                 
                 count_at_airfield += 1
                 found_near_airfield = True
@@ -214,11 +230,12 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
                 p.is_low_pass = True
                 count_low_pass += 1
 
-                point_geom = Point(p.lat, p.lon)
-                for poly in level_3_polygons:
-                    if poly.contains(point_geom):
-                        p.is_full = False
-                        break
+                if p.is_full:
+                    point_geom = Point(p.lat, p.lon)
+                    for poly in level_3_polygons:
+                        if poly.contains(point_geom):
+                            p.is_full = False
+                            break
         
         p.is_processed = True
 

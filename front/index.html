@@ -186,6 +186,17 @@
             const labelText = hasAirfield ? ac.airfield_name : "Unknown";
             const labelColor = hasAirfield ? "#e67e22" : "#7f8c8d"; // Orange for known, Gray for unknown
 
+            // If is_full is true, show a solid blue drop. If false, show an empty grey one.
+            const isFull = ac.is_full === true;
+            const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
+            const payloadColor = isFull ? '#3498db' : '#576574';
+            const payloadTitle = isFull ? 'Payload: Full' : 'Payload: Empty';
+
+            const payloadDisplay = `
+                <i class="${payloadIcon}" 
+                style="color: ${payloadColor}; font-size: 0.9em; margin-right: 8px;" 
+                title="${payloadTitle}"></i>`;
+
             const airfieldDisplay = `<span style="background: ${labelColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; margin-left: 5px; white-space: nowrap;">
                     <i class="fa-solid fa-location-dot" style="font-size: 0.9em;"></i> ${labelText}
                 </span>`;
@@ -194,7 +205,7 @@
                 <input type="checkbox" class="ac-checkbox" data-icao="${ac.icao24}" id="check-${ac.icao24}">
                 <label for="check-${ac.icao24}" style="cursor:pointer; flex-grow: 1;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong>${ac.registration || ac.icao24}</strong>
+                        <div>${payloadDisplay}<strong>${ac.registration || ac.icao24}</strong></div>
                         ${airfieldDisplay}
                     </div>
                     <small style="color: #bdc3c7;">${ac.model || 'Unknown'}</small>
