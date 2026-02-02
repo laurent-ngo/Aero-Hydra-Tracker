@@ -131,7 +131,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=8.0, airfield_alt_threshold=1500):
+def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=10.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 

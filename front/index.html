@@ -6,8 +6,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <style>
         body { margin: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; background: #1a252f; }
         #sidebar { width: 320px; background: #2c3e50; color: white; display: flex; flex-direction: column; }
@@ -184,14 +183,14 @@
         // 1. Existing Payload Logic
         const isFull = ac.is_full === true;
         const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
-        const payloadColor = isFull ? '#3498db' : '#576574';
+        const payloadColor = isFull ? '#3498db' : '#e74c3c';
         const payloadDisplay = `<i class="${payloadIcon}" style="color: ${payloadColor}; font-size: 0.8em; margin-right: 5px;"></i>`;
 
         // 2. NEW: Flight Status Logic (at_airfield)
         // If at_airfield is true, they are on the ground. If false, they are flying.
         const isFlying = ac.at_airfield === false; 
-        const statusIcon = isFlying ? 'fa-solid fa-plane-departure' : 'fa-solid fa-trowel-bricks'; // Or 'fa-house' for hangar
-        const statusColor = isFlying ? '#2ecc71' : '#95a5a6'; // Green for flying, Grey for grounded
+        const statusIcon = isFlying ? 'fa-solid fa-plane-circle-check' : 'fa-solid fa-plane-circle-xmark'; // Or 'fa-house' for hangar
+        const statusColor = isFlying ? '#2ecc71' : '#e67e22'; // Green for flying, Grey for grounded
         const statusTitle = isFlying ? 'In Flight' : 'On Ground';
 
         const statusDisplay = `<i class="${statusIcon}" 
