@@ -181,10 +181,16 @@
     li.className = 'aircraft-item';
     
         // 1. Existing Payload Logic
-        const isFull = ac.is_full === true;
-        const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
-        const payloadColor = isFull ? '#3498db' : '#e74c3c';
-        const payloadDisplay = `<i class="${payloadIcon}" style="color: ${payloadColor}; font-size: 0.8em; margin-right: 5px;"></i>`;
+        let payloadDisplay = '';
+        if (ac.payload_capacity_kg > 0) {
+            const isFull = ac.is_full === true;
+            const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
+            const payloadColor = isFull ? '#3498db' : '#e74c3c';
+            payloadDisplay = `
+                <i class="${payloadIcon}" 
+                    style="color: ${payloadColor}; font-size: 0.8em; margin-right: 5px;" 
+                    title="Payload: ${isFull ? 'Full' : 'Empty'}"></i>`;
+        }
 
         // 2. NEW: Flight Status Logic (at_airfield)
         // If at_airfield is true, they are on the ground. If false, they are flying.
