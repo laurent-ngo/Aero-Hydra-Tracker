@@ -18,3 +18,4 @@ pip install tqdm
 pip install fastapi uvicorn
 pip install scikit-learn numpy
 pip install shapely
+pip install httpx
