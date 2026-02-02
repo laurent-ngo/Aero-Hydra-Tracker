@@ -23,7 +23,7 @@ fi
 
 
 start() {
-    if [ -f "$PID_FILE" ]; then
+    if [[ -f "$PID_FILE" ]]; then
         warn "API is already running (PID: $(cat $PID_FILE))."
     else
         info "Starting Aero-Hydra API..."
@@ -38,10 +38,11 @@ start() {
         echo $! > "$PID_FILE"
         info "API successfully started on port 8000."
     fi
+    return
 }
 
 stop() {
-    if [ -f "$PID_FILE" ]; then
+    if [[ -f "$PID_FILE" ]]; then
         PID=$(cat "$PID_FILE")
         info "Stopping API (PID: $PID)..."
         kill "$PID"
@@ -50,6 +51,7 @@ stop() {
     else
         warn "API is not currently running."
     fi
+    return 
 }
 
 case "$1" in
@@ -57,7 +59,7 @@ case "$1" in
     stop)    stop ;;
     restart) stop; sleep 2; start ;;
     status)
-        if [ -f "$PID_FILE" ]; then
+        if [[ -f "$PID_FILE" ]]; then
             info "API is RUNNING (PID: $(cat $PID_FILE))"
         else
             error "API is OFFLINE"
