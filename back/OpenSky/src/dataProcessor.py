@@ -1,6 +1,7 @@
 import os
 import time
 import json
+from json import JSONDecodeError
 import requests
 from datetime import datetime, timedelta
 import math
@@ -141,7 +142,8 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         try:
             poly = Polygon(json.loads(r.geometry))
             level_3_polygons.append(poly)
-        except:
+        except(JSONDecodeError, TypeError, ValueError) as e:
+            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
             continue
     
     points = db.query(migrate.FlightTelemetry).filter(

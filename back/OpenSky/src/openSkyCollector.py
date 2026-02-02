@@ -10,6 +10,8 @@ class FirefleetCollector:
         self.track_url = "https://opensky-network.org/api/tracks/all"
         self.history_url = "https://opensky-network.org/api/flights/aircraft"
 
+        self.app_json = "application/json"
+
         self.token = token
 
     def get_positions(self, icao_list):
@@ -19,7 +21,7 @@ class FirefleetCollector:
         # New Header Format for OAuth2 / JWT
         headers = {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json"
+            "Accept": self.app_json
         }
         
         try:
@@ -48,7 +50,7 @@ class FirefleetCollector:
         
         headers = {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json"
+            "Accept": self.app_json
         }
         
         try:
@@ -122,7 +124,7 @@ class FirefleetCollector:
         
         headers = {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json"
+            "Accept": self.app_json
         }
 
         try:
