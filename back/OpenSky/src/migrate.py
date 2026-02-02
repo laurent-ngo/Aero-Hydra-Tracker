@@ -57,6 +57,9 @@ class FlightTelemetry(Base):
 
     is_low_pass = Column(Boolean, default=False)
     is_over_water = Column(Boolean, default=False)
+    
+    is_full = Column(Boolean) 
+    
     at_airfield = Column(Boolean, default=False)
     latest_airfield = Column(String(4), nullable=True)
     

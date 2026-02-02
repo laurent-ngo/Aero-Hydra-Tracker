@@ -12,7 +12,7 @@ from collections import Counter
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon, MultiPolygon, MultiPoint
+from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
 from shapely.ops import unary_union
 
 import migrate
@@ -135,12 +135,22 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
+    roi_data = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.level == 3).all()
+    level_3_polygons = []
+    for r in roi_data:
+        try:
+            poly = Polygon(json.loads(r.geometry))
+            level_3_polygons.append(poly)
+        except:
+            continue
+
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
         migrate.FlightTelemetry.is_processed == False 
     ).order_by(migrate.FlightTelemetry.timestamp).all()
 
+    
     if not points:
         print("No new points to label.")
         return
@@ -171,6 +181,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         p.at_airfield = False
         p.is_over_water = False
         p.is_low_pass = False
+        p.is_full = True
         
         # 1. Proximity Check (Highest priority)
         for af in airfields:
@@ -178,8 +189,6 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
             if dist <= airfield_radius and p.altitude_agl_ft <= airfield_alt_threshold:
                 p.at_airfield = True
                 p.latest_airfield = af.icao
-                p.is_over_water = False
-                p.is_low_pass = False
                 
                 # Update our cache for this specific airplane
                 airfield_dict[p.icao24] = af.icao
@@ -200,9 +209,16 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
             if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
                 p.is_over_water = True
                 count_over_water += 1
+
             elif p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
                 p.is_low_pass = True
                 count_low_pass += 1
+
+                point_geom = Point(p.lat, p.lon)
+                for poly in level_3_polygons:
+                    if poly.contains(point_geom):
+                        p.is_full = False
+                        break
         
         p.is_processed = True
 
