@@ -143,13 +143,16 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
             level_3_polygons.append(poly)
         except:
             continue
-
+    
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
         migrate.FlightTelemetry.is_processed == False 
-    ).order_by(migrate.FlightTelemetry.timestamp).all()
-    
+    ).order_by(
+        migrate.FlightTelemetry.timestamp,
+        desc(migrate.FlightTelemetry.timestamp)
+    ).all()
+
     if not points:
         print("No new points to label.")
         return
@@ -195,7 +198,9 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         p.is_over_water = False
         p.is_low_pass = False
 
-        p.is_full = is_full_dict[p.icao24] # water_bombers_dict
+        p.is_full = is_full_dict[p.icao24] 
+        if p.is_full is None:
+            p.is_full =  p.icao24 in water_bombers_dict
      
         # 1. Proximity Check (Highest priority)
         for af in airfields:
