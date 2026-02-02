@@ -8,10 +8,25 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color (Reset)
 
 # Helper functions for clean output
-info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
-header() { echo -e "${BLUE}=== $1 ===${NC}"; }
+info() {
+    local message="$1"
+    echo -e "${GREEN}[INFO]${NC} ${message}"; 
+}
+
+warn() { 
+    local message="$1"
+    echo -e "${YELLOW}[WARN]${NC} ${message}"; 
+}
+
+error() { 
+    local message="$1"
+    echo -e "${RED}[ERROR]${NC} ${message}"; 
+}
+
+header() { 
+    local message="$1"
+    echo -e "${BLUE}=== ${message} ===${NC}"; 
+}
 
 export -f info
 export -f warn
