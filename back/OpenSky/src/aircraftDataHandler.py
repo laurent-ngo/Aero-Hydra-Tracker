@@ -71,7 +71,7 @@ def bulk_insert_telemetry(session, icao24, path_data):
             "lat": p[1],
             "lon": p[2],
             "baro_altitude": p[3],
-            "baro_altitude_ft":round(p[3] * 3.28084) if p[3] else None,
+            "baro_altitude_ft":round(p[3] * 3.28084) if p[3] else 0,
             "true_track": p[4],
             "on_ground": p[5]
         }

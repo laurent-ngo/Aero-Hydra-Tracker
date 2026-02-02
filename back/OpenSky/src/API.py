@@ -58,6 +58,7 @@ def list_aircraft(db: Session = Depends(get_db)):
             "model": a.aircraft_model,
             "type": a.aircraft_type,
            
+            "last_timestamp": a.last_seen,
             "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
             "airfield_name": af.name if af else "Unknown", # The full name
             "last_lat": ft.lat if ft else None,
@@ -107,6 +108,7 @@ def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
             "model": a.aircraft_model,
             "type": a.aircraft_type,
            
+            "last_timestamp": a.last_seen,
             "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
             "airfield_name": af.name if af else "Unknown", # The full name
             "last_lat": ft.lat if ft else None,

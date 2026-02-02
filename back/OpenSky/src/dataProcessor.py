@@ -145,16 +145,34 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         print("No new points to label.")
         return
     
-    last_known_airfields = {}
+    last_known_airfields = db.query(
+        migrate.FlightTelemetry.icao24,
+        migrate.FlightTelemetry.latest_airfield,
+        migrate.FlightTelemetry.timestamp
+    ).filter(
+        migrate.FlightTelemetry.latest_airfield.isnot(None)
+    ).distinct(
+        migrate.FlightTelemetry.icao24
+    ).order_by(
+        migrate.FlightTelemetry.icao24, 
+        desc(migrate.FlightTelemetry.timestamp)
+    ).all()
+    
+    airfield_dict = {row.icao24: row.latest_airfield for row in last_known_airfields}
 
     count_low_pass = 0
     count_over_water = 0 
     count_at_airfield = 0
 
+    # Runs throught every new points
     for p in points:
-        # 1. Proximity Check (Highest priority)
         found_near_airfield = False
 
+        p.at_airfield = False
+        p.is_over_water = False
+        p.is_low_pass = False
+        
+        # 1. Proximity Check (Highest priority)
         for af in airfields:
             dist = calculate_distance(p.lat, p.lon, af.lat, af.lon)
             if dist <= airfield_radius and p.altitude_agl_ft <= airfield_alt_threshold:
@@ -164,7 +182,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
                 p.is_low_pass = False
                 
                 # Update our cache for this specific airplane
-                last_known_airfields[p.icao24] = af.icao
+                airfield_dict[p.icao24] = af.icao
                 
                 count_at_airfield += 1
                 found_near_airfield = True
@@ -172,22 +190,12 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
 
         # 2. Inheritance Logic (If not currently at an airfield)
         if not found_near_airfield:
-            p.at_airfield = False
             # Check if we already found an airfield for this plane in this batch
-            if p.icao24 in last_known_airfields:
-                p.latest_airfield = last_known_airfields[p.icao24]
+            if p.icao24 in airfield_dict:
+                p.latest_airfield = airfield_dict[p.icao24]
             else:
-                # OPTIONAL: Query the database for the most recent processed point for this plane
-                # to get the airfield if it wasn't in this current batch.
-                prior_point = db.query(migrate.FlightTelemetry).filter(
-                    migrate.FlightTelemetry.icao24 == p.icao24,
-                    migrate.FlightTelemetry.latest_airfield != None
-                ).order_by(migrate.FlightTelemetry.timestamp.desc()).first()
-                
-                if prior_point:
-                    p.latest_airfield = prior_point.latest_airfield
-                    last_known_airfields[p.icao24] = prior_point.latest_airfield
-
+                p.latest_airfield = None
+        
             # 3. Label Phase (Only if NOT at an airfield)
             if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
                 p.is_over_water = True
@@ -313,36 +321,6 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0):
     db.commit()
     print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} ROIs.")
 
-def sync_aircraft_last_airfield():
-    print("Syncing last known airfields to aircraft fleet...")
-    
-    # 1. Fetch the most recent telemetry point for every aircraft that has an airfield assigned
-    # We use a subquery or a simple loop depending on your DB size. 
-    # For your scale, a loop through unique ICAO24s is very reliable.
-    aircraft_with_data = db.query(migrate.FlightTelemetry.icao24).filter(
-        migrate.FlightTelemetry.latest_airfield != None
-    ).distinct().all()
-
-    sync_count = 0
-    for (icao,) in aircraft_with_data:
-        # Get the very latest point for this specific aircraft
-        latest_point = db.query(migrate.FlightTelemetry).filter(
-            migrate.FlightTelemetry.icao24 == icao,
-            migrate.FlightTelemetry.latest_airfield != None
-        ).order_by(migrate.FlightTelemetry.timestamp.desc()).first()
-
-        if latest_point:
-            # Find the corresponding record in tracked_aircraft
-            ac_record = db.query(migrate.TrackedAircraft).filter(
-                migrate.TrackedAircraft.icao24 == icao
-            ).first()
-
-            if ac_record:
-                ac_record.last_airfield = latest_point.latest_airfield
-                sync_count += 1
-
-    db.commit()
-    print(f"Sync complete: Updated {sync_count} aircraft with their last known airfield.")
 
 def sync_aircraft_metadata():
     print("Promoting latest telemetry metadata to aircraft table...")
@@ -375,7 +353,7 @@ if __name__ == "__main__":
     backfill_telemetry()
     backfill_agl()
     label_flight_phases()
-    sync_aircraft_last_airfield()
+
     sync_aircraft_metadata()
 
     detect_regions_of_interest_clustered()
