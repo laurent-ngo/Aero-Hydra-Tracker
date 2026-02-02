@@ -179,37 +179,46 @@
 
         aircraft.forEach(ac => {
             const li = document.createElement('li');
-            li.className = 'aircraft-item';
-            
-            // Logic for the airfield display
-            const hasAirfield = ac.airfield_name && ac.airfield_name !== "";
-            const labelText = hasAirfield ? ac.airfield_name : "Unknown";
-            const labelColor = hasAirfield ? "#e67e22" : "#7f8c8d"; // Orange for known, Gray for unknown
+    li.className = 'aircraft-item';
+    
+        // 1. Existing Payload Logic
+        const isFull = ac.is_full === true;
+        const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
+        const payloadColor = isFull ? '#3498db' : '#576574';
+        const payloadDisplay = `<i class="${payloadIcon}" style="color: ${payloadColor}; font-size: 0.8em; margin-right: 5px;"></i>`;
 
-            // If is_full is true, show a solid blue drop. If false, show an empty grey one.
-            const isFull = ac.is_full === true;
-            const payloadIcon = isFull ? 'fa-solid fa-droplet' : 'fa-solid fa-droplet-slash';
-            const payloadColor = isFull ? '#3498db' : '#576574';
-            const payloadTitle = isFull ? 'Payload: Full' : 'Payload: Empty';
+        // 2. NEW: Flight Status Logic (at_airfield)
+        // If at_airfield is true, they are on the ground. If false, they are flying.
+        const isFlying = ac.at_airfield === false; 
+        const statusIcon = isFlying ? 'fa-solid fa-plane-departure' : 'fa-solid fa-trowel-bricks'; // Or 'fa-house' for hangar
+        const statusColor = isFlying ? '#2ecc71' : '#95a5a6'; // Green for flying, Grey for grounded
+        const statusTitle = isFlying ? 'In Flight' : 'On Ground';
 
-            const payloadDisplay = `
-                <i class="${payloadIcon}" 
-                style="color: ${payloadColor}; font-size: 0.9em; margin-right: 8px;" 
-                title="${payloadTitle}"></i>`;
+        const statusDisplay = `<i class="${statusIcon}" 
+                                style="color: ${statusColor}; font-size: 0.9em; margin-right: 8px;" 
+                                title="${statusTitle}"></i>`;
 
-            const airfieldDisplay = `<span style="background: ${labelColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; margin-left: 5px; white-space: nowrap;">
-                    <i class="fa-solid fa-location-dot" style="font-size: 0.9em;"></i> ${labelText}
-                </span>`;
+        // 3. Airfield Logic (existing)
+        const hasAirfield = ac.airfield_name && ac.airfield_name !== "";
+        const labelText = hasAirfield ? ac.airfield_name : "Unknown";
+        const labelColor = hasAirfield ? "#e67e22" : "#7f8c8d";
+        const airfieldDisplay = `<span style="background: ${labelColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; margin-left: 5px; white-space: nowrap;">
+                                    <i class="fa-solid fa-location-dot" style="font-size: 0.9em;"></i> ${labelText}
+                                </span>`;
 
-            li.innerHTML = `
-                <input type="checkbox" class="ac-checkbox" data-icao="${ac.icao24}" id="check-${ac.icao24}">
-                <label for="check-${ac.icao24}" style="cursor:pointer; flex-grow: 1;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>${payloadDisplay}<strong>${ac.registration || ac.icao24}</strong></div>
-                        ${airfieldDisplay}
+        li.innerHTML = `
+            <input type="checkbox" class="ac-checkbox" data-icao="${ac.icao24}" id="check-${ac.icao24}">
+            <label for="check-${ac.icao24}" style="cursor:pointer; flex-grow: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        ${statusDisplay}
+                        ${payloadDisplay}
+                        <strong>${ac.registration || ac.icao24}</strong>
                     </div>
-                    <small style="color: #bdc3c7;">${ac.model || 'Unknown'}</small>
-                </label>`;
+                    ${airfieldDisplay}
+                </div>
+                <small style="color: #bdc3c7;">${ac.model || 'Unknown'}</small>
+            </label>`;
             
             li.onclick = (e) => {
                 if (e.target.type !== 'checkbox') {
