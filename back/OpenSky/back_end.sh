@@ -10,7 +10,7 @@ LOCAL_ENVS="$SCRIPT_DIR/local.sh"
 
 usage() {
     echo "Usage: $0 {start|stop|status|migrate|load|token|clean}"
-    exit 1
+    return 1
 }
 
 
@@ -51,7 +51,7 @@ case "$1" in
         info "Running database migrations..."
         python3 "$SCRIPT_DIR/src/migrate.py"
 
-        if [ $? -eq 0 ]; then
+        if [[ $? -eq 0 ]]; then
             info "Deployment successful! System is ready."
         else
             error "Deployment failed during migration."
