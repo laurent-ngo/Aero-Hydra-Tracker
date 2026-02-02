@@ -11,21 +11,25 @@ NC='\033[0m' # No Color (Reset)
 info() {
     local message="$1"
     echo -e "${GREEN}[INFO]${NC} ${message}"; 
+    return 0
 }
 
 warn() { 
     local message="$1"
     echo -e "${YELLOW}[WARN]${NC} ${message}"; 
+    return 0
 }
 
 error() { 
     local message="$1"
     echo -e "${RED}[ERROR]${NC} ${message}"; 
+    return 0
 }
 
 header() { 
     local message="$1"
     echo -e "${BLUE}=== ${message} ===${NC}"; 
+    return 0
 }
 
 export -f info
