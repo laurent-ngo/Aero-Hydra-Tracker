@@ -27,12 +27,10 @@ def get_db():
 def read_root():
     return {"message": "Welcome to the Aero-Hydra Flight API"}
 
-@app.get("/aircraft", response_model=List[dict])
-def list_aircraft(db: Session = Depends(get_db)):
-    # 1. Use a Join to get the Airfield details linked to the aircraft
-    # isouter=True ensures we still get the aircraft even if the airfield is NULL
-    
-    results = db.query(
+
+def _get_aircraft_with_details(db: Session, icao_filter=None):
+    """Common logic for querying aircraft, their last telemetry, and airfield names."""
+    query = db.query(
         migrate.TrackedAircraft, 
         migrate.Airfield,
         migrate.FlightTelemetry
@@ -45,9 +43,13 @@ def list_aircraft(db: Session = Depends(get_db)):
     ).outerjoin(
         migrate.Airfield, 
         migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
-    ).all()
+    )
 
-    # 2. Convert to dictionary including the new fields
+    if icao_filter is not None:
+        query = query.filter(migrate.TrackedAircraft.icao24.in_(icao_filter))
+
+    results = query.all()
+
     return [
         {
             "icao24": a.icao24, 
@@ -65,14 +67,17 @@ def list_aircraft(db: Session = Depends(get_db)):
             "last_lon": ft.lon if ft else None,
             "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
             "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
-            
         } for a, af, ft in results
     ]
+
+@app.get("/aircraft", response_model=List[dict])
+def list_aircraft(db: Session = Depends(get_db)):
+    return _get_aircraft_with_details(db)
 
 
 @app.get("/aircraft/active", response_model=List[dict])
 def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
-    # 1. Get unique ICAOs from telemetry within the timeframe
+    # 1. Get unique ICAOs within timeframe
     active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
         migrate.FlightTelemetry.timestamp >= start,
         migrate.FlightTelemetry.timestamp <= stop
@@ -80,43 +85,8 @@ def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
     
     icao_list = [i[0] for i in active_icaos]
 
-    # 2. Join TrackedAircraft with Airfield to get the names
-    results = db.query(
-        migrate.TrackedAircraft, 
-        migrate.Airfield,
-        migrate.FlightTelemetry
-    ).outerjoin(
-        migrate.FlightTelemetry,
-        and_(
-            migrate.TrackedAircraft.icao24 == migrate.FlightTelemetry.icao24,
-            migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp
-        )
-    ).outerjoin(
-        migrate.Airfield, 
-        migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
-    ).filter(
-        migrate.TrackedAircraft.icao24.in_(icao_list)
-    ).all()
-
-    return [
-        {
-            "icao24": a.icao24, 
-            "registration": a.registration, 
-            "country": a.country,
-            "owner": a.owner,
-            "payload_capacity_kg": a.payload_capacity_kg,
-            "model": a.aircraft_model,
-            "type": a.aircraft_type,
-           
-            "last_timestamp": a.last_seen,
-            "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
-            "airfield_name": af.name if af else "Unknown", # The full name
-            "last_lat": ft.lat if ft else None,
-            "last_lon": ft.lon if ft else None,
-            "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
-            "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
-        } for a, af, ft in results
-    ]
+    # 2. Use helper with the icao filter
+    return _get_aircraft_with_details(db, icao_filter=icao_list)
     
 @app.get("/telemetry/{icao24}")
 def get_telemetry(
