@@ -59,6 +59,7 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
             "payload_capacity_kg": a.payload_capacity_kg,
             "model": a.aircraft_model,
             "type": a.aircraft_type,
+            "sea_landing": a.sea_landing,
            
             "last_timestamp": a.last_seen,
             "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)

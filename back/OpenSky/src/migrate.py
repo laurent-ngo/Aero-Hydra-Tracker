@@ -27,6 +27,7 @@ class TrackedAircraft(Base):
     payload_capacity_kg = Column(Integer)
     aircraft_model = Column(String(50))
     aircraft_type = Column(String(50))
+    sea_landing =Column(Boolean) 
 
     last_seen = Column(Integer)
 
