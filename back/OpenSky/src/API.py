@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
@@ -126,12 +126,21 @@ def get_telemetry(
     return results
 
 @app.get("/regions-of-interest") # Updated to match your frontend fetch URL
-def get_rois(level: Optional[int] = None, db: Session = Depends(get_db)):
+def get_rois(
+    level: Optional[int] = Query(None, ge=1, le=4),
+    type: Optional[str] = Query(None, pattern="^(fire|water)$", description="Filter by 'fire' or 'water'"),
+    db: Session = Depends(get_db)
+    ):
+
     query = db.query(migrate.RegionOfInterest)
     
     # Filter if level is provided
     if level is not None:
         query = query.filter(migrate.RegionOfInterest.level == level)
+
+    # Filter by Type
+    if type is not None:
+        query = query.filter(migrate.RegionOfInterest.type == type)
         
     rois = query.all()
     
