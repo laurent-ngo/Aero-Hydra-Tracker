@@ -12,7 +12,7 @@ from collections import Counter
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, MultiPoint
 from shapely.ops import unary_union
 
 import migrate
@@ -209,15 +209,21 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     db.commit()
     print(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
-def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200):
+def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (15 days ago from now)
     cutoff_timestamp = int((datetime.now() - timedelta(days=15)).timestamp())
 
     # 1. Fetch points
-    points = db.query(migrate.FlightTelemetry).filter(
-        migrate.FlightTelemetry.is_low_pass == True,
-        migrate.FlightTelemetry.timestamp >= cutoff_timestamp
-    ).all()
+    if type == 'fire':
+        points = db.query(migrate.FlightTelemetry).filter(
+            migrate.FlightTelemetry.is_low_pass == True,
+            migrate.FlightTelemetry.timestamp >= cutoff_timestamp
+        ).all()
+    elif type == 'water':
+        points = db.query(migrate.FlightTelemetry).filter(
+            migrate.FlightTelemetry.is_over_water == True,
+            migrate.FlightTelemetry.timestamp >= cutoff_timestamp
+        ).all()
 
 
     if len(points) < min_samples:
@@ -234,46 +240,58 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200):
     labels = dbscan.labels_
     unique_labels = set(labels) - {-1}
     
-    db.query(migrate.RegionOfInterest).delete()
+    # Fetch existing ROIs from DB to compare
+    existing_rois = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.type == type).all()
 
     for k in unique_labels:
-        class_member_mask = (labels == k)
-        cluster_points = coords[class_member_mask]
-        
-        # 4. Calculate the Convex Hull (The "Rubber Band" shape)
-        # We need at least 3 points to make a polygon
-        if len(cluster_points) >= 3:
-            hull = ConvexHull(cluster_points)
-            # Extract the coordinates of the vertices in order
-            hull_points = cluster_points[hull.vertices].tolist()
-        else:
-            # Fallback for very small clusters: just the points themselves
-            hull_points = cluster_points.tolist()
+        cluster_points = coords[labels == k]
+        if len(cluster_points) < 3: continue
 
-        # 5. Save as JSON
-        # Note: You'll need a Text or JSON column in your DB for 'geometry'
-        new_roi = migrate.RegionOfInterest(
-            lat=np.mean(cluster_points[:, 0]),
-            lon=np.mean(cluster_points[:, 1]),
-            geometry=json.dumps(hull_points), # Store the list of coordinates
-            density=len(cluster_points),
-            name=f"Custom Area {k}",
-            detected_at=datetime.now(),
-            level=1
-        )
-        db.add(new_roi)
+        # Create the new cluster polygon
+        new_poly = MultiPoint(cluster_points).convex_hull
+        
+        merged = False
+        for old_roi in existing_rois:
+            old_poly = Polygon(json.loads(old_roi.geometry))
+            
+            # Identify if new cluster intersects or is inside existing ROI
+            if new_poly.intersects(old_poly):
+                # MERGE the two geometries
+                combined_poly = unary_union([old_poly, new_poly]).convex_hull
+                
+                # Update existing record
+                old_roi.geometry = json.dumps(list(combined_poly.exterior.coords))
+                old_roi.density += len(cluster_points)
+                old_roi.detected_at = datetime.now()
+                merged = True
+                break
+        
+        if not merged:
+            # Save as a brand new ROI if no intersection found
+            hull_points = list(new_poly.exterior.coords)
+            new_roi = migrate.RegionOfInterest(
+                lat=np.mean(cluster_points[:, 0]),
+                lon=np.mean(cluster_points[:, 1]),
+                geometry=json.dumps(hull_points),
+                density=len(cluster_points),
+                name=f"Area {datetime.now().strftime('%H%M%S')}",
+                detected_at=datetime.now(),
+                level=1,
+                type=type
+            )
+            db.add(new_roi)
 
     db.commit()
-    print(f"Detected {len(unique_labels)} high-density areas with bounding boxes.")
 
-def grow_and_level_up_rois(starting_level=1, buffer_km=1.0):
+def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
     # 1. Fetch only ROIs at the specific starting level
     rois = db.query(migrate.RegionOfInterest).filter(
-        migrate.RegionOfInterest.level == starting_level
+        migrate.RegionOfInterest.level == starting_level,
+        migrate.RegionOfInterest.type == type
     ).all()
 
     if not rois:
-        print(f"No ROIs found at Level {starting_level} to grow.")
+        print(f"No {type} ROIs found at Level {starting_level} to grow.")
         return
 
     polygons = []
@@ -314,12 +332,13 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0):
             density=0, # New levels represent area, not raw points
             level=new_level,
             name=f"Level {new_level} Zone - Area {i+1}",
-            detected_at=datetime.now()
+            detected_at=datetime.now(),
+            type=type
         )
         db.add(new_roi)
 
     db.commit()
-    print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} ROIs.")
+    print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} {type} ROIs.")
 
 
 def sync_aircraft_metadata():
@@ -356,9 +375,14 @@ if __name__ == "__main__":
 
     sync_aircraft_metadata()
 
-    detect_regions_of_interest_clustered()
+    detect_regions_of_interest_clustered(type='fire')
+    detect_regions_of_interest_clustered(type='water')
 
-    grow_and_level_up_rois(starting_level=1, buffer_km=1.0)
-    grow_and_level_up_rois(starting_level=2, buffer_km=1.0)
-    grow_and_level_up_rois(starting_level=3, buffer_km=1.0)
+    grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
+    grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
+    grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
+    
+    grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+    grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
+    grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
  
