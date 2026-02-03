@@ -11,4 +11,5 @@ back/OpenSky/nohup.out
 front/index.html
 back/OpenSky/api.pid
 .venv/*
-back/OpenSky/logs/cron2026-02-02.txt
+back/OpenSky/logs/*
+
