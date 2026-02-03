@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 import migrate # Importing your existing models and SessionLocal
+import time
 
 app = FastAPI(title="Aero-Hydra API")
 
@@ -100,13 +101,30 @@ def get_telemetry(
     limit: int = 1000, 
     db: Session = Depends(get_db)
 ):
-    query = db.query(migrate.FlightTelemetry).filter(migrate.FlightTelemetry.icao24 == icao24)
+    # Validation: 24-hour check (86400 seconds)
+    if start is None and stop is None:
+        stop = int(time.time())
+        start = stop - 86400
 
-    # Apply date filters if they are provided
-    if start:
-        query = query.filter(migrate.FlightTelemetry.timestamp >= start)
-    if stop:
-        query = query.filter(migrate.FlightTelemetry.timestamp <= stop)
+    elif stop is None:
+        stop = int(time.time())
+        
+    if start and stop:
+        timespan = stop - start
+        if timespan < 0:
+            raise HTTPException(status_code=400, detail="Start timestamp must be before stop timestamp.")
+        if timespan > 86400:
+            raise HTTPException(
+                status_code=400, 
+                detail="Timespan exceeds 24 hours. Please reduce the range for a more precise mission view."
+            )
+        
+    # Query construction
+    query = db.query(migrate.FlightTelemetry).filter(
+        migrate.FlightTelemetry.icao24 == icao24,
+        migrate.FlightTelemetry.timestamp >= start,
+        migrate.FlightTelemetry.timestamp <= stop
+        )
 
     points = query.order_by(migrate.FlightTelemetry.timestamp.desc()).limit(limit).all()
 
