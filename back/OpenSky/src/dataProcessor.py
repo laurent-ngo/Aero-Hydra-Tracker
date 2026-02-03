@@ -182,23 +182,35 @@ def get_water_bombers():
 
     return water_bombers_dict
 
+def get_level_poly(level=3):
+    roi_data = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.level == level).all()
+    level_polygons = []
+    for r in roi_data:
+        try:
+            poly = Polygon(json.loads(r.geometry))
+            level_polygons.append(poly)
+        except(TypeError, ValueError) as e:
+            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
+            continue
+
+    return level_polygons
+
+def proximity_check( point, airfields, radius_km, alt_threshold_ft):
+    for af in airfields:
+        dist = calculate_distance(point.lat, point.lon, af.lat, af.lon)
+        if dist <= radius_km and point.altitude_agl_ft <= alt_threshold_ft:
+            return af
+        return None
+
 def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=10.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
-    roi_data = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.level == 3).all()
-    level_3_polygons = []
-    for r in roi_data:
-        try:
-            poly = Polygon(json.loads(r.geometry))
-            level_3_polygons.append(poly)
-        except(TypeError, ValueError) as e:
-            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
-            continue
+    level_3_polygons = get_level_poly()
     
     points = get_unprocessed_points()
     airfield_dict, is_full_dict = get_lastest_aircraft_data()   
-    water_bombers_dict = get_water_bombers
+    water_bombers_dict = get_water_bombers()
 
     count_low_pass = 0
     count_over_water = 0 
@@ -206,8 +218,6 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
 
     # Runs throught every new points
     for p in points:
-        found_near_airfield = False
-
         p.at_airfield = False
         p.is_over_water = False
         p.is_low_pass = False
@@ -217,23 +227,20 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
             p.is_full =  p.icao24 in water_bombers_dict
      
         # 1. Proximity Check (Highest priority)
-        for af in airfields:
-            dist = calculate_distance(p.lat, p.lon, af.lat, af.lon)
-            if dist <= airfield_radius and p.altitude_agl_ft <= airfield_alt_threshold:
-                p.at_airfield = True
-                p.latest_airfield = af.icao
-                
-                # Update our cache for this specific airplane
-                airfield_dict[p.icao24] = af.icao
-
-                p.is_full = True
-                
-                count_at_airfield += 1
-                found_near_airfield = True
-                break
+        nearby_af = proximity_check(p, airfields, airfield_radius, airfield_alt_threshold)
+    
+        if nearby_af:
+            p.at_airfield = True
+            p.latest_airfield = nearby_af.icao
+            
+            # Update cache and state
+            airfield_dict[p.icao24] = nearby_af.icao
+            p.is_full = True
+            
+            count_at_airfield += 1
 
         # 2. Inheritance Logic (If not currently at an airfield)
-        if not found_near_airfield:
+        else:
             # Check if we already found an airfield for this plane in this batch
             if p.icao24 in airfield_dict:
                 p.latest_airfield = airfield_dict[p.icao24]
