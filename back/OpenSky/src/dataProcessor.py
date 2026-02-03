@@ -131,20 +131,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=10.0, airfield_alt_threshold=1500):
-    # 1. Load all airfields into memory for fast lookup
-    airfields = db.query(migrate.Airfield).all()
-
-    roi_data = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.level == 3).all()
-    level_3_polygons = []
-    for r in roi_data:
-        try:
-            poly = Polygon(json.loads(r.geometry))
-            level_3_polygons.append(poly)
-        except(TypeError, ValueError) as e:
-            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
-            continue
-    
+def get_unprocessed_points():
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
@@ -158,6 +145,9 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         print("No new points to label.")
         return
     
+    return points
+    
+def get_lastest_aircraft_data():
     last_known_airfields = db.query(
         migrate.FlightTelemetry.icao24,
         migrate.FlightTelemetry.latest_airfield,
@@ -175,6 +165,9 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     airfield_dict = {row.icao24: row.latest_airfield for row in last_known_airfields}
     is_full_dict = {row.icao24: row.is_full for row in last_known_airfields}
 
+    return airfield_dict, is_full_dict
+
+def get_water_bombers():
     water_bombers = db.query(
         migrate.TrackedAircraft.icao24,
         migrate.TrackedAircraft.payload_capacity_kg,
@@ -186,6 +179,26 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
     ).all()
     
     water_bombers_dict = {row.icao24: row.payload_capacity_kg for row in water_bombers}
+
+    return water_bombers_dict
+
+def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=10.0, airfield_alt_threshold=1500):
+    # 1. Load all airfields into memory for fast lookup
+    airfields = db.query(migrate.Airfield).all()
+
+    roi_data = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.level == 3).all()
+    level_3_polygons = []
+    for r in roi_data:
+        try:
+            poly = Polygon(json.loads(r.geometry))
+            level_3_polygons.append(poly)
+        except(TypeError, ValueError) as e:
+            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
+            continue
+    
+    points = get_unprocessed_points()
+    airfield_dict, is_full_dict = get_lastest_aircraft_data()   
+    water_bombers_dict = get_water_bombers
 
     count_low_pass = 0
     count_over_water = 0 
