@@ -147,23 +147,50 @@
     }
 
     // --- 2. TIME FILTERING ---
+    // --- 2. TIME FILTERING WITH 24-HOUR CHECK ---
     async function updateFleetByTime() {
-        const startVal = document.getElementById('start-date').value;
-        const stopVal = document.getElementById('end-date').value;
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        const startVal = startInput.value;
+        const stopVal = endInput.value;
 
         if (!startVal || !stopVal) {
             alert("Please select both a start and end date.");
             return;
         }
 
-        const startUnix = Math.floor(new Date(startVal).getTime() / 1000);
-        const stopUnix = Math.floor(new Date(stopVal).getTime() / 1000);
+        const startDate = new Date(startVal);
+        const endDate = new Date(stopVal);
+        
+        // 1. Calculate difference in milliseconds
+        const diffInMs = endDate - startDate;
+        const maxSpanMs = 24 * 60 * 60 * 1000; // 24 hours
+
+        // 2. Diplomatic Validation
+        if (diffInMs < 0) {
+            alert("The start date must be before the end date. Please check your timeline.");
+            return;
+        }
+
+        if (diffInMs > maxSpanMs) {
+            alert("Maximum timespan is 24 hours. Please refine your selection to keep the data stream manageable.");
+            // Optional: Reset the end date to exactly 24h after start
+            // endInput.value = new Date(startDate.getTime() + maxSpanMs).toISOString().slice(0, 16);
+            return;
+        }
+
+        const startUnix = Math.floor(startDate.getTime() / 1000);
+        const stopUnix = Math.floor(endDate.getTime() / 1000);
 
         try {
             const response = await fetch(`http://localhost:8000/aircraft/active?start=${startUnix}&stop=${stopUnix}`);
             const aircraft = await response.json();
             renderSidebarList(aircraft);
-        } catch (e) { console.error("Filter failed:", e); }
+        } catch (e) { 
+            console.error("Filter failed:", e);
+            alert("Failed to fetch aircraft data. Ensure the server is running.");
+        }
     }
 
     // --- 3. RENDERING ---
