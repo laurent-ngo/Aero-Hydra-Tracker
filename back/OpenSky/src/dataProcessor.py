@@ -140,11 +140,7 @@ def get_unprocessed_points():
         migrate.FlightTelemetry.timestamp,
         desc(migrate.FlightTelemetry.timestamp)
     ).all()
-
-    if not points:
-        print("No new points to label.")
-        return
-    
+  
     return points
     
 def get_lastest_aircraft_data():
@@ -202,13 +198,18 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
             return af
         return None
 
-def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius=10.0, airfield_alt_threshold=1500):
+def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=5.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
     level_3_polygons = get_level_poly()
     
     points = get_unprocessed_points()
+    if not points:
+        print("No new points to label.")
+        return
+    
+    
     airfield_dict, is_full_dict = get_lastest_aircraft_data()   
     water_bombers_dict = get_water_bombers()
 
@@ -222,7 +223,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=50, airfield_radius
         p.is_over_water = False
         p.is_low_pass = False
 
-        p.is_full = is_full_dict[p.icao24] 
+        p.is_full = is_full_dict.get(p.icao24)
         if p.is_full is None:
             p.is_full =  p.icao24 in water_bombers_dict
      
