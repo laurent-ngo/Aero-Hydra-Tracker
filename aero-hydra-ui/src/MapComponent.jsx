@@ -5,17 +5,29 @@ import L from 'leaflet';
 
 // Icon colors matching your status logic
 const COLORS = {
-  airborne: { fill: "#60a5fa", stroke: "#1d4ed8" }, // Blue
-  ground: { fill: "#fb923c", stroke: "#c2410c" },   // Orange
-  path: "#94a3b8"                                   // Gray for the trail
+  ground: { fill: "#94a3b8", stroke: "#475569" },   // Grey
+  airborne: { fill: "#22c55e", stroke: "#15803d" }, // Green
+  full: { fill: "#60a5fa", stroke: "#1d4ed8" },     // Blue
+  empty: { fill: "#f97316", stroke: "#c2410c" },    // Orange
 };
 
-const createAircraftIcon = (heading = 0, isOnGround = false) => {
-  const color = isOnGround ? COLORS.ground : COLORS.airborne;
+const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false ) => {
+  let color = COLORS.airborne;
+
+  if (isOnGround) {
+    color = COLORS.ground;
+  } 
+  else if (payload) {
+    color = COLORS.airborne
+  }
+  else{
+    color = full ? COLORS.full : COLORS.empty;
+  }
+
   return L.divIcon({
     html: `
-      <div style="transform: rotate(${heading}deg); transition: all 0.5s ease-in-out;">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <div style="transform: rotate(${heading}deg); transition: all 0.3s ease;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
           <path d="M21 16V14.5L13 9.5V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9.5L2 14.5V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z" 
                 fill="${color.fill}" stroke="${color.stroke}" stroke-width="1.5" />
         </svg>
@@ -126,7 +138,15 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600 }) => {
                 );
               })}
               {/* 2. Draw the Aircraft Marker */}
-              <Marker position={[ac.last_lat, ac.last_lon]} icon={createAircraftIcon(ac.true_track || 0, isOnGround)}>
+              <Marker 
+                position={[ac.last_lat, ac.last_lon]} 
+                icon={createAircraftIcon(
+                  ac.true_track || 0, 
+                  ac.at_airfield, 
+                  ac.payload_capacity > 0,
+                  ac.is_full
+                )}
+              >
                 <Popup>
                   <div className="text-slate-900 font-sans p-1">
                     <p className="font-bold border-b border-slate-200 pb-1 mb-1">{ac.registration}</p>

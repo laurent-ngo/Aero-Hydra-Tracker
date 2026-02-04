@@ -13,6 +13,13 @@ const TIME_OPTIONS = [
   { label: '12h', seconds: 43200 },
 ];
 
+const COLORS = {
+  ground:   "#475569", // Grey
+  airborne: "#15803d", // Green
+  full:     "#1d4ed8", // Blue
+  empty:    "#c2410c", // Orange
+};
+
 function App() {
   const [aircraft, setAircraft] = useState([]);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -20,6 +27,14 @@ function App() {
   const [timeIndex, setTimeIndex] = useState(3); // Default to 1h
 
   const selectedTime = TIME_OPTIONS[timeIndex];
+
+  const getAircraftColor = (ac) => {
+    if (ac.at_airfield) return COLORS.ground;
+    if (ac.payload_capacity > 0) {
+      return CORLORS.airborne;
+    }
+    return ac.is_full ? COLORS.full : COLORS.empty;
+  };
 
   const getStatusColor = (atAirfield) => {
     if (atAirfield === true || atAirfield === "true") return '#fb923c'; // Orange
@@ -97,35 +112,51 @@ function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {aircraft.map((ac) => (
-            <div 
-              key={ac.icao24} 
-              style={{ borderColor: `${getStatusColor(ac.at_airfield)}33` }}
-              className="p-3 rounded-lg border bg-slate-800/50 hover:bg-slate-800 transition-all cursor-pointer"
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <Plane 
-                    size={18} 
-                    style={{ 
-                      color: getStatusColor(ac.at_airfield),
-                      transform: 'rotate(45deg)' 
-                    }}
-                    className="transition-colors" 
-                  />
-                  <div>
-                    <span className="font-mono font-bold text-slate-100">{ac.registration}</span>
-                    <p className="text-[10px] text-slate-500 uppercase font-bold leading-none mt-1">
-                      {ac.model}
-                    </p>
+          {aircraft.map((ac) => {
+            const statusColor = getAircraftColor(ac);
+
+            return (
+              <div 
+                key={ac.icao24} 
+                style={{ borderColor: `${statusColor}33` }} 
+                className="p-3 rounded-lg border bg-slate-800/50 hover:bg-slate-800 transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <Plane 
+                      size={18} 
+                      style={{ 
+                        color: statusColor,
+                        transform: 'rotate(45deg)' 
+                      }}
+                      className="transition-colors" 
+                    />
+                    <div>
+                      <span className="font-mono font-bold text-slate-100">{ac.registration}</span>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold leading-none mt-1">
+                        {ac.model}
+                      </p>
+                    </div>
                   </div>
+                  
+                  {/* Visual status dot for quick scanning */}
+                  <div 
+                    className="w-1.5 h-1.5 rounded-full" 
+                    style={{ backgroundColor: statusColor, boxShadow: `0 0 8px ${statusColor}` }}
+                  />
+                </div>
+                
+                <div className="mt-2 text-[10px] text-slate-400 font-medium italic flex justify-between items-center">
+                  <span>{ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}</span>
+                  {ac.payload_capacity > 0 && (
+                    <span className="text-[8px] uppercase font-bold tracking-tighter opacity-60">
+                      {ac.is_full ? "Payload Full" : "Payload Empty"}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="mt-2 text-[10px] text-slate-400 font-medium italic">
-                {ac.airfield_name || "In Transit"}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
 
