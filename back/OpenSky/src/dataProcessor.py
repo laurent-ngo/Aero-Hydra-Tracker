@@ -293,7 +293,8 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 .filter(
                     migrate.FlightTelemetry.is_over_water == True,
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
-                    migrate.TrackedAircraft.payload_capacity_kg > 0   
+                    migrate.TrackedAircraft.payload_capacity_kg > 0,
+                    migrate.TrackedAircraft.sea_landing == True
                 ).all()
             )
 
