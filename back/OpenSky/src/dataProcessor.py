@@ -277,16 +277,25 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
 
     # 1. Fetch points
     if type == 'fire':
-        points = db.query(migrate.FlightTelemetry).filter(
-            migrate.FlightTelemetry.is_low_pass == True,
-            migrate.FlightTelemetry.timestamp >= cutoff_timestamp
-            
-        ).all()
+        points = (
+            db.query(migrate.FlightTelemetry)
+                .join(migrate.TrackedAircraft, migrate.FlightTelemetry.icao24 == migrate.TrackedAircraft.icao24)
+                .filter(
+                    migrate.FlightTelemetry.is_low_pass == True,
+                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
+                    migrate.TrackedAircraft.payload_capacity_kg > 0   
+                ).all()
+            )
     elif type == 'water':
-        points = db.query(migrate.FlightTelemetry).filter(
-            migrate.FlightTelemetry.is_over_water == True,
-            migrate.FlightTelemetry.timestamp >= cutoff_timestamp
-        ).all()
+        points = (
+            db.query(migrate.FlightTelemetry)
+                .join(migrate.TrackedAircraft, migrate.FlightTelemetry.icao24 == migrate.TrackedAircraft.icao24)
+                .filter(
+                    migrate.FlightTelemetry.is_over_water == True,
+                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
+                    migrate.TrackedAircraft.payload_capacity_kg > 0   
+                ).all()
+            )
 
 
     if len(points) < min_samples:
