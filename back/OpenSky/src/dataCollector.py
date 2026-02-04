@@ -1,5 +1,7 @@
 import os
 import time
+import argparse
+import sys
 from migrate import SessionLocal
 from openSkyCollector import FirefleetCollector
 from aircraftDataHandler import (
@@ -8,16 +10,20 @@ from aircraftDataHandler import (
     bulk_insert_telemetry
 )
 
-def orchestrate_sync():
+def orchestrate_sync(active_only=False):
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
     collector = FirefleetCollector(TOKEN)
     session = None
     
     try:
         session = SessionLocal()
-        icao_list = get_all_tracked_icao24(session)
+        icao_list = get_all_tracked_icao24(session, active_only)
         
-        print(f"[START] Syncing fleet of {len(icao_list)} aircraft...")
+        if len(icao_list) < 1:
+            print(f"[INFO] No active aircraft...")
+
+        print(f"[START] Syncing fleet of {len(icao_list)} aircrafts...")
+
 
         for icao in icao_list:
             # 1. Get high-water mark
@@ -51,4 +57,17 @@ def orchestrate_sync():
             print("[INFO] Database session closed.")
 
 if __name__ == "__main__":
-    orchestrate_sync()
+    # 1. Setup the argument parser
+    parser = argparse.ArgumentParser(description="AERO-HYDRA Sync Orchestrator")
+    
+    # 2. Add the toggle (action="store_true" means it's False by default)
+    parser.add_argument(
+        "--active", 
+        action="store_true", 
+        help="Only sync aircraft active in the last 5 minutes"
+    )
+
+    args = parser.parse_args()
+
+    # 3. Pass the argument to your function
+    orchestrate_sync(active_only=args.active)

@@ -1,15 +1,26 @@
 from sqlalchemy import func
+from datetime import datetime, timedelta
 from sqlalchemy.dialects.postgresql import insert
 from migrate import FlightTelemetry, TrackedAircraft
 
 
-def get_all_tracked_icao24(session):
+def get_all_tracked_icao24(session, active = False):
     """
     Returns a list of all icao24 strings currently in the tracked_aircraft table.
     """
     try:
-        # We query only the icao24 column to keep it fast
-        results = session.query(TrackedAircraft.icao24).all()
+        if active:
+            cutoff_timestamp = int(datetime.now().timestamp()) - 300
+            results = (
+                session.query(TrackedAircraft.icao24)
+                .join(FlightTelemetry, TrackedAircraft.icao24 == FlightTelemetry.icao24)
+                .filter(FlightTelemetry.timestamp >= cutoff_timestamp)
+                .distinct() # Ensure we don't get the same ICAO multiple times
+                .all()
+        )
+        else:
+            # We query only the icao24 column to keep it fast
+            results = session.query(TrackedAircraft.icao24).all()
         
         # SQLAlchemy returns a list of tuples like [('3b7b70',), ('43c6f3',)]
         # We flatten it into a simple list of strings

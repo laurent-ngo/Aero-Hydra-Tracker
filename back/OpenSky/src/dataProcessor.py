@@ -194,9 +194,10 @@ def get_level_poly(level=3):
 def proximity_check( point, airfields, radius_km, alt_threshold_ft):
     for af in airfields:
         dist = calculate_distance(point.lat, point.lon, af.lat, af.lon)
+
         if dist <= radius_km and point.altitude_agl_ft <= alt_threshold_ft:
             return af
-        return None
+    return None
 
 def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=5.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
@@ -219,6 +220,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
 
     # Runs throught every new points
     for p in points:
+
         p.at_airfield = False
         p.is_over_water = False
         p.is_low_pass = False
@@ -253,7 +255,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
                 p.is_over_water = True
                 count_over_water += 1
 
-            elif p.altitude_agl_ft <= threshold_ft and p.altitude_agl_ft > 10:
+            if p.altitude_agl_ft <= threshold_ft:
                 p.is_low_pass = True
                 count_low_pass += 1
 
@@ -271,13 +273,14 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (15 days ago from now)
-    cutoff_timestamp = int((datetime.now() - timedelta(days=15)).timestamp())
+    cutoff_timestamp = int((datetime.now() - timedelta(days=2)).timestamp())
 
     # 1. Fetch points
     if type == 'fire':
         points = db.query(migrate.FlightTelemetry).filter(
             migrate.FlightTelemetry.is_low_pass == True,
             migrate.FlightTelemetry.timestamp >= cutoff_timestamp
+            
         ).all()
     elif type == 'water':
         points = db.query(migrate.FlightTelemetry).filter(
@@ -340,6 +343,7 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 type=type
             )
             db.add(new_roi)
+
 
     db.commit()
 

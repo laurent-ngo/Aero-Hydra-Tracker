@@ -8,7 +8,6 @@ class FirefleetCollector:
     def __init__(self, token):
         self.url = "https://opensky-network.org/api/states/all"
         self.track_url = "https://opensky-network.org/api/tracks/all"
-        self.history_url = "https://opensky-network.org/api/flights/aircraft"
 
         self.app_json = "application/json"
 
@@ -32,6 +31,7 @@ class FirefleetCollector:
                 timeout=15
             )
             response.raise_for_status()
+            print( "INFO: calling OpenSky API/states")
             
             data = response.json()
             print("Successfully connected to OpenSky!")
@@ -56,6 +56,7 @@ class FirefleetCollector:
         try:
             response = requests.get(self.url, headers=headers, params=params, timeout=15)
             response.raise_for_status()
+            print( "INFO: calling OpenSky API/states")
             data = response.json()
                 
             states = data.get('states', [])
@@ -88,6 +89,7 @@ class FirefleetCollector:
                 # We fetch all (or use a bounding box for FinOps efficiency)
                 response = requests.get(self.url, headers=headers, timeout=15)
                 response.raise_for_status()
+                print( "INFO: calling OpenSky API/states")
                 data = response.json()
                 
                 states = data.get('states', [])
@@ -130,6 +132,8 @@ class FirefleetCollector:
         try:
             response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
             response.raise_for_status()
+            print( "INFO: calling OpenSky API/track")
+
             return response.json() # Returns a full track object with path points
         except requests.exceptions.HTTPError as e:
             # Diplomatically ignore 404s, but report other issues (like 500 or 401)
