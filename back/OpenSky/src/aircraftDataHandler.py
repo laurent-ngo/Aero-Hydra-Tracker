@@ -10,7 +10,7 @@ def get_all_tracked_icao24(session, active = False):
     """
     try:
         if active:
-            cutoff_timestamp = int(datetime.now().timestamp()) - 300
+            cutoff_timestamp = int(datetime.now().timestamp()) - 150
             results = (
                 session.query(TrackedAircraft.icao24)
                 .join(FlightTelemetry, TrackedAircraft.icao24 == FlightTelemetry.icao24)

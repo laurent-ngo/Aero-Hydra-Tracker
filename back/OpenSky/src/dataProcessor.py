@@ -199,7 +199,7 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
             return af
     return None
 
-def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=5.0, airfield_alt_threshold=1500):
+def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=8.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
