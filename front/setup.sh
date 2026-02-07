@@ -7,10 +7,10 @@ npm create vite@latest aero-hydra-ui -- --template react
 cd aero-hydra-ui
 
 # Install dependencies
-npm install
+npm install --ignore-scripts
 
 # Install the "Adventurer" essentials (Tailwind and Leaflet)
-npm install -D tailwindcss postcss autoprefixer
+npm install --ignore-scripts -D tailwindcss postcss autoprefixer
 npx tailwindcss init -p
 
-npm install react-leaflet leaflet lucide-react
+npm install --ignore-scripts react-leaflet leaflet lucide-react
