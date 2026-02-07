@@ -2,6 +2,8 @@ import requests
 import os
 from datetime import datetime
 import time
+import logging
+logger = logging.getLogger(__name__)
 
 
 class FirefleetCollector:
@@ -31,14 +33,14 @@ class FirefleetCollector:
                 timeout=15
             )
             response.raise_for_status()
-            print( "INFO: calling OpenSky API/states")
+            logger.info( "Calling OpenSky API/states")
             
             data = response.json()
-            print("Successfully connected to OpenSky!")
+            logger.debug("Successfully connected to OpenSky!")
             return data.get('states', [])
 
         except requests.exceptions.HTTPError as e:
-            print(f"Auth Error: {e.response.status_code} - Check if the token has expired.")
+            logger.error(f"Auth Error: {e.response.status_code} - Check if the token has expired.")
             return []
 
     def get_by_icao24(self, icao_list):
@@ -56,7 +58,7 @@ class FirefleetCollector:
         try:
             response = requests.get(self.url, headers=headers, params=params, timeout=15)
             response.raise_for_status()
-            print( "INFO: calling OpenSky API/states")
+            logger.info( "Calling OpenSky API/states")
             data = response.json()
                 
             states = data.get('states', [])
@@ -78,7 +80,7 @@ class FirefleetCollector:
             return matched_fleet
         
         except Exception as e:
-            print(f"Error: {e}")
+            logger.error(f"{e}")
             return []
     
     def get_by_callsigns(self, target_callsigns):
@@ -89,7 +91,7 @@ class FirefleetCollector:
                 # We fetch all (or use a bounding box for FinOps efficiency)
                 response = requests.get(self.url, headers=headers, timeout=15)
                 response.raise_for_status()
-                print( "INFO: calling OpenSky API/states")
+                logger.info( "Calling OpenSky API/states")
                 data = response.json()
                 
                 states = data.get('states', [])
@@ -111,7 +113,7 @@ class FirefleetCollector:
                 return matched_fleet
 
             except Exception as e:
-                print(f"Error: {e}")
+                logger.error(f"{e}")
                 return []
             
     def get_aircraft_track(self, icao24, target_time=0):
@@ -132,17 +134,17 @@ class FirefleetCollector:
         try:
             response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
             response.raise_for_status()
-            print( "INFO: calling OpenSky API/track")
+            logger.info( "Calling OpenSky API/track")
 
             return response.json() # Returns a full track object with path points
         except requests.exceptions.HTTPError as e:
             # Diplomatically ignore 404s, but report other issues (like 500 or 401)
             if e.response.status_code != 404:
-                print(f"HTTP Error fetching track for {icao24}: {e}")
+                logger.error(f"HTTP Error fetching track for {icao24}: {e}")
             return None
         except Exception as e:
             # Catch non-HTTP errors like timeouts or connection issues
-            print(f"Unexpected error fetching track for {icao24}: {e}")
+            logger.error(f"Unexpected error fetching track for {icao24}: {e}")
             return None
 
 # --- Local Test ---
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     # In Github, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
 
-    print(f"DEBUG: Token found: {'Yes' if TOKEN else 'No'}")
+    logger.debug(f"Token found: {'Yes' if TOKEN else 'No'}")
 
     collector = FirefleetCollector(TOKEN)
 
@@ -164,7 +166,7 @@ if __name__ == "__main__":
     fleet_status = collector.get_by_icao24(MY_ICAO24S)
     
     for plane in fleet_status:
-        print(f"Unit {plane}")
+        logger.debug(f"Unit {plane}")
     
 
     # Example: Check where a plane was over the past 60 seconds
@@ -173,11 +175,11 @@ if __name__ == "__main__":
     track = collector.get_aircraft_track(target_icao)
     
     if track:
-        print(f"History for {target_icao} found!")
+        logger.info(f"History for {target_icao} found!")
         # The 'path' contains [time, lat, lon, altitude, heading, on_ground]
-        print ( track.get('startTime'))
-        print ( track.get('endTime'))
-        print ( len( track.get('path')))
+        logger.info ( track.get('startTime'))
+        logger.info ( track.get('endTime'))
+        logger.info ( len( track.get('path')))
         for point in track.get('path', []): # Print first 5 points
-            print(f"Time: {point[0]} | Pos: {point[1]}, {point[2]}, {point}")
+            logger.info(f"Time: {point[0]} | Pos: {point[1]}, {point[2]}, {point}")
     

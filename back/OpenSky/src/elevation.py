@@ -3,6 +3,8 @@ import migrate
 import requests
 import os
 import time
+import logging
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker
@@ -31,7 +33,7 @@ def get_ground_elevation(lat, lon):
         time.sleep(0.5) 
         return data['results'][0]['elevation']
     except Exception as e:
-        print(f"Elevation lookup failed: {e}")
+        logger.error(f"Elevation lookup failed: {e}")
         return None # Default to sea level if lookup fails
     
 def get_or_fetch_elevation(lat, lon):
@@ -49,7 +51,7 @@ def get_or_fetch_elevation(lat, lon):
     ).first()
 
     if cached:
-        #print( 'Elevation found in DB')
+        logger.debug( 'Elevation found in DB')
         return cached.elevation_m
 
     # 2. Cache Miss: Call the limited API
@@ -66,7 +68,7 @@ def get_or_fetch_elevation(lat, lon):
         db.add(new_elevation)
         db.commit()
         
-        #print( 'Elevation collected from API and saved in DB')
+        logger.debug( 'Elevation collected from API and saved in DB')
         return elevation
         
     return None

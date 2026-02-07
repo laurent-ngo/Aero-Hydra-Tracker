@@ -2,6 +2,8 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from sqlalchemy.dialects.postgresql import insert
 from migrate import FlightTelemetry, TrackedAircraft
+import logging
+logger = logging.getLogger(__name__)
 
 
 def get_all_tracked_icao24(session, active = False):
@@ -27,7 +29,7 @@ def get_all_tracked_icao24(session, active = False):
         return [r[0] for r in results]
         
     except Exception as e:
-        print(f"\033[0;31m[ERROR]\033[0m Failed to fetch tracked aircraft list: {e}")
+        logger.error(f"Failed to fetch tracked aircraft list: {e}")
         return []
     
 def get_latest_timestamp(session, icao_code):
@@ -57,13 +59,13 @@ def sync_flight_data(session, icao_code, raw_path_data):
     new_points = [p for p in raw_path_data if p[0] > latest_ts]
     
     if not new_points:
-        print(f"\033[1;34m[INFO]\033[0m No new data to load for {icao_code}.")
+        logger.info(f"No new data to load for {icao_code}.")
         return
 
     # 3. Perform the bulk insert from the previous step
     # (Using the bulk_insert_telemetry function we wrote earlier)
     bulk_insert_telemetry(session, icao_code, new_points)
-    print(f"\033[0;32m[SUCCESS]\033[0m Added {len(new_points)} new waypoints.")
+    logger.info(f"Added {len(new_points)} new waypoints.")
 
 
 def bulk_insert_telemetry(session, icao24, path_data):
@@ -97,7 +99,7 @@ def bulk_insert_telemetry(session, icao24, path_data):
     try:
         session.execute(stmt)
         session.commit()
-        print(f"\033[0;32m[INFO]\033[0m Bulk insert complete. Processed {len(values)} points.")
+        logger.info(f"Bulk insert complete. Processed {len(values)} points.")
     except Exception as e:
         session.rollback() # Diplomatic cleanup if things go wrong
-        print(f"\033[0;31m[ERROR]\033[0m Bulk insert failed: {e}")
+        logger.error(f"Bulk insert failed: {e}")

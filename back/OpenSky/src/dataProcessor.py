@@ -3,6 +3,10 @@ import time
 import json
 import argparse
 import requests
+import sys
+import logging
+logger = logging.getLogger(__name__)
+
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
@@ -50,7 +54,7 @@ def backfill_telemetry():
     ).distinct().all()
 
     for (icao,) in aircraft_ids:
-        print(f"Processing aircraft: {icao}")
+        logger.debug(f"Processing aircraft: {icao}")
         
         # 2. Get all points for this aircraft, oldest first
         points = db.query(migrate.FlightTelemetry).filter(
@@ -82,7 +86,7 @@ def backfill_telemetry():
         
         # Commit per aircraft to keep memory usage low
         db.commit()
-    print("Backfill complete!")
+    logger.info("Backfill complete!")
 def backfill_agl():
     # 1. Fetch only records that have baro_altitude but missing AGL
     # We process in batches to be gentle on the API and memory
@@ -92,10 +96,10 @@ def backfill_agl():
     ).all() # Processing 500 at a time is safer
 
     if not points_to_fix:
-        print("No pending AGL calculations found.")
+        logger.debug("No pending AGL calculations found.")
         return
 
-    print(f"Calculating AGL for {len(points_to_fix)} points...")
+    logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
 
     for p in points_to_fix:
         # 2. Get the ground height from your new method
@@ -107,7 +111,7 @@ def backfill_agl():
             p.altitude_agl_ft = round(agl_m * 3.28084, 0)
 
     db.commit()
-    print("Batch AGL backfill complete.")
+    logger.info("Batch AGL backfill complete.")
     
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Returns distance in km between two points."""
@@ -173,7 +177,7 @@ def get_level_poly(level=3):
             poly = Polygon(json.loads(r.geometry))
             level_polygons.append(poly)
         except(TypeError, ValueError) as e:
-            print(f"Skipping ROI {r.id} due to invalid geometry: {e}")
+            logger.error(f"Skipping ROI {r.id} due to invalid geometry: {e}")
             continue
 
     return level_polygons
@@ -194,7 +198,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
     
     points = get_unprocessed_points()
     if not points:
-        print("No new points to label.")
+        logger.debug("No new points to label.")
         return
     
     
@@ -256,7 +260,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
         p.is_processed = True
 
     db.commit()
-    print(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
+    logger.debug(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (5 days ago from now)
@@ -287,7 +291,7 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
 
 
     if len(points) < min_samples:
-        print(f"Not enough points to cluster ({type}).")
+        logger.debug(f"Not enough points to cluster ({type}).")
         return
 
     # 2. Prepare data for DBSCAN (Coordinates in radians for Haversine distance)
@@ -350,7 +354,7 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
     ).all()
 
     if not rois:
-        print(f"No {type} ROIs found at Level {starting_level} to grow.")
+        logger.debug(f"No {type} ROIs found at Level {starting_level} to grow.")
         return
 
     polygons = []
@@ -397,11 +401,11 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
         db.add(new_roi)
 
     db.commit()
-    print(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} {type} ROIs.")
+    logger.info(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} {type} ROIs.")
 
 
 def sync_aircraft_metadata():
-    print("Promoting latest telemetry metadata to aircraft table...")
+    logger.info("Promoting latest telemetry metadata to aircraft table...")
     
     # Get the latest point for every aircraft
     # This query finds the maximum ID for each ICAO24
@@ -425,9 +429,24 @@ def sync_aircraft_metadata():
             sync_count += 1
 
     db.commit()
-    print(f"Sync complete: {sync_count} aircraft updated with their latest status.")
+    logger.info(f"Sync complete: {sync_count} aircraft updated with their latest status.")
 
 if __name__ == "__main__":
+
+    log_level_name = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    LOG_FORMAT = "%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s"
+    DATE_FORMAT = "%H:%M:%S"
+
+    logging.basicConfig(
+        level=log_level,
+        format=LOG_FORMAT,
+        datefmt=DATE_FORMAT,
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
 
     parser = argparse.ArgumentParser(description="AERO-HYDRA data collector")
 

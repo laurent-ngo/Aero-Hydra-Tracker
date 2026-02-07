@@ -4,6 +4,8 @@ import csv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from migrate import TrackedAircraft, Airfield
+import logging
+logger = logging.getLogger(__name__)
 
 def load_aircrafts_from_csv(file_path):
     user, pw, db = os.getenv('DB_USER'), os.getenv('DB_PASSWORD'), os.getenv('DB_NAME')
@@ -41,10 +43,10 @@ def load_aircrafts_from_csv(file_path):
                     skipped_records += 1
             
             session.commit()
-            print(f"\033[0;32m[INFO]\033[0m Load complete: {new_records} added, {skipped_records} already existed.")
+            logger.info(f"Load complete: {new_records} added, {skipped_records} already existed.")
     except Exception as e:
         session.rollback()
-        print(f"\033[0;31m[ERROR]\033[0m Failed to load CSV: {e}")
+        logger.error(f"Failed to load CSV: {e}")
     finally:
         session.close()
 
@@ -84,17 +86,17 @@ def load_airfields_from_csv(file_path):
                     skipped_records += 1
             
             session.commit()
-            print(f"\033[0;32m[INFO]\033[0m Airfields complete: {new_records} added, {skipped_records} already existed.")
+            logger.info(f"Airfields complete: {new_records} added, {skipped_records} already existed.")
     except Exception as e:
         session.rollback()
-        print(f"\033[0;31m[ERROR]\033[0m Failed to load Airfields CSV: {e}")
+        logger.error(f"Failed to load Airfields CSV: {e}")
     finally:
         session.close()
 
 if __name__ == "__main__":
     # Check if argument is provided
     if len(sys.argv) < 3:
-        print("\033[1;33m[WARN]\033[0m Usage: python3 loadCSV.py <aircrafts.csv> <airfields.csv>")
+        logger.warning("Usage: python3 loadCSV.py <aircrafts.csv> <airfields.csv>")
         sys.exit(1)
     
     load_aircrafts_from_csv(sys.argv[1])

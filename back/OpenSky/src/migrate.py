@@ -2,6 +2,8 @@ import os
 import sys
 from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, Text, ForeignKey, func, Numeric
 from sqlalchemy.orm import declarative_base, sessionmaker
+import logging
+logger = logging.getLogger(__name__)
 
 # 1. Setup Connection Configuration (with safe defaults)
 user = os.getenv('DB_USER', 'postgres')
@@ -106,9 +108,9 @@ def run_migration():
     try:
         # Create all tables defined in Base
         Base.metadata.create_all(engine)
-        print("\033[0;32m[INFO]\033[0m Database migration completed successfully.")
+        logger.info("Database migration completed successfully.")
     except Exception as e:
-        print(f"\033[0;31m[ERROR]\033[0m Migration failed: {e}")
+        logger.error(f"Migration failed: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

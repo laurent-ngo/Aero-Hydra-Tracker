@@ -2,6 +2,9 @@ import os
 import time
 import argparse
 import sys
+import logging
+logger = logging.getLogger(__name__)
+
 from migrate import SessionLocal
 from openSkyCollector import FirefleetCollector
 from aircraftDataHandler import (
@@ -20,9 +23,9 @@ def orchestrate_sync(active_only=False):
         icao_list = get_all_tracked_icao24(session, active_only)
         
         if len(icao_list) < 1:
-            print(f"[INFO] No active aircraft...")
+            logger.info(f"No active aircraft...")
 
-        print(f"[START] Syncing fleet of {len(icao_list)} aircrafts...")
+        logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
 
 
         for icao in icao_list:
@@ -38,25 +41,41 @@ def orchestrate_sync(active_only=False):
                 
                 if new_points:
                     bulk_insert_telemetry(session, icao, new_points)
-                    print(f"[{icao}] Inserted {len(new_points)} new points.")
+                    logger.info(f"[{icao}] Inserted {len(new_points)} new points.")
                 else:
-                    print(f"[{icao}] Up-to-date.")
+                    logger.debug(f"[{icao}] Up-to-date.")
             else:
-                print(f"[{icao}] No live data available.")
+                logger.debug(f"[{icao}] No live data available.")
             
             # 4. API Throttling
             time.sleep(0.5)
 
-        print("[DONE] Fleet sync completed successfully.")
+        logger.info("[DONE] Fleet sync completed successfully.")
 
     except Exception as e:
-        print(f"[CRITICAL] Orchestrator failed: {e}")
+        logger.critical(f"Orchestrator failed: {e}")
     finally:
         if session:
             session.close()
-            print("[INFO] Database session closed.")
+            logger.info("Database session closed.")
 
 if __name__ == "__main__":
+
+    log_level_name = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    LOG_FORMAT = "%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s"
+    DATE_FORMAT = "%H:%M:%S"
+
+    logging.basicConfig(
+        level=log_level,
+        format=LOG_FORMAT,
+        datefmt=DATE_FORMAT,
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
     # 1. Setup the argument parser
     parser = argparse.ArgumentParser(description="AERO-HYDRA Sync Orchestrator")
     
