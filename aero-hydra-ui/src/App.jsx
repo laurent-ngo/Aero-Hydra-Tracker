@@ -100,7 +100,7 @@ function App() {
               min="0"
               max={TIME_OPTIONS.length - 1}
               value={timeIndex}
-              onChange={(e) => setTimeIndex(parseInt(e.target.value))}
+              onChange={(e) => setTimeIndex(Number.parseInt(e.target.value))}
               className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
           </div>
