@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import argparse
 import requests
 from datetime import datetime, timedelta
 import math
@@ -14,6 +15,7 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
 from shapely.ops import unary_union
+import elevation
 
 import migrate
 
@@ -81,26 +83,13 @@ def backfill_telemetry():
         # Commit per aircraft to keep memory usage low
         db.commit()
     print("Backfill complete!")
-
-def get_ground_elevation(lat, lon):
-    try:
-        # Using the Open-Elevation public API
-        url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        # Returns elevation in meters
-        return data['results'][0]['elevation']
-    except Exception as e:
-        print(f"Elevation lookup failed: {e}")
-        return 0 # Default to sea level if lookup fails
-
 def backfill_agl():
     # 1. Fetch only records that have baro_altitude but missing AGL
     # We process in batches to be gentle on the API and memory
     points_to_fix = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.baro_altitude != None,
         migrate.FlightTelemetry.altitude_agl_ft == None
-    ).limit(500).all() # Processing 500 at a time is safer
+    ).all() # Processing 500 at a time is safer
 
     if not points_to_fix:
         print("No pending AGL calculations found.")
@@ -110,14 +99,12 @@ def backfill_agl():
 
     for p in points_to_fix:
         # 2. Get the ground height from your new method
-        ground_m = get_ground_elevation(p.lat, p.lon)
+        ground_m = elevation.get_or_fetch_elevation(p.lat, p.lon)
         
         if ground_m is not None:
             # 3. Calculation: MSL - Ground = AGL
             agl_m = p.baro_altitude - ground_m
             p.altitude_agl_ft = round(agl_m * 3.28084, 0)
-            
-            time.sleep(0.5) 
 
     db.commit()
     print("Batch AGL backfill complete.")
@@ -272,8 +259,8 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
     print(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
-    # 1. Calculate the cutoff (15 days ago from now)
-    cutoff_timestamp = int((datetime.now() - timedelta(days=2)).timestamp())
+    # 1. Calculate the cutoff (5 days ago from now)
+    cutoff_timestamp = int((datetime.now() - timedelta(days=5)).timestamp())
 
     # 1. Fetch points
     if type == 'fire':
@@ -300,7 +287,7 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
 
 
     if len(points) < min_samples:
-        print("Not enough points to cluster.")
+        print(f"Not enough points to cluster ({type}).")
         return
 
     # 2. Prepare data for DBSCAN (Coordinates in radians for Haversine distance)
@@ -353,8 +340,6 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 type=type
             )
             db.add(new_roi)
-
-
     db.commit()
 
 def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
@@ -443,11 +428,25 @@ def sync_aircraft_metadata():
     print(f"Sync complete: {sync_count} aircraft updated with their latest status.")
 
 if __name__ == "__main__":
-    backfill_telemetry()
-    backfill_agl()
-    label_flight_phases()
 
-    sync_aircraft_metadata()
+    parser = argparse.ArgumentParser(description="AERO-HYDRA data collector")
+
+    parser.add_argument(
+        "--AGL", 
+        action="store_true", 
+        help="Only set AGL altitude"
+    )
+
+    args = parser.parse_args()
+
+    if args.AGL:
+        backfill_agl()
+    else:
+        backfill_telemetry()
+        backfill_agl()
+        label_flight_phases()
+
+        sync_aircraft_metadata()
 
     detect_regions_of_interest_clustered(type='fire')
     detect_regions_of_interest_clustered(type='water')

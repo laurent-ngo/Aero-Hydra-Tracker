@@ -1,6 +1,6 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, Text, ForeignKey, func
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, CheckConstraint, Text, ForeignKey, func, Numeric
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Setup Connection Configuration (with safe defaults)
@@ -82,6 +82,14 @@ class RegionOfInterest(Base):
     __table_args__ = (
         CheckConstraint(type.in_(['fire', 'water']), name='type_check'),
     )
+
+class GroundElevation(Base):
+    __tablename__ = "ground_elevations"
+
+    latitude = Column(Numeric(8, 3), primary_key=True)
+    longitude = Column(Numeric(8, 3), primary_key=True)
+    elevation_m = Column(Float, nullable=False)
+
 
 class Airfield(Base):
     __tablename__ = 'airfields'
