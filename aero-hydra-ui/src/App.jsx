@@ -11,6 +11,7 @@ const TIME_OPTIONS = [
   { label: '4h', seconds: 14400 },
   { label: '8h', seconds: 28800 },
   { label: '12h', seconds: 43200 },
+  { label: '24h', seconds: 86400 },
 ];
 
 const COLORS = {
@@ -30,10 +31,10 @@ function App() {
 
   const getAircraftColor = (ac) => {
     if (ac.at_airfield) return COLORS.ground;
-    if (ac.payload_capacity > 0) {
-      return CORLORS.airborne;
+    if (ac.payload_capacity_kg > 0) {
+      return ac.is_full ? COLORS.full : COLORS.empty;
     }
-    return ac.is_full ? COLORS.full : COLORS.empty;
+    return COLORS.airborne;
   };
 
   const getStatusColor = (atAirfield) => {

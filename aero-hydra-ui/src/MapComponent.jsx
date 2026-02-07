@@ -18,9 +18,6 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
     color = COLORS.ground;
   } 
   else if (payload) {
-    color = COLORS.airborne
-  }
-  else{
     color = full ? COLORS.full : COLORS.empty;
   }
 
@@ -39,7 +36,7 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
 };
 
 const getAltitudeColor = (alt) => {
-  if (alt === null || alt === null || alt <10 ) return '#94a3b8'; // Gray for unknown
+  if (alt === null || alt <10 ) return '#94a3b8'; // Gray for unknown
   if (alt < 950) return '#f97316';    // Orange: Near Ground/Taxi
   if (alt < 5000) return '#fbce00';   // Yellow: Low altitude/Climb
   if (alt < 13000) return '#22c55e';  // Green: Mid altitude
@@ -143,7 +140,7 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600 }) => {
                 icon={createAircraftIcon(
                   ac.true_track || 0, 
                   ac.at_airfield, 
-                  ac.payload_capacity > 0,
+                  ac.payload_capacity_kg > 0,
                   ac.is_full
                 )}
               >
