@@ -37,12 +37,6 @@ function App() {
     return COLORS.airborne;
   };
 
-  const getStatusColor = (atAirfield) => {
-    if (atAirfield === true || atAirfield === "true") return '#fb923c'; // Orange
-    if (atAirfield === false || atAirfield === "false") return '#22c55e'; // Green
-    return '#94a3b8'; // Gray
-  };
-
   // --- Resizing Logic ---
   const startResizing = useCallback(() => setIsResizing(true), []);
   const stopResizing = useCallback(() => setIsResizing(false), []);
@@ -54,11 +48,11 @@ function App() {
   }, [isResizing]);
 
   useEffect(() => {
-    window.addEventListener("mousemove", resize);
-    window.addEventListener("mouseup", stopResizing);
+    globalThis.addEventListener("mousemove", resize);
+    globalThis.addEventListener("mouseup", stopResizing);
     return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
+      globalThis.removeEventListener("mousemove", resize);
+      globalThis.removeEventListener("mouseup", stopResizing);
     };
   }, [resize, stopResizing]);
 
