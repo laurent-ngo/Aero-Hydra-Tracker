@@ -2,11 +2,11 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from typing import List, Optional, Annotated
+from typing import List, Optional
+from typing import List, Optional
+from typing_extensions import Annotated
 import migrate # Importing your existing models and SessionLocal
 import time
-
-DbSession = Annotated[Session, Depends(get_db)]
 
 app = FastAPI(title="Aero-Hydra API")
 
@@ -25,6 +25,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+DbSession = Annotated[Session, Depends(get_db)]
 
 @app.get("/")
 def read_root():
@@ -83,7 +85,11 @@ def list_aircraft(db: DbSession):
 
 
 @app.get("/aircraft/active", response_model=List[dict])
-def list_active_aircraft(start: int, stop: int, db: DbSession):
+def list_active_aircraft(
+    start: int, 
+    stop: int, 
+    db: DbSession
+):
     # 1. Get unique ICAOs within timeframe
     active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
         migrate.FlightTelemetry.timestamp >= start,
@@ -95,14 +101,13 @@ def list_active_aircraft(start: int, stop: int, db: DbSession):
     # 2. Use helper with the icao filter
     return _get_aircraft_with_details(db, icao_filter=icao_list)
     
-@app.get("/telemetry/{icao24}"
-    responses={400: {"description": "icao24 not found"}})
+@app.get("/telemetry/{icao24}", responses={400: {"description": "icao24 not found"}})
 def get_telemetry(
+    db: DbSession,
     icao24: str, 
     start: Optional[int] = None, 
     stop: Optional[int] = None,
-    limit: int = 1000, 
-    db: DbSession
+    limit: int = 1000
 ):
     # Validation: 24-hour check (86400 seconds)
     if start is None and stop is None:
@@ -149,9 +154,9 @@ def get_telemetry(
 
 @app.get("/regions-of-interest") # Updated to match your frontend fetch URL
 def get_rois(
+    db: DbSession,
     level: Optional[int] = Query(None, ge=1, le=4),
-    type: Optional[str] = Query(None, pattern="^(fire|water)$", description="Filter by 'fire' or 'water'"),
-    db: DbSession
+    type: Optional[str] = Query(None, pattern="^(fire|water)$", description="Filter by 'fire' or 'water'")
     ):
 
     query = db.query(migrate.RegionOfInterest)
