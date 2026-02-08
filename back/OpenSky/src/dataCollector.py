@@ -23,7 +23,7 @@ def orchestrate_sync(active_only=False):
         icao_list = get_all_tracked_icao24(session, active_only)
         
         if len(icao_list) < 1:
-            logger.info(f"No active aircraft...")
+            logger.info("No active aircraft...")
 
         logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
 
