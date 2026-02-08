@@ -2,9 +2,11 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from typing import List, Optional
+from typing import List, Optional, Annotated
 import migrate # Importing your existing models and SessionLocal
 import time
+
+DbSession = Annotated[Session, Depends(get_db)]
 
 app = FastAPI(title="Aero-Hydra API")
 
@@ -76,12 +78,12 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
     ]
 
 @app.get("/aircraft", response_model=List[dict])
-def list_aircraft(db: Session = Depends(get_db)):
+def list_aircraft(db: DbSession):
     return _get_aircraft_with_details(db)
 
 
 @app.get("/aircraft/active", response_model=List[dict])
-def list_active_aircraft(start: int, stop: int, db: Session = Depends(get_db)):
+def list_active_aircraft(start: int, stop: int, db: DbSession):
     # 1. Get unique ICAOs within timeframe
     active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
         migrate.FlightTelemetry.timestamp >= start,
@@ -99,7 +101,7 @@ def get_telemetry(
     start: Optional[int] = None, 
     stop: Optional[int] = None,
     limit: int = 1000, 
-    db: Session = Depends(get_db)
+    db: DbSession
 ):
     # Validation: 24-hour check (86400 seconds)
     if start is None and stop is None:
@@ -148,7 +150,7 @@ def get_telemetry(
 def get_rois(
     level: Optional[int] = Query(None, ge=1, le=4),
     type: Optional[str] = Query(None, pattern="^(fire|water)$", description="Filter by 'fire' or 'water'"),
-    db: Session = Depends(get_db)
+    db: DbSession
     ):
 
     query = db.query(migrate.RegionOfInterest)
