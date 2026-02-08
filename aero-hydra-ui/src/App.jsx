@@ -125,18 +125,58 @@ function App() {
             return (
               <div 
                 key={ac.icao24} 
-                className={`rounded-lg border bg-slate-800/50 transition-all cursor-pointer ${isCollapsed ? 'p-2 flex justify-center' : 'p-3'}`}
+                className={`rounded-lg border bg-slate-800/50 hover:bg-slate-800/80 transition-all cursor-pointer group ${isCollapsed ? 'p-2 flex justify-center' : 'p-3'}`}
                 style={{ borderColor: `${statusColor}33` }}
               >
-                <Plane 
-                  size={18} 
-                  style={{ color: statusColor, transform: 'rotate(45deg)' }} 
-                />
-                {!isCollapsed && (
-                  <div className="ml-3 flex-1">
-                    <span className="font-mono font-bold text-slate-100">{ac.registration}</span>
+                <div className="flex items-start" style={{ display: 'flex', alignItems: 'flex-start' }}>
+                  {/* Icon Container */}
+                  <div 
+                    className="shrink-0" 
+                    style={{ 
+                      width: '40px', 
+                      paddingRight: '15px', 
+                      display: 'flex', 
+                      justifyContent: 'center',
+                      marginTop: '4px' 
+                    }}
+                  >
+                    <Plane 
+                      size={18} 
+                      style={{ color: statusColor, transform: 'rotate(45deg)', flexShrink: 0 }} 
+                    />
                   </div>
-                )}
+                  
+                  {!isCollapsed && (
+                    <div className="flex-1 min-w-0"> 
+                      {/* Top Row: Reg (Left) and Airfield (Right) */}
+                      <div className="flex justify-between items-baseline w-full">
+                        <span className="font-mono font-bold text-slate-100 truncate max-w-[40%]">
+                          {ac.registration || "N/A"}
+                        </span>
+                        
+                        {/* Airfield: Right-aligned with a bit of space for the dot */}
+                        <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
+                          <span className="text-slate-500 truncate text-right w-full">
+                            {ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}
+                          </span>
+                          {/* Status Dot */}
+                          <div 
+                            className="w-1.5 h-1.5 rounded-full shrink-0" 
+                            style={{ 
+                              backgroundColor: statusColor, 
+                              boxShadow: `0 0 6px ${statusColor}`
+                            }}
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Second Row: Aircraft Model */}
+                      <p className="text-[10px] text-blue-400 font-bold uppercase tracking-tight truncate mt-0.5">
+                        {ac.model || "Unknown Model"}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
