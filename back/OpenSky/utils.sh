@@ -10,25 +10,25 @@ NC='\033[0m' # No Color (Reset)
 # Helper functions for clean output
 info() {
     local message="$1"
-    echo -e "${GREEN}[INFO]${NC} ${message}"; 
+    echo -e "${GREEN}[INFO]${NC} ${message}">&2; 
     return 0
 }
 
 warn() { 
     local message="$1"
-    echo -e "${YELLOW}[WARN]${NC} ${message}"; 
+    echo -e "${YELLOW}[WARN]${NC} ${message}">&2; 
     return 0
 }
 
 error() { 
     local message="$1"
-    echo -e "${RED}[ERROR]${NC} ${message}"; 
+    echo -e "${RED}[ERROR]${NC} ${message}">&2; 
     return 0
 }
 
 header() { 
     local message="$1"
-    echo -e "${BLUE}=== ${message} ===${NC}"; 
+    echo -e "${BLUE}=== ${message} ===${NC}">&2; 
     return 0
 }
 

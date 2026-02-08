@@ -2,7 +2,7 @@
 
 # Capture the first argument passed to the shell script
 ACTIVE_FLAG=""
-if [ "$1" == "--active" ]; then
+if [[ "$1" == "--active" ]]; then
     ACTIVE_FLAG="--active"
 fi
 

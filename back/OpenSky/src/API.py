@@ -95,7 +95,8 @@ def list_active_aircraft(start: int, stop: int, db: DbSession):
     # 2. Use helper with the icao filter
     return _get_aircraft_with_details(db, icao_filter=icao_list)
     
-@app.get("/telemetry/{icao24}")
+@app.get("/telemetry/{icao24}"
+    responses={400: {"description": "icao24 not found"}})
 def get_telemetry(
     icao24: str, 
     start: Optional[int] = None, 
@@ -114,10 +115,10 @@ def get_telemetry(
     if start and stop:
         timespan = stop - start
         if timespan < 0:
-            raise HTTPException(status_code=400, detail="Start timestamp must be before stop timestamp.")
+            raise HTTPException(status_code=400,                     
+                detail="Start timestamp must be before stop timestamp.")
         if timespan > 86400:
-            raise HTTPException(
-                status_code=400, 
+            raise HTTPException(status_code=400, 
                 detail="Timespan exceeds 24 hours. Please reduce the range for a more precise mission view."
             )
         
