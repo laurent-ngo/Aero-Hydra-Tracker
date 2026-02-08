@@ -8,7 +8,7 @@ source ./utils.sh
 # Configuration
 PROJECT_DIR="/home/lngo/projects/aero-hydra/back/OpenSky"
 PID_FILE="$PROJECT_DIR/api.pid"
-LOG_FILE="$PROJECT_DIR/logs/api_logs.txt"
+LOG_FILE="$PROJECT_DIR/logs/api_logs$(date +\%Y-\%m-\%d).txt"
 
 LOCAL_ENVS="$PROJECT_DIR/local.sh"
 
@@ -34,7 +34,7 @@ start() {
         
         
         #nohup "$PROJECT_DIR/.venv/bin/uvicorn" API:app --host $API_HOST --port &API_PORT > "$LOG_FILE" 2>&1 &
-        nohup "uvicorn" API:app --host $API_HOST --port $API_PORT > "$LOG_FILE" 2>&1 &
+        nohup "uvicorn" API:app --host $API_HOST --port $API_PORT >> "$LOG_FILE" 2>&1 &
         echo $! > "$PID_FILE"
         info "API successfully started on port 8000."
     fi
