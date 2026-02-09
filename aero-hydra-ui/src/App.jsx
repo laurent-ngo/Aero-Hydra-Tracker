@@ -26,10 +26,18 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [timeIndex, setTimeIndex] = useState(3);
-  const [isCollapsed, setIsCollapsed] = useState(false); // New state
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
+  const [mapCenter, setMapCenter] = useState([43.758662, 4.416307]);
   const selectedTime = TIME_OPTIONS[timeIndex];
 
+  const handleAircraftClick = (ac) => {
+    if (ac.last_lat && ac.last_lon) {
+      console.log(`Centering on ${ac.registration}:`, [ac.last_lat, ac.last_lon]);
+      setMapCenter([Number(ac.last_lat), Number(ac.last_lon)]);
+    }
+  };
+  
   const getAircraftColor = (ac) => {
     if (ac.at_airfield) return COLORS.ground;
     if (ac.payload_capacity_kg > 0) {
@@ -80,7 +88,6 @@ function App() {
 
   return (
     <div className="flex h-screen w-screen bg-slate-950 overflow-hidden select-none">
-      
       <aside 
         style={{ width: isCollapsed ? '64px' : `${sidebarWidth}px` }} 
         className="h-full bg-slate-900 border-r border-slate-800 flex flex-col z-[1001] shrink-0 transition-all duration-300 ease-in-out"
@@ -125,57 +132,31 @@ function App() {
             return (
               <div 
                 key={ac.icao24} 
+                // 3. ADD THIS ONCLICK:
+                onClick={() => handleAircraftClick(ac)}
                 className={`rounded-lg border bg-slate-800/50 hover:bg-slate-800/80 transition-all cursor-pointer group ${isCollapsed ? 'p-2 flex justify-center' : 'p-3'}`}
                 style={{ borderColor: `${statusColor}33` }}
               >
                 <div className="flex items-start" style={{ display: 'flex', alignItems: 'flex-start' }}>
-                  {/* Icon Container */}
-                  <div 
-                    className="shrink-0" 
-                    style={{ 
-                      width: '40px', 
-                      paddingRight: '15px', 
-                      display: 'flex', 
-                      justifyContent: 'center',
-                      marginTop: '4px' 
-                    }}
-                  >
-                    <Plane 
-                      size={18} 
-                      style={{ color: statusColor, transform: 'rotate(45deg)', flexShrink: 0 }} 
-                    />
-                  </div>
-                  
-                  {!isCollapsed && (
-                    <div className="flex-1 min-w-0"> 
-                      {/* Top Row: Reg (Left) and Airfield (Right) */}
-                      <div className="flex justify-between items-baseline w-full">
-                        <span className="font-mono font-bold text-slate-100 truncate max-w-[40%]">
-                          {ac.registration || "N/A"}
-                        </span>
-                        
-                        {/* Airfield: Right-aligned with a bit of space for the dot */}
-                        <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
-                          <span className="text-slate-500 truncate text-right w-full">
-                            {ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}
-                          </span>
-                          {/* Status Dot */}
-                          <div 
-                            className="w-1.5 h-1.5 rounded-full shrink-0" 
-                            style={{ 
-                              backgroundColor: statusColor, 
-                              boxShadow: `0 0 6px ${statusColor}`
-                            }}
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Second Row: Aircraft Model */}
-                      <p className="text-[10px] text-blue-400 font-bold uppercase tracking-tight truncate mt-0.5">
-                        {ac.model || "Unknown Model"}
-                      </p>
+                    {/* ... icon and text logic ... */}
+                    <div className="shrink-0" style={{ width: '40px', paddingRight: '15px', display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
+                         <Plane size={18} style={{ color: statusColor, transform: 'rotate(45deg)', flexShrink: 0 }} />
                     </div>
-                  )}
+                    {!isCollapsed && (
+                        <div className="flex-1 min-w-0">
+                            {/* ... reg and airfield ... */}
+                            <div className="flex justify-between items-baseline w-full">
+                                <span className="font-mono font-bold text-slate-100 truncate max-w-[40%]">{ac.registration || "N/A"}</span>
+                                <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
+                                    <span className="text-slate-500 truncate text-right w-full text-[9px] italic">
+                                        {ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}
+                                    </span>
+                                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-tight truncate mt-0.5">{ac.model || "Unknown Model"}</p>
+                        </div>
+                    )}
                 </div>
               </div>
             );
@@ -185,14 +166,16 @@ function App() {
 
       {/* Resizer Handle (Hidden when collapsed) */}
       {!isCollapsed && (
-        <div
-          onMouseDown={startResizing}
-          className="w-1 cursor-col-resize bg-slate-800 hover:bg-blue-500 transition-colors z-[1002]"
-        />
+        <div onMouseDown={startResizing} className="w-1 cursor-col-resize bg-slate-800 hover:bg-blue-500 transition-colors z-[1002]" />
       )}
 
       <main className="flex-1 relative h-full bg-slate-900">
-        <MapComponent aircraft={aircraft} timeRangeSeconds={selectedTime.seconds} />
+        {/* 4. PASS THE CENTER PROP: This tells MapComponent where to fly */}
+        <MapComponent 
+            aircraft={aircraft} 
+            timeRangeSeconds={selectedTime.seconds} 
+            center={mapCenter} 
+        />
       </main>
     </div>
   );
