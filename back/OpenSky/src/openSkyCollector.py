@@ -138,8 +138,9 @@ class FirefleetCollector:
 
             return response.json() # Returns a full track object with path points
         except requests.exceptions.HTTPError as e:
-            # Diplomatically ignore 404s, but report other issues (like 500 or 401)
-            if e.response.status_code != 404:
+            if e.response.status_code != 429:
+                logger.error(f"Too many requests, Quota exceeded: {e}")
+            elif e.response.status_code != 404:
                 logger.error(f"HTTP Error fetching track for {icao24}: {e}")
             return None
         except Exception as e:
