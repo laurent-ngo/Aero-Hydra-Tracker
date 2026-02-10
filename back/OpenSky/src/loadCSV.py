@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 def load_aircrafts_from_csv(file_path):
     user, pw, db = os.getenv('DB_USER'), os.getenv('DB_PASSWORD'), os.getenv('DB_NAME')
-    db_url = f"postgresql://{user}:{pw}@localhost:5432/{db}"
+    url, port = os.getenv('DB_HOST'), os.getenv('DB_PORT')
+    db_url = f"postgresql://{user}:{pw}@{url}:{port}/{db}"
     
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
@@ -52,7 +53,8 @@ def load_aircrafts_from_csv(file_path):
 
 def load_airfields_from_csv(file_path):
     user, pw, db = os.getenv('DB_USER'), os.getenv('DB_PASSWORD'), os.getenv('DB_NAME')
-    db_url = f"postgresql://{user}:{pw}@localhost:5432/{db}"
+    url, port = os.getenv('DB_HOST'), os.getenv('DB_PORT')
+    db_url = f"postgresql://{user}:{pw}@{url}:{port}/{db}"
     
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
