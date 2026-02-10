@@ -9,11 +9,13 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker
 
-user = os.getenv('DB_USER', 'postgres')
-password = os.getenv('DB_PASSWORD', 'postgres')
-db_host = os.getenv('DB_HOST', 'localhost:5432')
+user = os.getenv('DB_USER', 'neondb_owner')
+password = os.getenv('DB_PASSWORD')
+db_host = os.getenv('DB_HOST')
+db_name = os.getenv('DB_NAME', 'neondb')
+db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
 
-db_url = f"postgresql://{user}:{password}@{db_host}"
+db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
 # --- Database Setup ---
 engine = create_engine(db_url)
