@@ -91,10 +91,11 @@ def list_active_aircraft(
     db: DbSession
 ):
     # 1. Get unique ICAOs within timeframe
-    active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
-        migrate.FlightTelemetry.timestamp >= start,
-        migrate.FlightTelemetry.timestamp <= stop
-    ).distinct().all()
+    active_icaos = db.query(migrate.TrackedAircraft.icao24).filter(
+        migrate.TrackedAircraft.last_seen >= start,
+        migrate.TrackedAircraft.last_seen <= stop
+    ).all()
+
     
     icao_list = [i[0] for i in active_icaos]
 
