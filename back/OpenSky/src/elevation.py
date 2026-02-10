@@ -11,11 +11,9 @@ from sqlalchemy.orm import sessionmaker
 
 user = os.getenv('DB_USER', 'postgres')
 password = os.getenv('DB_PASSWORD', 'postgres')
-db_name = os.getenv('DB_NAME', 'aero_hydra')
-db_port = os.getenv('DB_PORT', '5432') # Use string first
-db_host = os.getenv('DB_HOST', 'localhost')
+db_host = os.getenv('DB_HOST', 'localhost:5432')
 
-db_url = f"postgresql://{user}:{password}@{db_host}:{db_port}/{db_name}"
+db_url = f"postgresql://{user}:{password}@{db_host}"
 
 # --- Database Setup ---
 engine = create_engine(db_url)

@@ -6,17 +6,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 # 1. Setup Connection Configuration (with safe defaults)
-user = os.getenv('DB_USER', 'postgres')
-password = os.getenv('DB_PASSWORD', 'postgres')
-db_name = os.getenv('DB_NAME', 'aero_hydra')
-db_port = os.getenv('DB_PORT', '5432') # Use string first
-db_host = os.getenv('DB_HOST', 'localhost')
+user = os.getenv('DB_USER', 'neondb_owner')
+password = os.getenv('DB_PASSWORD')
+db_host = os.getenv('DB_HOST')
+db_name = os.getenv('DB_NAME', 'neondb')
+db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
 
-db_url = f"postgresql://{user}:{password}@{db_host}:{db_port}/{db_name}"
+db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
 # 2. Create the Engine and Session Factory
 # These must be at the top level so dataCollector.py can import them
-engine = create_engine(db_url)
+engine = create_engine(
+    db_url,
+    pool_pre_ping=True, 
+    pool_recycle=3600
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

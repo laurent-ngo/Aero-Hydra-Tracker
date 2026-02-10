@@ -23,13 +23,13 @@ import elevation
 
 import migrate
 
-user = os.getenv('DB_USER', 'postgres')
-password = os.getenv('DB_PASSWORD', 'postgres')
-db_name = os.getenv('DB_NAME', 'aero_hydra')
-db_port = os.getenv('DB_PORT', '5432') # Use string first
-db_host = os.getenv('DB_HOST', 'localhost')
+user = os.getenv('DB_USER', 'neondb_owner')
+password = os.getenv('DB_PASSWORD')
+db_host = os.getenv('DB_HOST')
+db_name = os.getenv('DB_NAME', 'neondb')
+db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
 
-db_url = f"postgresql://{user}:{password}@{db_host}:{db_port}/{db_name}"
+db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
 # --- Database Setup ---
 engine = create_engine(db_url)
