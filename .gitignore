@@ -42,3 +42,5 @@ back/OpenSky/logs/*
 .agents/skills/neon-postgres/references/neon-rest-api/operations.md
 .agents/skills/neon-postgres/references/neon-rest-api/organizations.md
 .agents/skills/neon-postgres/references/neon-rest-api/projects.md
+back/OpenSky/src/migrate.py
+*.sql
