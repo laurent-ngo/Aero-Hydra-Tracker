@@ -26,6 +26,7 @@ class FirefleetCollector:
         }
         
         try:
+            logger.info( "Calling OpenSky API/states")
             response = requests.get(
                 self.url, 
                 headers=headers, # Switched from auth= to headers=
@@ -33,7 +34,6 @@ class FirefleetCollector:
                 timeout=15
             )
             response.raise_for_status()
-            logger.info( "Calling OpenSky API/states")
             
             data = response.json()
             logger.debug("Successfully connected to OpenSky!")
@@ -56,9 +56,9 @@ class FirefleetCollector:
         }
         
         try:
+            logger.info( "Calling OpenSky API/states")
             response = requests.get(self.url, headers=headers, params=params, timeout=15)
             response.raise_for_status()
-            logger.info( "Calling OpenSky API/states")
             data = response.json()
                 
             states = data.get('states', [])
@@ -89,9 +89,9 @@ class FirefleetCollector:
             
             try:
                 # We fetch all (or use a bounding box for FinOps efficiency)
+                logger.info( "Calling OpenSky API/states")
                 response = requests.get(self.url, headers=headers, timeout=15)
                 response.raise_for_status()
-                logger.info( "Calling OpenSky API/states")
                 data = response.json()
                 
                 states = data.get('states', [])
@@ -132,9 +132,9 @@ class FirefleetCollector:
         }
 
         try:
+            logger.info( "Calling OpenSky API/track")
             response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
             response.raise_for_status()
-            logger.info( "Calling OpenSky API/track")
 
             return response.json() # Returns a full track object with path points
         except requests.exceptions.HTTPError as e:
