@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
-from sqlalchemy import create_engine, desc
+from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
 from collections import Counter
@@ -22,6 +22,7 @@ from shapely.ops import unary_union
 import elevation
 
 import migrate
+from dataCollector import orchestrate_sync 
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -47,11 +48,14 @@ def haversine(lon1, lat1, lon2, lat2):
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     return 6371 * 2 * asin(sqrt(a))
 
-def backfill_telemetry():
+def backfill_telemetry( icao_list = None):
     # 1. Get all unique ICAO24s that have empty speed data
+
     aircraft_ids = db.query(migrate.FlightTelemetry.icao24).filter(
+        migrate.FlightTelemetry.icao24.in_(icao_list),
         migrate.FlightTelemetry.speed_kph == None
     ).distinct().all()
+ 
 
     for (icao,) in aircraft_ids:
         logger.debug(f"Processing aircraft: {icao}")
@@ -93,7 +97,9 @@ def backfill_agl():
     points_to_fix = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.baro_altitude != None,
         migrate.FlightTelemetry.altitude_agl_ft == None
-    ).limit(100).all() # Processing 500 at a time is safer
+    ).order_by(
+        desc(migrate.FlightTelemetry.timestamp)
+    ).limit(200).all() # Processing 200 at a time is safer
 
     if not points_to_fix:
         logger.debug("No pending AGL calculations found.")
@@ -409,13 +415,16 @@ def sync_aircraft_metadata():
     
     # Get the latest point for every aircraft
     # This query finds the maximum ID for each ICAO24
-    latest_points = db.query(migrate.FlightTelemetry).distinct(
-        migrate.FlightTelemetry.icao24
-    ).order_by(
-        migrate.FlightTelemetry.icao24, 
-        desc(migrate.FlightTelemetry.timestamp)
-    ).all()
+    subquery = db.query(
+        migrate.FlightTelemetry.icao24,
+        func.max(migrate.FlightTelemetry.timestamp).label("max_ts")
+    ).group_by(migrate.FlightTelemetry.icao24).subquery()
 
+    latest_points = db.query(migrate.FlightTelemetry).join(
+        subquery,
+        (migrate.FlightTelemetry.icao24 == subquery.c.icao24) &
+        (migrate.FlightTelemetry.timestamp == subquery.c.max_ts)
+    ).all()
 
     sync_count = 0
     for p in latest_points:
@@ -453,28 +462,38 @@ if __name__ == "__main__":
     parser.add_argument(
         "--active", 
         action="store_true", 
+        help="Only active aircrafts"
+    )
+
+    parser.add_argument(
+        "--AGL", 
+        action="store_true", 
         help="Only set AGL altitude"
     )
 
     args = parser.parse_args()
 
-    if args.active:
+    icao_list = orchestrate_sync(active_only=args.active)
+
+
+    if args.AGL:
         backfill_agl()
     else:
-        backfill_telemetry()
+        backfill_telemetry(icao_list)
         backfill_agl()
         label_flight_phases()
-
         sync_aircraft_metadata()
 
-        detect_regions_of_interest_clustered(type='fire')
-        #detect_regions_of_interest_clustered(type='water')
+        if not args.active: 
 
-        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
-        
-        #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
- 
+            detect_regions_of_interest_clustered(type='fire')
+            #detect_regions_of_interest_clustered(type='water')
+
+            grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
+            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
+            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
+            
+            #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
+            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
+    

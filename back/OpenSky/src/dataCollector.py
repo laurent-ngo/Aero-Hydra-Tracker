@@ -51,6 +51,7 @@ def orchestrate_sync(active_only=False):
             time.sleep(0.5)
 
         logger.info("[DONE] Fleet sync completed successfully.")
+        return icao_list
 
     except Exception as e:
         logger.critical(f"Orchestrator failed: {e}")
