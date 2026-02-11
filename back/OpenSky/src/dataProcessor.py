@@ -460,6 +460,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--active", 
         action="store_true", 
+        help="Only active aircrafts"
+    )
+
+    parser.add_argument(
+        "--AGL", 
+        action="store_true", 
         help="Only set AGL altitude"
     )
 
@@ -468,21 +474,24 @@ if __name__ == "__main__":
     icao_list = orchestrate_sync(active_only=args.active)
 
 
-    backfill_telemetry(icao_list)
-    backfill_agl()
-    label_flight_phases()
-    sync_aircraft_metadata()
+    if args.AGL:
+        backfill_agl()
+    else:
+        backfill_telemetry(icao_list)
+        backfill_agl()
+        label_flight_phases()
+        sync_aircraft_metadata()
 
-    if not args.active: 
+        if not args.active: 
 
-        detect_regions_of_interest_clustered(type='fire')
-        #detect_regions_of_interest_clustered(type='water')
+            detect_regions_of_interest_clustered(type='fire')
+            #detect_regions_of_interest_clustered(type='water')
 
-        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
-        
-        #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
- 
+            grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
+            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
+            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
+            
+            #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
+            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
+    
