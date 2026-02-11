@@ -458,7 +458,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.AGL:
+    if args.active:
         backfill_agl()
     else:
         backfill_telemetry()
