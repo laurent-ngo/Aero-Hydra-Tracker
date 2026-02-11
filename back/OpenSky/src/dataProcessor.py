@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
-from sqlalchemy import create_engine, desc
+from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
 from collections import Counter
@@ -22,6 +22,7 @@ from shapely.ops import unary_union
 import elevation
 
 import migrate
+from dataCollector import orchestrate_sync 
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -47,11 +48,14 @@ def haversine(lon1, lat1, lon2, lat2):
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     return 6371 * 2 * asin(sqrt(a))
 
-def backfill_telemetry():
+def backfill_telemetry( icao_list = None):
     # 1. Get all unique ICAO24s that have empty speed data
+
     aircraft_ids = db.query(migrate.FlightTelemetry.icao24).filter(
+        migrate.FlightTelemetry.icao24.in_(icao_list),
         migrate.FlightTelemetry.speed_kph == None
     ).distinct().all()
+ 
 
     for (icao,) in aircraft_ids:
         logger.debug(f"Processing aircraft: {icao}")
@@ -409,13 +413,16 @@ def sync_aircraft_metadata():
     
     # Get the latest point for every aircraft
     # This query finds the maximum ID for each ICAO24
-    latest_points = db.query(migrate.FlightTelemetry).distinct(
-        migrate.FlightTelemetry.icao24
-    ).order_by(
-        migrate.FlightTelemetry.icao24, 
-        desc(migrate.FlightTelemetry.timestamp)
-    ).all()
+    subquery = db.query(
+        migrate.FlightTelemetry.icao24,
+        func.max(migrate.FlightTelemetry.timestamp).label("max_ts")
+    ).group_by(migrate.FlightTelemetry.icao24).subquery()
 
+    latest_points = db.query(migrate.FlightTelemetry).join(
+        subquery,
+        (migrate.FlightTelemetry.icao24 == subquery.c.icao24) &
+        (migrate.FlightTelemetry.timestamp == subquery.c.max_ts)
+    ).all()
 
     sync_count = 0
     for p in latest_points:
@@ -458,14 +465,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.active:
-        backfill_agl()
-    else:
-        backfill_telemetry()
-        backfill_agl()
-        label_flight_phases()
+    icao_list = orchestrate_sync(active_only=args.active)
 
-        sync_aircraft_metadata()
+
+    backfill_telemetry(icao_list)
+    backfill_agl()
+    label_flight_phases()
+    sync_aircraft_metadata()
+
+    if not args.active: 
 
         detect_regions_of_interest_clustered(type='fire')
         #detect_regions_of_interest_clustered(type='water')
