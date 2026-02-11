@@ -93,7 +93,7 @@ def backfill_agl():
     points_to_fix = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.baro_altitude != None,
         migrate.FlightTelemetry.altitude_agl_ft == None
-    ).all() # Processing 500 at a time is safer
+    ).limit(100).all() # Processing 500 at a time is safer
 
     if not points_to_fix:
         logger.debug("No pending AGL calculations found.")
@@ -451,7 +451,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AERO-HYDRA data collector")
 
     parser.add_argument(
-        "--AGL", 
+        "--active", 
         action="store_true", 
         help="Only set AGL altitude"
     )
@@ -467,14 +467,14 @@ if __name__ == "__main__":
 
         sync_aircraft_metadata()
 
-    detect_regions_of_interest_clustered(type='fire')
-    detect_regions_of_interest_clustered(type='water')
+        detect_regions_of_interest_clustered(type='fire')
+        #detect_regions_of_interest_clustered(type='water')
 
-    grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-    grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
-    grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
-    
-    grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
-    grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-    grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
+        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
+        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
+        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
+        
+        #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
+        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
  
