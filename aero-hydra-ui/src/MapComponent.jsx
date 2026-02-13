@@ -57,11 +57,12 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
         mask-image: url('../img/sprites.png');
         mask-position: ${offsetX}px ${offsetY}px;
         -webkit-mask-repeat: no-repeat;
+        transform: scale(0.8);
       "></div>
     </div>`,
     className: "bg-transparent",
     iconSize: [20, 20],
-    iconAnchor: [35, 35],
+    iconAnchor: [36, 36],
   });
 };
 
