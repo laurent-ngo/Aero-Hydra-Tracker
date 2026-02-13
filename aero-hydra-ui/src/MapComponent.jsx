@@ -3,6 +3,31 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+const getTimeAgo = (timestamp) => {
+  if (!timestamp) return "Unknown";
+  
+  const lastSeen = new Date(timestamp * 1000); 
+  const now = new Date();
+  const secondsAgo = Math.floor((now - lastSeen) / 1000);
+
+  if (secondsAgo < 60) return `${secondsAgo}s ago`;
+  
+  const minutes = Math.floor(secondsAgo / 60);
+  if (minutes < 60) {
+    const remainingSeconds = secondsAgo % 60;
+    return `${minutes}m ${remainingSeconds}s ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours < 24) {
+    return `${hours}h ${remainingMinutes}m ago`;
+  }
+
+  return "1d+ ago";
+};
+
 function ChangeView({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -40,24 +65,30 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
 
   return L.divIcon({
     html: `
+    <div style="
+      width: ${ICON_SIZE}px; 
+      height: ${ICON_SIZE}px; 
+      transform: rotate(${heading}deg);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      /* The 'Secret Sauce': 4 shadows create a 1px solid black border */
+      filter: drop-shadow(1px 0px 0px black) 
+              drop-shadow(-1px 0px 0px black) 
+              drop-shadow(0px 1px 0px black) 
+              drop-shadow(0px -1px 0px black);
+    ">
       <div style="
         width: ${ICON_SIZE}px; 
         height: ${ICON_SIZE}px; 
-        overflow: hidden; 
-        transform: rotate(${heading}deg);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      ">
-        <div style="
-        position: absolute;
-        width: ${ICON_SIZE}px; 
-        height: ${ICON_SIZE}px; 
-        background-color: ${color.stroke}; 
+        background-color: ${color.fill}; 
+        -webkit-mask-image: url('../img/sprites.png');
         mask-image: url('../img/sprites.png');
+        -webkit-mask-position: ${offsetX}px ${offsetY}px;
         mask-position: ${offsetX}px ${offsetY}px;
         -webkit-mask-repeat: no-repeat;
-        transform: scale(0.8);
+        /* Adjust scale to make the icon fit your 20x20 hit-box */
+        transform: scale(0.5); 
       "></div>
     </div>`,
     className: "bg-transparent",
@@ -209,12 +240,23 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                         <span className="text-sm font-bold">
                           {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
                         </span>
-                      <div className="flex flex-col"></div>
+                      </div>
+                      <div className="flex flex-col">
                         <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">AGL Altitude</span>
                         <span className="text-sm font-bold">
                           {ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Footer: Last Seen Status */}
+                    <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Last seen</span>
+                      <span className={`text-[10px] font-bold ${
+                        (Math.floor(Date.now() / 1000) - ac.last_timestamp) > 60 ? 'text-red-500' : 'text-green-600'
+                      }`}>
+                        {getTimeAgo(ac.last_timestamp)}
+                      </span>
                     </div>
                   </div>
                 </Popup>
