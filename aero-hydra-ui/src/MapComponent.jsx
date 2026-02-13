@@ -191,9 +191,14 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                     {/* Instruments: Altitude and Speed */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="flex flex-col">
-                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Altitude</span>
+                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Baro Altitude</span>
                         <span className="text-sm font-bold">
                           {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
+                        </span>
+                      <div className="flex flex-col"></div>
+                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">AGL Altitude</span>
+                        <span className="text-sm font-bold">
+                          {ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}
                         </span>
                       </div>
                     </div>
