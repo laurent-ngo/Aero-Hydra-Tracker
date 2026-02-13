@@ -73,7 +73,11 @@ function App() {
         const start = stop - selectedTime.seconds;
         
         // Using your specific endpoint for active aircraft in a time range
-        const response = await fetch(`http://localhost:8000/aircraft/active?start=${start}&stop=${stop}`);
+        const response = await fetch(`http://localhost:8000/aircraft/active?start=${start}&stop=${stop}`, {
+            headers: {
+                'X-API-Key': import.meta.env.VITE_AERO_API_KEY
+            }
+        }); 
         const data = await response.json();
         setAircraft(Array.isArray(data) ? data : (data ? [data] : []));
       } catch (error) {
