@@ -67,11 +67,11 @@ function App() {
   }, [isResizing, isCollapsed]);
 
   useEffect(() => {
-    globalThis.addEventListener("mousemove", resize);
-    globalThis.addEventListener("mouseup", stopResizing);
+    globalThis.addEventListener("pointermove", resize);
+    globalThis.addEventListener("pointerup", stopResizing);
     return () => {
-      globalThis.removeEventListener("mousemove", resize);
-      globalThis.removeEventListener("mouseup", stopResizing);
+      globalThis.removeEventListener("pointermove", resize);
+      globalThis.removeEventListener("pointerup", stopResizing);
     };
   }, [resize, stopResizing]);
 
@@ -192,7 +192,10 @@ function App() {
 
       {/* Resizer Handle (Hidden when collapsed) */}
       {!isCollapsed && (
-        <div onMouseDown={startResizing} className="w-1 cursor-col-resize bg-slate-800 hover:bg-blue-500 transition-colors z-[1002]" />
+        <div 
+          onPointerDown={startResizing} // Changed from onMouseDown
+          className="w-1 cursor-col-resize bg-slate-800 hover:bg-blue-500 transition-colors z-[1002]" 
+        />
       )}
 
       <main className="flex-1 relative h-full bg-slate-900">
