@@ -21,6 +21,15 @@ const COLORS = {
   empty:    "#c2410c", // Orange
 };
 
+// At the top of App.jsx
+if (!import.meta.env.VITE_AERO_API_KEY) {
+    throw new Error(
+        "CRITICAL: VITE_AERO_API_KEY is missing from environment variables. " +
+        "Check your .env.local file and restart the dev server."
+    );
+}
+
+
 function App() {
   const [aircraft, setAircraft] = useState([]);
   const [sidebarWidth, setSidebarWidth] = useState(320);
