@@ -73,7 +73,11 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
     await Promise.all(aircraft.map(async (ac) => {
       try {
         // Explicitly pass start/stop so the backend has a valid range
-        const response = await fetch(`http://localhost:8000/telemetry/${ac.icao24}?start=${start}&stop=${stop}`);
+        const response = await fetch(`http://localhost:8000/telemetry/${ac.icao24}?start=${start}&stop=${stop}`, {
+            headers: {
+                'X-API-Key': import.meta.env.VITE_AERO_API_KEY
+            }
+        });
         const data = await response.json();
 
         if (Array.isArray(data) && data.length > 0) {
@@ -173,13 +177,30 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                 )}
               >
                 <Popup>
-                  <div className="text-slate-900 font-sans p-1">
-                    <p className="font-bold border-b border-slate-200 pb-1 mb-1">{ac.registration}</p>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${isOnGround ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                      <span className="text-xs font-bold uppercase">
-                        {isOnGround ? `On Ground - ${ac.airfield_name || 'Airport'}` : "Airborne"}
-                      </span>
+                  <div className="text-slate-900 font-mono p-1 min-w-[160px]">
+                    {/* Header: Reg and Model */}
+                    <div className="mb-2 border-b border-slate-100 pb-1">
+                      <p className="font-bold text-lg text-blue-700 leading-none mb-1">
+                        {ac.registration || "N/A"}
+                      </p>
+                      <p className="text-[11px] text-slate-500 font-sans uppercase font-bold tracking-tight">
+                        {ac.model || "Unknown Model"}
+                      </p>
+                    </div>
+
+                    {/* Instruments: Altitude and Speed */}
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Baro Altitude</span>
+                        <span className="text-sm font-bold">
+                          {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
+                        </span>
+                      <div className="flex flex-col"></div>
+                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">AGL Altitude</span>
+                        <span className="text-sm font-bold">
+                          {ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </Popup>

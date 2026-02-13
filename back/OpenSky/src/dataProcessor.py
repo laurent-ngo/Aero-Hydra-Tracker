@@ -99,7 +99,7 @@ def backfill_agl():
         migrate.FlightTelemetry.altitude_agl_ft == None
     ).order_by(
         desc(migrate.FlightTelemetry.timestamp)
-    ).limit(150).all() # Processing 200 at a time is safer
+    ).limit(120).all() # Processing 200 at a time is safer
 
     if not points_to_fix:
         logger.debug("No pending AGL calculations found.")

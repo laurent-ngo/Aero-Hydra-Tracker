@@ -1,14 +1,26 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 from typing import List, Optional
 from typing_extensions import Annotated
 import migrate # Importing your existing models and SessionLocal
-import time
+import time, os
+
+API_KEY = os.getenv("AERO_API_KEY")
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 app = FastAPI(title="Aero-Hydra API")
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header == API_KEY:
+        return api_key_header
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Could not validate credentials"
+    )
 
 
 # Allow your local frontend to talk to the API
@@ -79,12 +91,13 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
         } for a, af, ft in results
     ]
 
-@app.get("/aircraft", response_model=List[dict])
+
+@app.get("/aircraft", response_model=List[dict], dependencies=[Security(get_api_key)])
 def list_aircraft(db: DbSession):
     return _get_aircraft_with_details(db)
 
 
-@app.get("/aircraft/active", response_model=List[dict])
+@app.get("/aircraft/active", response_model=List[dict], dependencies=[Security(get_api_key)])
 def list_active_aircraft(
     start: int, 
     stop: int, 
@@ -102,7 +115,7 @@ def list_active_aircraft(
     # 2. Use helper with the icao filter
     return _get_aircraft_with_details(db, icao_filter=icao_list)
     
-@app.get("/telemetry/{icao24}", responses={400: {"description": "icao24 not found"}})
+@app.get("/telemetry/{icao24}", responses={400: {"description": "icao24 not found"}}, dependencies=[Security(get_api_key)])
 def get_telemetry(
     db: DbSession,
     icao24: str, 
@@ -153,7 +166,7 @@ def get_telemetry(
 
     return results
 
-@app.get("/regions-of-interest") # Updated to match your frontend fetch URL
+@app.get("/regions-of-interest", dependencies=[Security(get_api_key)]) # Updated to match your frontend fetch URL
 def get_rois(
     db: DbSession,
     level: Optional[int] = Query(None, ge=1, le=4),
