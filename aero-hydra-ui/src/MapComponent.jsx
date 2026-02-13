@@ -24,29 +24,44 @@ const COLORS = {
   empty: { fill: "#f97316", stroke: "#c2410c" },    // Orange
 };
 
-const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, aircraftType = "") => {
+const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, iconId = 1) => {
+
+  const ICON_SIZE = 72;
+  const iconsPerRow = 8;
+
+  const offsetX = -(iconId%iconsPerRow) * ICON_SIZE;
+  const offsetY = -Math.floor(iconId / iconsPerRow)* ICON_SIZE;
+
+  console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
+
   let color = COLORS.airborne;
   if (isOnGround) color = COLORS.ground;
   else if (payload) color = full ? COLORS.full : COLORS.empty;
 
-  const planePath = "M21 16V14.5L13 9.5V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9.5L2 14.5V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z";
-  
-  const heliPath = "M12 2L11 4.5H5V6.5H11V10.1C9.3 10.4 8 11.9 8 13.5C8 15.5 9.8 17 12 17C14.2 17 16 15.5 16 13.5C16 11.9 14.7 10.4 13 10.1V6.5H19V4.5H13L12 2ZM2 11V13H22V11H2ZM11 18V22H13V18H11Z";
-  
-  const type = aircraftType?.toLowerCase().trim();
-  const selectedPath = (type === 'helicopter') ? heliPath : planePath;
-
   return L.divIcon({
     html: `
-      <div style="transform: rotate(${heading}deg); transition: all 0.3s ease;">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-          <path d="${selectedPath}" 
-                fill="${color.fill}" stroke="${color.stroke}" stroke-width="1.5" />
-        </svg>
-      </div>`,
+      <div style="
+        width: ${ICON_SIZE}px; 
+        height: ${ICON_SIZE}px; 
+        overflow: hidden; 
+        transform: rotate(${heading}deg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      ">
+        <div style="
+        position: absolute;
+        width: ${ICON_SIZE}px; 
+        height: ${ICON_SIZE}px; 
+        background-color: ${color.stroke}; 
+        mask-image: url('../img/sprites.png');
+        mask-position: ${offsetX}px ${offsetY}px;
+        -webkit-mask-repeat: no-repeat;
+      "></div>
+    </div>`,
     className: "bg-transparent",
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [20, 20],
+    iconAnchor: [35, 35],
   });
 };
 
@@ -146,8 +161,6 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                   [point.lat, point.lon]
                 ];
 
-                if (index === 1) console.log(`Drawing path for ${ac.icao24}:`, point);
-
                 return (
                   <Polyline
                     key={`${ac.icao24}-seg-${index}`}
@@ -173,7 +186,7 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                   ac.at_airfield, 
                   ac.payload_capacity_kg > 0,
                   ac.is_full,
-                  ac.type
+                  ac.icon
                 )}
               >
                 <Popup>

@@ -125,7 +125,7 @@ function App() {
                 showAll ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'
               }`}
             >
-              {showAll ? 'ALL KNOWN' : 'ACTIVE ONLY'}
+              {showAll ? 'ALL' : 'ACTIVE ONLY'}
             </button>
           </div>
         )}
