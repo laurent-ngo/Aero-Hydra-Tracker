@@ -177,13 +177,25 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                 )}
               >
                 <Popup>
-                  <div className="text-slate-900 font-sans p-1">
-                    <p className="font-bold border-b border-slate-200 pb-1 mb-1">{ac.registration}</p>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${isOnGround ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                      <span className="text-xs font-bold uppercase">
-                        {isOnGround ? `On Ground - ${ac.airfield_name || 'Airport'}` : "Airborne"}
-                      </span>
+                  <div className="text-slate-900 font-mono p-1 min-w-[160px]">
+                    {/* Header: Reg and Model */}
+                    <div className="mb-2 border-b border-slate-100 pb-1">
+                      <p className="font-bold text-lg text-blue-700 leading-none mb-1">
+                        {ac.registration || "N/A"}
+                      </p>
+                      <p className="text-[11px] text-slate-500 font-sans uppercase font-bold tracking-tight">
+                        {ac.model || "Unknown Model"}
+                      </p>
+                    </div>
+
+                    {/* Instruments: Altitude and Speed */}
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Altitude</span>
+                        <span className="text-sm font-bold">
+                          {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </Popup>
