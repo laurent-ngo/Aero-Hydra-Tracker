@@ -25,7 +25,13 @@ const getTimeAgo = (timestamp) => {
     return `${hours}h ${remainingMinutes}m ago`;
   }
 
-  return "1d+ ago";
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+
+  if (days < 7) {
+    return `${days}d ${remainingHours}h ago`
+  }
+  return "+7days ago";
 };
 
 function ChangeView({ center }) {
