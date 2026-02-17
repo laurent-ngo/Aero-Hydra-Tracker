@@ -77,6 +77,7 @@ def bulk_insert_telemetry(session, icao24, path_data):
         return
 
     # 1. Transform the raw OpenSky list into a list of dictionaries
+    print (path_data)
     values = [
         {
             "icao24": icao24,

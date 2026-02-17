@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'; 
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { Polygon } from 'react-leaflet';
+import { THEME } from './theme';
+import { Header, Label, Value } from './components/Typography';
 
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return "Unknown";
@@ -63,7 +66,7 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
   const offsetX = -(iconId%iconsPerRow) * ICON_SIZE;
   const offsetY = -Math.floor(iconId / iconsPerRow)* ICON_SIZE;
 
-  console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
+  //console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
 
   let color = COLORS.airborne;
   if (isOnGround) color = COLORS.ground;
@@ -78,7 +81,6 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
       display: flex;
       justify-content: center;
       align-items: center;
-      /* The 'Secret Sauce': 4 shadows create a 1px solid black border */
       filter: drop-shadow(1px 0px 0px black) 
               drop-shadow(-1px 0px 0px black) 
               drop-shadow(0px 1px 0px black) 
@@ -93,7 +95,6 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
         -webkit-mask-position: ${offsetX}px ${offsetY}px;
         mask-position: ${offsetX}px ${offsetY}px;
         -webkit-mask-repeat: no-repeat;
-        /* Adjust scale to make the icon fit your 20x20 hit-box */
         transform: scale(0.5); 
       "></div>
     </div>`,
@@ -112,9 +113,19 @@ const getAltitudeColor = (alt) => {
   return '#a855f7';                     // Purple: Very high/Cruise
 };
 
-const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
+const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, center }) => {
   const [telemetryPaths, setTelemetryPaths] = useState({});
   const position = [43.758662, 4.416307];
+
+  // Styling logic for the ROI level 2
+  const roiStyle = {
+    color: '#FF0000', 
+    weight: 5, 
+    fillOpacity: 0.15,
+    fillColor: '#FF0000',
+    zIndex: 9999 // Force it to the top
+  };
+  
 
   useEffect(() => {
   const fetchPaths = async () => {
@@ -173,6 +184,49 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
       />
       
       {center && <ChangeView center={center} />}
+
+      {rois.map((roi) => {
+        let finalCoords = [];
+
+        // 1. Parse the string into a real Array
+        try {
+          if (typeof roi.geometry === 'string') {
+            finalCoords = JSON.parse(roi.geometry);
+          } else {
+            finalCoords = roi.geometry;
+          }
+        } catch (e) {
+          console.error(`Parsing error for ROI ${roi.id}:`, e);
+          return null;
+        }
+
+        // 2. Safety check now works because finalCoords is a real Array
+        if (!finalCoords || !Array.isArray(finalCoords) || finalCoords.length === 0) {
+          return null;
+        }
+
+        // 3. Render the Polygon
+        return (
+          <Polygon 
+            key={`roi-${roi.id}`} 
+            positions={finalCoords} 
+            pathOptions={roiStyle}
+          >
+            <Popup>
+              <div className="text-slate-900 font-mono p-1">
+                <Header>{roi.name}</Header>
+                <div className="mt-2">
+                  <Label>Level</Label>
+                  <Value>{roi.level}</Value>
+                  <Label>Type</Label>
+                  <Value>{roi.type}</Value>
+                </div>
+              </div>
+            </Popup>
+          </Polygon>
+        );
+      })}
+
       {aircraft
         .filter(ac => ac.last_lat !== null && ac.last_lon !== null)
         .map((ac) => {
@@ -231,38 +285,32 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                   <div className="text-slate-900 font-mono p-1 min-w-[160px]">
                     {/* Header: Reg and Model */}
                     <div className="mb-2 border-b border-slate-100 pb-1">
-                      <p className="font-bold text-lg text-blue-700 leading-none mb-1">
+                      <Header>
                         {ac.registration || "N/A"}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-sans uppercase font-bold tracking-tight">
+                      </Header>
+                    </div>
+                    <div className="mb-2 border-b border-slate-100 pb-1">
+                      <Label>
                         {ac.model || "Unknown Model"}
-                      </p>
+                      </Label>
                     </div>
 
                     {/* Instruments: Altitude and Speed */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="flex flex-col">
-                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Baro Altitude</span>
-                        <span className="text-sm font-bold">
-                          {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
-                        </span>
+                        <Label>Baro Altitude</Label>
+                          <Value>{ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}</Value>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">AGL Altitude</span>
-                        <span className="text-sm font-bold">
-                          {ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}
-                        </span>
+                        <Label>AGL Altitude</Label>
+                          <Value>{ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}</Value>
                       </div>
                     </div>
 
                     {/* Footer: Last Seen Status */}
                     <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
-                      <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Last seen</span>
-                      <span className={`text-[10px] font-bold ${
-                        (Math.floor(Date.now() / 1000) - ac.last_timestamp) > 60 ? 'text-red-500' : 'text-green-600'
-                      }`}>
-                        {getTimeAgo(ac.last_timestamp)}
-                      </span>
+                      <Label>Last seen</Label>
+                      <Value> {getTimeAgo(ac.last_timestamp)}</Value>
                     </div>
                   </div>
                 </Popup>

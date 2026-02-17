@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Clock, ChevronLeft, ChevronRight } from 'lucide-react'; // Added Chevrons
+import { Plane, Clock, ChevronLeft, ChevronRight, Target } from 'lucide-react'; // Added Chevrons
 import MapComponent from './MapComponent';
+
+import { Header, Label, Value } from './components/Typography';
 
 const TIME_OPTIONS = [
   { label: '5m', seconds: 300 },
@@ -32,6 +34,7 @@ if (!import.meta.env.VITE_AERO_API_KEY) {
 
 function App() {
   const [aircraft, setAircraft] = useState([]);
+  const [rois, setRois] = useState([]);
   const [showAll, setShowAll] = useState(false); // New: Toggle State
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -81,17 +84,22 @@ function App() {
       try {
         const stop = Math.floor(Date.now() / 1000);
         const start = stop - selectedTime.seconds;
+
+        const headers = { 'X-API-Key': import.meta.env.VITE_AERO_API_KEY };
         
-        // Toggle between "Active" and "All" endpoints
-        const url = showAll 
+       // Fetch Aircraft
+        const acUrl = showAll 
           ? `http://localhost:8000/aircraft` 
           : `http://localhost:8000/aircraft/active?start=${start}&stop=${stop}`;
+        const acRes = await fetch(acUrl, { headers });
+        const acData = await acRes.json();
+        setAircraft(Array.isArray(acData) ? acData : [acData]);
 
-        const response = await fetch(url, {
-            headers: { 'X-API-Key': import.meta.env.VITE_AERO_API_KEY }
-        }); 
-        const data = await response.json();
-        setAircraft(Array.isArray(data) ? data : (data ? [data] : []));
+        // Fetch Level 2 ROIs
+        const roiRes = await fetch(`http://localhost:8000/regions-of-interest?level=2`, { headers });
+        const roiData = await roiRes.json();
+        setRois(Array.isArray(roiData) ? roiData : []);
+
       } catch (error) {
         console.error("API Error:", error);
       }
@@ -100,7 +108,7 @@ function App() {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [selectedTime, showAll]); // Re-run when toggle or time changes
+  }, [selectedTime, showAll]);
 
   return (
     <div className="flex h-screen w-screen bg-slate-950 overflow-hidden select-none">
@@ -118,7 +126,7 @@ function App() {
         {/* Time Slider & and toggle */}
         {!isCollapsed && (
           <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-            <span className="text-[10px] uppercase font-bold text-slate-500">View Mode</span>
+            <Value>View Mode</Value>
             <button 
               onClick={() => setShowAll(!showAll)}
               className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
@@ -135,9 +143,9 @@ function App() {
               <div className="space-y-2 bg-slate-800/40 p-3 rounded-lg border border-slate-700/50">
                 <div className="flex justify-between items-center text-[10px] uppercase tracking-wider font-bold text-slate-500">
                   <div className="flex items-center gap-1">
-                    <Clock size={12} /> <span>History Range</span>
+                    <Clock size={12} /> <Value>History Range</Value>
                   </div>
-                  <span className="text-blue-400 font-mono">{selectedTime.label}</span>
+                  <Value>{selectedTime.label}</Value>
                 </div>
                 <input
                   type="range"
@@ -172,15 +180,15 @@ function App() {
                         <div className="flex-1 min-w-0">
                             {/* ... reg and airfield ... */}
                             <div className="flex justify-between items-baseline w-full">
-                                <span className="font-mono font-bold text-slate-100 truncate max-w-[40%]">{ac.registration || "N/A"}</span>
+                                <Header>{ac.registration || "N/A"}</Header>
                                 <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
-                                    <span className="text-slate-500 truncate text-right w-full text-[9px] italic">
+                                    <Value>
                                         {ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}
-                                    </span>
+                                    </Value>
                                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
                                 </div>
                             </div>
-                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-tight truncate mt-0.5">{ac.model || "Unknown Model"}</p>
+                            <Value>{ac.model || "Unknown Model"}</Value>
                         </div>
                     )}
                 </div>
@@ -188,6 +196,35 @@ function App() {
             );
           })}
         </div>
+
+        {/* ROI List (Level 2) */}
+        {!isCollapsed && rois.length > 0 && (
+          <div className="px-3 py-2 border-b border-slate-800">
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <Target size={14} className="text-red-400" />
+              <Header>Active ROI</Header>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {rois.map((roi) => (
+                <div 
+                  key={roi.id}
+                  onClick={() => {
+                    console.log("Flying to ROI:", roi.lat, roi.lon);
+                    setMapCenter([Number(roi.lon), Number(roi.lat)]);
+                  }}
+                  className="p-2 rounded bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 cursor-pointer transition-all"
+                >
+                  <div className="flex justify-between items-center">
+                    <Value>{roi.name}</Value>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 uppercase">
+                      {roi.type}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Resizer Handle (Hidden when collapsed) */}
@@ -202,6 +239,7 @@ function App() {
         {/* 4. PASS THE CENTER PROP: This tells MapComponent where to fly */}
         <MapComponent 
             aircraft={aircraft} 
+            rois={rois}
             timeRangeSeconds={selectedTime.seconds} 
             center={mapCenter} 
         />
