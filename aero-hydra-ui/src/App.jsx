@@ -56,6 +56,7 @@ function App() {
   };
   
   const getAircraftColor = (ac) => {
+    if (ac.airfield_name === 'Unknown') return TRACK_COLORS.ground
     if (ac.at_airfield) return TRACK_COLORS.ground;
     if (ac.payload_capacity_kg > 0) {
       return ac.is_full ? TRACK_COLORS.full : TRACK_COLORS.empty;
