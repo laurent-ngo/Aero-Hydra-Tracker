@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-main: 'JetBrains Mono', monospace;
+  --color-accent: #1d4ed8;
+  --color-text-primary: #1e293b;
+}
+
+body {
+  font-family: var(--font-main);
+  color: var(--color-text-primary);
+}
+
+/* Dark Mode Overrides for Leaflet Popups */
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background-color: #020617 !important; /* Matches your slate-950 */
+  color: #f1f5f9 !important;
+  border: 1px solid #1e293b; /* Matches your border color */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+/* Light Mode (Optional - if you want to match your slate-50/white exactly) */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background-color: #ffffff; 
+  border: 1px solid #e2e8f0;
+}
+
+/* Remove default extra padding so your component looks clean */
+.leaflet-popup-content {
+  margin: 12px !important;
+  line-height: inherit !important;
+}

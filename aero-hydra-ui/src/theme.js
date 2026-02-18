@@ -1,13 +1,35 @@
 export const THEME = {
   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-  colors: {
-    textPrimary: "#1e293b",
-    textSecondary: "#64748b",
-    accent: "#1d4ed8",
-    border: "#f1f5f9",
-    background: "#ffffff",
-    success: "#16a34a",
-    danger: "#ef4444"
+  // Split colors into modes
+  modes: {
+    light: {
+      textPrimary: "#1e293b",   // slate-800
+      textSecondary: "#64748b", // slate-500
+      accent: "#1d4ed8",        // blue-700
+      border: "#e2e8f0",        // slate-200
+      background: "#ffffff",
+      sidebar: "#f8fafc",       // slate-50
+      success: "#16a34a",
+      danger: "#ef4444",
+      map: {
+        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }
+    },
+    dark: {
+      textPrimary: "#f1f5f9",   // slate-100
+      textSecondary: "#94a3b8", // slate-400
+      accent: "#60a5fa",        // blue-400
+      border: "#1e293b",        // slate-800
+      background: "#020617",    // slate-950
+      sidebar: "#0f172a",       // slate-900
+      success: "#22c55e",
+      danger: "#f87171",
+      map: {
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      }
+    }
   },
   fontSize: {
     label: "9px",
@@ -15,6 +37,9 @@ export const THEME = {
     header: "16px"
   }
 };
+
+// Keep your existing TRACK_COLORS, AIRCRAFT_COLORS, ROI_STYLE as is
+// or move them into the modes if you want them to change too.
 
 
 export const TRACK_COLORS = {
@@ -39,13 +64,37 @@ export const ROI_STYLE = {
   zIndex: 9999 // Force it to the top
 };
 
-export const getAltitudeColor = (alt) => {
-  if (alt === null || alt <1 ) return '#94a3b8'; // Gray for unknown
-  if (alt <100 ) return '#ff0000'; 
-  if (alt < 950) return '#f97316';    // Orange: Near Ground/Taxi
-  if (alt < 5000) return '#fbce00';   // Yellow: Low altitude/Climb
-  if (alt < 13000) return '#22c55e';  // Green: Mid altitude
-  if (alt < 200000) return '#3b82f6';  // Blue: High altitude
-  return '#a855f7';                     // Purple: Very high/Cruise
+
+const ALTITUDE_PALETTE = {
+  light: {
+    unknown: '#94a3b8',
+    ground:  '#ff0000',
+    taxi:    '#f97316',
+    low:     '#fbce00',
+    mid:     '#22c55e',
+    high:    '#3b82f6',
+    cruise:  '#a855f7'
+  },
+  dark: {
+    unknown: '#64748b', // Deeper gray
+    ground:  '#dc2626', // Stronger red
+    taxi:    '#ea580c', // Deep orange
+    low:     '#ca8a04', // Darker yellow/gold (better contrast on white)
+    mid:     '#16a34a', // Forest green
+    high:    '#2563eb', // Royal blue
+    cruise:  '#9333ea'  // Deep purple
+  }
+};
+
+export const getAltitudeColor = (alt, mode = 'dark') => {
+  const colors = ALTITUDE_PALETTE[mode] || ALTITUDE_PALETTE.dark;
+
+  if (alt === null || alt < 1) return colors.unknown;
+  if (alt < 100)               return colors.ground; 
+  if (alt < 950)               return colors.taxi;
+  if (alt < 5000)              return colors.low;
+  if (alt < 13000)             return colors.mid;
+  if (alt < 200000)            return colors.high;
+  return colors.cruise;
 };
 

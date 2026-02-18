@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Polygon } from 'react-leaflet';
-import { AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
+import { THEME, AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
 const getTimeAgo = (timestamp) => {
@@ -97,9 +97,11 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
 };
 
 
-const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, center }) => {
+const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, center, mode = 'dark' }) => {
   const [telemetryPaths, setTelemetryPaths] = useState({});
   const position = [43.758662, 4.416307];
+
+  const mapConfig = THEME.modes[mode].map;
 
   useEffect(() => {
   const fetchPaths = async () => {
@@ -147,9 +149,9 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
       zoomControl={false}
     >
       <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-
+        key={mode} 
+        url={mapConfig.url}
+        attribution={mapConfig.attribution}
         eventHandlers={{
           tileloadstart: (e) => {
             e.tile.setAttribute('referrerpolicy', 'no-referrer');
@@ -187,13 +189,13 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
             pathOptions={ROI_STYLE}
           >
             <Popup>
-              <div className="text-slate-900 font-mono p-1">
-                <Header>{roi.name}</Header>
+              <div className="font-mono min-w-[140px]">
+                <Header mode={mode}>{roi.name}</Header>
                 <div className="mt-2">
-                  <Label>Level</Label>
-                  <Value>{roi.level}</Value>
-                  <Label>Type</Label>
-                  <Value>{roi.type}</Value>
+                  <Label mode={mode}>Level</Label>
+                  <Value mode={mode}>{roi.level}</Value>
+                  <Label mode={mode}>Type</Label>
+                  <Value mode={mode}>{roi.type}</Value>
                 </div>
               </div>
             </Popup>
@@ -236,9 +238,9 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                       [point.lat, point.lon]
                     ]}
                     pathOptions={{
-                      color: getAltitudeColor(point.alt),
+                      color: getAltitudeColor(point.alt, mode),
                       weight: 4,
-                      opacity: 1,
+                      opacity: mode === 'light' ? 0.8 : 1,
                       lineCap: 'round'
                     }}
                   />
@@ -256,35 +258,31 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                 )}
               >
                 <Popup>
-                  <div className="text-slate-900 font-mono p-1 min-w-[160px]">
+                  <div className="font-mono min-w-[140px]">
                     {/* Header: Reg and Model */}
                     <div className="mb-2 border-b border-slate-100 pb-1">
-                      <Header>
-                        {ac.registration || "N/A"}
-                      </Header>
+                      <Header mode={mode}>{ac.registration || "N/A"}</Header>
                     </div>
                     <div className="mb-2 border-b border-slate-100 pb-1">
-                      <Label>
-                        {ac.model || "Unknown Model"}
-                      </Label>
+                      <Label mode={mode}>{ac.model || "Unknown Model"}</Label>
                     </div>
 
                     {/* Instruments: Altitude and Speed */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="flex flex-col">
-                        <Label>Baro Altitude</Label>
-                          <Value>{ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}</Value>
+                        <Label mode={mode}>Baro Altitude</Label>
+                          <Value mode={mode}>{ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}</Value>
                       </div>
                       <div className="flex flex-col">
-                        <Label>AGL Altitude</Label>
-                          <Value>{ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}</Value>
+                        <Label mode={mode}>AGL Altitude</Label>
+                          <Value mode={mode}>{ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}</Value>
                       </div>
                     </div>
 
                     {/* Footer: Last Seen Status */}
                     <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
-                      <Label>Last seen</Label>
-                      <Value> {getTimeAgo(ac.last_timestamp)}</Value>
+                      <Label mode={mode}>Last seen</Label>
+                      <Value mode={mode}> {getTimeAgo(ac.last_timestamp)}</Value>
                     </div>
                   </div>
                 </Popup>

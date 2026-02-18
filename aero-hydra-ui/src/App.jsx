@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Clock, ChevronLeft, ChevronRight, Target } from 'lucide-react'; // Added Chevrons
+import { Plane, Clock, ChevronLeft, ChevronRight, Target, Sun, Moon } from 'lucide-react'; // Added Chevrons
 import MapComponent from './MapComponent';
 
-import { TRACK_COLORS } from './theme';
+import { TRACK_COLORS, THEME } from './theme';
 import { Header, Label, Value } from './components/Typography';
+
 
 const TIME_OPTIONS = [
   { label: '5m', seconds: 300 },
@@ -35,6 +36,15 @@ function App() {
   const [timeIndex, setTimeIndex] = useState(3);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mapCenter, setMapCenter] = useState([43.758662, 4.416307]);
+  const [isDarkMode, setIsDarkMode] = useState(
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+  
+  const currentMode = isDarkMode ? 'dark' : 'light';
+
+  const toggleTheme = () => {
+    setIsDarkMode(prev => !prev);
+  };
 
   const selectedTime = TIME_OPTIONS[timeIndex];
 
@@ -62,6 +72,16 @@ function App() {
       setSidebarWidth(newWidth);
     }
   }, [isResizing, isCollapsed]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    // Listener for real-time changes
+    const handleChange = (e) => setIsDarkMode(e.matches);
+    
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     globalThis.addEventListener("pointermove", resize);
@@ -105,11 +125,15 @@ function App() {
   }, [selectedTime, showAll]);
 
   return (
-    <div className="flex h-screen w-screen bg-slate-950 overflow-hidden select-none">
+    <div className={`${isDarkMode ? 'dark' : ''} flex h-screen w-screen bg-white dark:bg-slate-950 overflow-hidden select-none`}>
       <aside 
-        style={{ width: isCollapsed ? '64px' : `${sidebarWidth}px` }} 
-        className="h-full bg-slate-900 border-r border-slate-800 flex flex-col z-[1001] shrink-0 transition-all duration-300 ease-in-out"
-      >
+          style={{ 
+            width: isCollapsed ? '64px' : `${sidebarWidth}px`,
+            backgroundColor: isDarkMode ? THEME.modes.dark.sidebar : THEME.modes.light.sidebar,
+            borderColor: isDarkMode ? THEME.modes.dark.border : THEME.modes.light.border
+          }} 
+          className="h-full border-r flex flex-col z-[1001] shrink-0 transition-all duration-300"
+        >
         <div className="p-4 border-b border-slate-800 flex items-center justify-between overflow-hidden">
           {!isCollapsed && <h1 className="text-xl font-bold text-blue-400">AERO-HYDRA</h1>}
           <button onClick={() => setIsCollapsed(!isCollapsed)} className="p-1 hover:bg-slate-800 rounded text-slate-400">
@@ -120,7 +144,7 @@ function App() {
         {/* Time Slider & and toggle */}
         {!isCollapsed && (
           <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-            <Value>View Mode</Value>
+            <Value mode={currentMode}>View Mode</Value>
             <button 
               onClick={() => setShowAll(!showAll)}
               className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
@@ -137,9 +161,9 @@ function App() {
               <div className="space-y-2 bg-slate-800/40 p-3 rounded-lg border border-slate-700/50">
                 <div className="flex justify-between items-center text-[10px] uppercase tracking-wider font-bold text-slate-500">
                   <div className="flex items-center gap-1">
-                    <Clock size={12} /> <Value>History Range</Value>
+                    <Clock size={12} /> <Value mode={currentMode}>History Range</Value>
                   </div>
-                  <Value>{selectedTime.label}</Value>
+                  <Value mode={currentMode}>{selectedTime.label}</Value>
                 </div>
                 <input
                   type="range"
@@ -174,15 +198,13 @@ function App() {
                         <div className="flex-1 min-w-0">
                             {/* ... reg and airfield ... */}
                             <div className="flex justify-between items-baseline w-full">
-                                <Header>{ac.registration || "N/A"}</Header>
+                                <Header mode={currentMode}>{ac.registration || "N/A"}</Header>
                                 <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
-                                    <Value>
-                                        {ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}
-                                    </Value>
+                                    <Value mode={currentMode}>{ac.airfield_name || (ac.at_airfield ? "On Ground" : "In Transit")}</Value>
                                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
                                 </div>
                             </div>
-                            <Value>{ac.model || "Unknown Model"}</Value>
+                            <Value mode={currentMode}>{ac.model || "Unknown Model"}</Value>
                         </div>
                     )}
                 </div>
@@ -196,29 +218,43 @@ function App() {
           <div className="px-3 py-2 border-b border-slate-800">
             <div className="flex items-center gap-2 mb-2 px-1">
               <Target size={14} className="text-red-400" />
-              <Header>Active ROI</Header>
+              <Header mode={currentMode}>Active ROI</Header>
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {rois.map((roi) => (
                 <div 
                   key={roi.id}
                   onClick={() => {
-                    // console.log("Flying to ROI:", roi.lat, roi.lon);
                     setMapCenter([Number(roi.lon), Number(roi.lat)]);
                   }}
                   className="p-2 rounded bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 cursor-pointer transition-all"
                 >
                   <div className="flex justify-between items-center">
-                    <Value>{roi.name}</Value>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 uppercase">
-                      {roi.type}
-                    </span>
+                    <Value mode={currentMode}>{roi.name}</Value>
+                    <Label mode={currentMode}>{roi.type}</Label>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* --- Theme Toggle at Bottom of Sidebar --- */}
+        <div className="p-4 border-t border-slate-800 mt-auto">
+          <button 
+            onClick={toggleTheme}
+            className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg transition-all duration-300 border ${
+              isDarkMode 
+                ? 'bg-slate-800 border-slate-700 text-yellow-400 hover:bg-slate-700' 
+                : 'bg-slate-100 border-slate-300 text-slate-900 hover:bg-white'
+            }`}
+          >
+            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+            {!isCollapsed && (
+              <Label mode={currentMode}>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</Label>
+            )}
+          </button>
+        </div>
       </aside>
 
       {/* Resizer Handle (Hidden when collapsed) */}
@@ -229,13 +265,14 @@ function App() {
         />
       )}
 
-      <main className="flex-1 relative h-full bg-slate-900">
+      <main className="flex-1 relative h-full bg-slate-50 dark:bg-slate-900">
         {/* 4. PASS THE CENTER PROP: This tells MapComponent where to fly */}
         <MapComponent 
             aircraft={aircraft} 
             rois={rois}
             timeRangeSeconds={selectedTime.seconds} 
             center={mapCenter} 
+            mode={currentMode}
         />
       </main>
     </div>
