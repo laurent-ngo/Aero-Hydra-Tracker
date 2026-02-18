@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Polygon } from 'react-leaflet';
-import { THEME } from './theme';
+import { AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
 const getTimeAgo = (timestamp) => {
@@ -50,14 +50,6 @@ function ChangeView({ center }) {
   return null;
 }
 
-// Icon colors matching your status logic
-const COLORS = {
-  ground: { fill: "#94a3b8", stroke: "#475569" },   // Grey
-  airborne: { fill: "#22c55e", stroke: "#15803d" }, // Green
-  full: { fill: "#60a5fa", stroke: "#1d4ed8" },     // Blue
-  empty: { fill: "#f97316", stroke: "#c2410c" },    // Orange
-};
-
 const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, iconId = 1) => {
 
   const ICON_SIZE = 72;
@@ -68,9 +60,9 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
 
   //console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
 
-  let color = COLORS.airborne;
-  if (isOnGround) color = COLORS.ground;
-  else if (payload) color = full ? COLORS.full : COLORS.empty;
+  let color = AIRCRAFT_COLORS.airborne;
+  if (isOnGround) color = AIRCRAFT_COLORS.ground;
+  else if (payload) color = full ? AIRCRAFT_COLORS.full : AIRCRAFT_COLORS.empty;
 
   return L.divIcon({
     html: `
@@ -104,28 +96,10 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
   });
 };
 
-const getAltitudeColor = (alt) => {
-  if (alt === null || alt <10 ) return '#94a3b8'; // Gray for unknown
-  if (alt < 950) return '#f97316';    // Orange: Near Ground/Taxi
-  if (alt < 5000) return '#fbce00';   // Yellow: Low altitude/Climb
-  if (alt < 13000) return '#22c55e';  // Green: Mid altitude
-  if (alt < 200000) return '#3b82f6';  // Blue: High altitude
-  return '#a855f7';                     // Purple: Very high/Cruise
-};
 
 const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, center }) => {
   const [telemetryPaths, setTelemetryPaths] = useState({});
   const position = [43.758662, 4.416307];
-
-  // Styling logic for the ROI level 2
-  const roiStyle = {
-    color: '#FF0000', 
-    weight: 5, 
-    fillOpacity: 0.15,
-    fillColor: '#FF0000',
-    zIndex: 9999 // Force it to the top
-  };
-  
 
   useEffect(() => {
   const fetchPaths = async () => {
@@ -210,7 +184,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
           <Polygon 
             key={`roi-${roi.id}`} 
             positions={finalCoords} 
-            pathOptions={roiStyle}
+            pathOptions={ROI_STYLE}
           >
             <Popup>
               <div className="text-slate-900 font-mono p-1">

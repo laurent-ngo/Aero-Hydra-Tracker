@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plane, Clock, ChevronLeft, ChevronRight, Target } from 'lucide-react'; // Added Chevrons
 import MapComponent from './MapComponent';
 
+import { TRACK_COLORS } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
 const TIME_OPTIONS = [
@@ -15,13 +16,6 @@ const TIME_OPTIONS = [
   { label: '12h', seconds: 43200 },
   { label: '24h', seconds: 86400 },
 ];
-
-const COLORS = {
-  ground:   "#475569", // Grey
-  airborne: "#15803d", // Green
-  full:     "#1d4ed8", // Blue
-  empty:    "#c2410c", // Orange
-};
 
 // At the top of App.jsx
 if (!import.meta.env.VITE_AERO_API_KEY) {
@@ -52,11 +46,11 @@ function App() {
   };
   
   const getAircraftColor = (ac) => {
-    if (ac.at_airfield) return COLORS.ground;
+    if (ac.at_airfield) return TRACK_COLORS.ground;
     if (ac.payload_capacity_kg > 0) {
-      return ac.is_full ? COLORS.full : COLORS.empty;
+      return ac.is_full ? TRACK_COLORS.full : TRACK_COLORS.empty;
     }
-    return COLORS.airborne;
+    return TRACK_COLORS.airborne;
   };
 
   // --- Resizing Logic ---
@@ -209,7 +203,7 @@ function App() {
                 <div 
                   key={roi.id}
                   onClick={() => {
-                    console.log("Flying to ROI:", roi.lat, roi.lon);
+                    // console.log("Flying to ROI:", roi.lat, roi.lon);
                     setMapCenter([Number(roi.lon), Number(roi.lat)]);
                   }}
                   className="p-2 rounded bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 cursor-pointer transition-all"
