@@ -204,7 +204,11 @@ function App() {
 
         {/* Aircraft List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden">
-          {aircraft.map((ac) => {
+          {aircraft
+            .slice()
+            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+            .reverse()
+            .map((ac) => {
             const statusColor = getAircraftColor(ac);
             return (
               <div 
