@@ -87,6 +87,8 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
             "airfield_name": af.name if af else "Unknown", # The full name
             "last_lat": ft.lat if ft else None,
             "last_lon": ft.lon if ft else None,
+            "last_speed_kt": ft.speed_kt if ft else None,
+            "last_speed_kph": ft.speed_kph if ft else None,
             "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
             "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
         } for a, af, ft in results

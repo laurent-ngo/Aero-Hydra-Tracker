@@ -6,6 +6,37 @@ import { Polygon } from 'react-leaflet';
 import { THEME, AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
+
+const projectPosition = (lat, lon, track, speedKph, timestamp, alt) => {
+
+
+  // Check for missing data
+  if (!lat || !lon) return null;
+  if (track === undefined || track === null) return null;
+  if (!speedKph || speedKph < 5) return null; // Ignore stationary/slow aircraft
+  if (!timestamp) return null;
+  if (!alt) return null;
+  
+  if (alt < 1000) return [lat, lon];
+
+  const now = Math.floor(Date.now() / 1000);
+  const diffSeconds = now - timestamp;
+  
+  // If your timestamp is in milliseconds, diffSeconds will be a huge negative number
+  // or a massive positive number. Let's fix that:
+  const actualDiff = Math.abs(diffSeconds) > 1000000 ? (Date.now() - timestamp) / 1000 : diffSeconds;
+
+  if (actualDiff <= 0 || actualDiff > 1200) return null;
+
+  // Simple projection math
+  const distanceKm = (speedKph * actualDiff) / 3600;
+  const latChange = (distanceKm * Math.cos(track * Math.PI / 180)) / 111.32;
+  const lonChange = (distanceKm * Math.sin(track * Math.PI / 180)) / 
+                    (111.32 * Math.cos(lat * Math.PI / 180));
+
+  return [lat + latChange, lon + lonChange];
+};
+
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return "Unknown";
   
@@ -208,6 +239,17 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
         .map((ac) => {
           const isOnGround = ac.at_airfield === true;
           const pathCoords = telemetryPaths[ac.icao24] || [];
+          
+          const projectedPos = projectPosition(
+            ac.last_lat, 
+            ac.last_lon, 
+            ac.true_track, 
+            ac.last_speed_kph, 
+            ac.last_timestamp,
+            ac.last_agl_alt_ft,
+          );
+
+          //console.log(`Projecting ${ac.registration}:`, ac.last_lat, ac.last_lon, ac.true_track, ac.last_speed_kph, ac.last_timestamp, projectedPos);
 
           return (
             <React.Fragment key={ac.icao24}>
@@ -246,9 +288,23 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                   />
                 );
               })}
+              
+              {/* The New Projected Track (Dashed line) */}
+              {projectedPos && (
+                <Polyline
+                  positions={[[ac.last_lat, ac.last_lon], projectedPos]}
+                  pathOptions={{
+                    color: '#3b82f6', // Bright blue to see it clearly first
+                    weight: 3,
+                    dashArray: '5, 10',
+                    opacity: 0.8,
+                  }}
+                />
+              )}
+
               {/* 2. Draw the Aircraft Marker */}
               <Marker 
-                position={[ac.last_lat, ac.last_lon]} 
+                position={projectedPos ? projectedPos : [ac.last_lat, ac.last_lon]}
                 icon={createAircraftIcon(
                   ac.true_track || 0, 
                   ac.at_airfield, 
