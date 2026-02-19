@@ -3,7 +3,7 @@ import { Plane, Clock, ChevronLeft, ChevronRight, Target, Sun, Moon } from 'luci
 import MapComponent from './MapComponent';
 
 import { TRACK_COLORS, THEME } from './theme';
-import { Header, Label, Value } from './components/Typography';
+import { Header, Label, Value, getModeColors } from './components/Typography';
 
 
 const TIME_OPTIONS = [
@@ -137,43 +137,67 @@ function App() {
         >
         <div className="p-4 border-b border-slate-800 flex items-center justify-between overflow-hidden">
           {!isCollapsed && <h1 className="text-xl font-bold text-blue-400">AERO-HYDRA</h1>}
-          <button onClick={() => setIsCollapsed(!isCollapsed)} className="p-1 hover:bg-slate-800 rounded text-slate-400">
-            {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)} 
+            className="p-1 rounded transition-colors duration-200 border border-transparent hover:border-slate-300 dark:hover:border-slate-700"
+            style={{
+              backgroundColor: getModeColors(currentMode).background
+            }}
+          >
+            <Label mode={currentMode}>{isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}</Label>
           </button>
         </div>
 
         {/* Time Slider & and toggle */}
         {!isCollapsed && (
           <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-            <Value mode={currentMode}>View Mode</Value>
+            <Label mode={currentMode}>View Mode</Label>
             <button 
               onClick={() => setShowAll(!showAll)}
-              className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
-                showAll ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'
+              className={`px-3 py-1 rounded-full transition-all border ${
+                showAll 
+                  ? 'bg-blue-600 border-blue-600 shadow-sm' 
+                  : 'border-slate-300 dark:border-slate-700'
               }`}
+              style={{
+                backgroundColor: getModeColors(currentMode).background
+              }}
             >
-              {showAll ? 'ALL' : 'ACTIVE ONLY'}
+              <Label mode={currentMode}>
+                {showAll ? 'ALL' : 'ACTIVE ONLY'}
+              </Label>
             </button>
           </div>
         )}
 
         {!isCollapsed && (
-           <div className="p-4 border-b border-slate-800 space-y-4">
-              <div className="space-y-2 bg-slate-800/40 p-3 rounded-lg border border-slate-700/50">
-                <div className="flex justify-between items-center text-[10px] uppercase tracking-wider font-bold text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <Clock size={12} /> <Value mode={currentMode}>History Range</Value>
-                  </div>
-                  <Value mode={currentMode}>{selectedTime.label}</Value>
+           <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-4">
+              <div 
+                className="space-y-2 p-3 rounded-lg border transition-colors duration-200"
+                style={{
+                  // Dynamically switches background based on theme
+                  backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.4)' : 'rgba(241, 245, 249, 0.8)',
+                  borderColor: isDarkMode ? 'rgba(51, 65, 85, 0.5)' : 'rgba(203, 213, 225, 1)'
+                }}
+              >
+                <div className="flex justify-between items-center text-[10px] uppercase tracking-wider font-bold">
+                <div className="flex items-center gap-1">
+                  <Clock size={12} className={isDarkMode ? 'text-slate-500' : 'text-slate-400'} /> 
+                  <Label mode={currentMode}>History Range</Label>
                 </div>
+                <Value mode={currentMode}>{selectedTime.label}</Value>
+              </div>
                 <input
                   type="range"
                   min="0"
                   max={TIME_OPTIONS.length - 1}
                   value={timeIndex}
                   onChange={(e) => setTimeIndex(Number.parseInt(e.target.value))}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                />
+                  className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 transition-colors ${
+                      isDarkMode ? 'bg-slate-700' : 'bg-slate-300'
+                    }`}
+                  />
               </div>
            </div>
         )}
@@ -241,19 +265,46 @@ function App() {
         )}
 
         {/* --- Theme Toggle at Bottom of Sidebar --- */}
-        <div className="p-4 border-t border-slate-800 mt-auto">
-          <button 
+        <div className="p-6 border-t border-slate-200 dark:border-slate-800 mt-auto flex shrink-0 justify-center items-center">
+          {/* The Outer Track */}
+          <button
             onClick={toggleTheme}
-            className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg transition-all duration-300 border ${
-              isDarkMode 
-                ? 'bg-slate-800 border-slate-700 text-yellow-400 hover:bg-slate-700' 
-                : 'bg-slate-100 border-slate-300 text-slate-900 hover:bg-white'
-            }`}
+            aria-label="Toggle Theme"
+            className={`
+              relative flex items-center shrink-0
+              h-14 w-28 rounded-full p-1 
+              transition-all duration-500 ease-in-out
+              focus:outline-none 
+              border-4
+              ${isDarkMode 
+                ? 'bg-slate-900 border-blue-500 shadow-lg' 
+                : 'bg-white border-slate-400 shadow-inner'
+              }
+            `}
           >
-            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-            {!isCollapsed && (
-              <Label mode={currentMode}>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</Label>
-            )}
+            {/* The Sliding Thumb */}
+            <div
+              className={`
+                flex items-center justify-center
+                rounded-full shadow-lg transform transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)
+                ${isDarkMode 
+                  ? 'h-10 w-10 translate-x-12 bg-blue-500 text-white' 
+                  : 'h-10 w-10 translate-x-0 bg-slate-100 text-orange-500'
+                }
+              `}
+            >
+              {isDarkMode ? (
+                <Moon size={24} fill="currentColor" />
+              ) : (
+                <Sun size={24} fill="currentColor" />
+              )}
+            </div>
+
+            {/* Background Icons (Stationary) */}
+            <div className="absolute inset-0 flex items-center justify-between px-3 pointer-events-none opacity-20">
+              <Sun size={18} className={isDarkMode ? 'text-white' : 'hidden'} />
+              <Moon size={18} className={!isDarkMode ? 'text-slate-600' : 'hidden'} />
+            </div>
           </button>
         </div>
       </aside>

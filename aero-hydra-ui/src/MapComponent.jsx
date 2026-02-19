@@ -240,7 +240,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                     pathOptions={{
                       color: getAltitudeColor(point.alt, mode),
                       weight: 4,
-                      opacity: mode === 'light' ? 0.8 : 1,
+                      opacity: 1,
                       lineCap: 'round'
                     }}
                   />

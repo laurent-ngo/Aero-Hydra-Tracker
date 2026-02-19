@@ -3,7 +3,7 @@ import React from 'react';
 import { THEME } from '../theme';
 
 // Helper to get colors based on mode
-const getModeColors = (mode) => THEME.modes[mode] || THEME.modes.light;
+export const getModeColors = (mode) => THEME.modes[mode] || THEME.modes.light;
 
 export const Header = ({ children, mode = 'dark' }) => {
   const colors = getModeColors(mode);
@@ -32,7 +32,7 @@ export const Label = ({ children, mode = 'dark' }) => {
       fontWeight: '800',
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
-      display: 'block'
+      display: 'inline-block'
     }}>
       {children}
     </span>

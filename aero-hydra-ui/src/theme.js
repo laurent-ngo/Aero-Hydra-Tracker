@@ -77,12 +77,12 @@ const ALTITUDE_PALETTE = {
   },
   dark: {
     unknown: '#64748b', // Deeper gray
-    ground:  '#dc2626', // Stronger red
-    taxi:    '#ea580c', // Deep orange
-    low:     '#ca8a04', // Darker yellow/gold (better contrast on white)
-    mid:     '#16a34a', // Forest green
-    high:    '#2563eb', // Royal blue
-    cruise:  '#9333ea'  // Deep purple
+    ground:  '#b60d0d', // Stronger red
+    taxi:    '#a04819', // Deep orange
+    low:     '#a06f06', // Darker yellow/gold (better contrast on white)
+    mid:     '#107736', // Forest green
+    high:    '#1d4db4', // Royal blue
+    cruise:  '#6c26ad'  // Deep purple
   }
 };
 
