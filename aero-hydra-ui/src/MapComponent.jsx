@@ -24,9 +24,9 @@ const projectPosition = (lat, lon, track, speedKph, timestamp, alt) => {
   
   // If your timestamp is in milliseconds, diffSeconds will be a huge negative number
   // or a massive positive number. Let's fix that:
-  const actualDiff = Math.abs(diffSeconds) > 1000000 ? (Date.now() - timestamp) / 1000 : diffSeconds;
+  const actualDiff = Math.min(1200, Math.abs(diffSeconds) > 1000000 ? (Date.now() - timestamp) / 1000 : diffSeconds);
 
-  if (actualDiff <= 0 || actualDiff > 1200) return null;
+  if (actualDiff <= 0) return null;
 
   // Simple projection math
   const distanceKm = (speedKph * actualDiff) / 3600;
