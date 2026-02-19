@@ -270,7 +270,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (5 days ago from now)
-    cutoff_timestamp = int((datetime.now() - timedelta(days=5)).timestamp())
+    cutoff_timestamp = int((datetime.now() - timedelta(days=30)).timestamp())
 
     # 1. Fetch points
     if type == 'fire':
@@ -294,6 +294,8 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                     migrate.TrackedAircraft.sea_landing == True
                 ).all()
             )
+    else:
+        logger.error(f"incorrect value in argument \'type\':{type}")
 
 
     if len(points) < min_samples:
@@ -479,10 +481,10 @@ if __name__ == "__main__":
     if args.AGL:
         backfill_agl()
     else:
+        sync_aircraft_metadata()
         backfill_telemetry(icao_list)
         backfill_agl()
         label_flight_phases()
-        sync_aircraft_metadata()
 
         if not args.active: 
 

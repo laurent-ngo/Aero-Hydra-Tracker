@@ -12,11 +12,14 @@ def get_all_tracked_icao24(session, active = False):
     """
     try:
         if active:
-            cutoff_timestamp = int(datetime.now().timestamp()) - 150
+            cutoff_timestamp = int(datetime.now().timestamp()) - 330
             results = (
                 session.query(TrackedAircraft.icao24)
                 .join(FlightTelemetry, TrackedAircraft.icao24 == FlightTelemetry.icao24)
-                .filter(FlightTelemetry.timestamp >= cutoff_timestamp)
+                .filter(
+                    FlightTelemetry.timestamp >= cutoff_timestamp,
+                    FlightTelemetry.baro_altitude_ft <= 10000 # There is little in tracking aircraft cruising at high altitude
+                        )
                 .distinct() # Ensure we don't get the same ICAO multiple times
                 .all()
         )

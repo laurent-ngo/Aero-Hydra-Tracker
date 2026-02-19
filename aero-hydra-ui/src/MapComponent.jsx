@@ -2,6 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'; 
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { Polygon } from 'react-leaflet';
+import { THEME, AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
+import { Header, Label, Value } from './components/Typography';
+
+const getTimeAgo = (timestamp) => {
+  if (!timestamp) return "Unknown";
+  
+  const lastSeen = new Date(timestamp * 1000); 
+  const now = new Date();
+  const secondsAgo = Math.floor((now - lastSeen) / 1000);
+
+  if (secondsAgo < 60) return `${secondsAgo}s ago`;
+  
+  const minutes = Math.floor(secondsAgo / 60);
+  if (minutes < 60) {
+    const remainingSeconds = secondsAgo % 60;
+    return `${minutes}m ${remainingSeconds}s ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours < 24) {
+    return `${hours}h ${remainingMinutes}m ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+
+  if (days < 7) {
+    return `${days}d ${remainingHours}h ago`
+  }
+  return "+7days ago";
+};
 
 function ChangeView({ center }) {
   const map = useMap();
@@ -16,52 +50,58 @@ function ChangeView({ center }) {
   return null;
 }
 
-// Icon colors matching your status logic
-const COLORS = {
-  ground: { fill: "#94a3b8", stroke: "#475569" },   // Grey
-  airborne: { fill: "#22c55e", stroke: "#15803d" }, // Green
-  full: { fill: "#60a5fa", stroke: "#1d4ed8" },     // Blue
-  empty: { fill: "#f97316", stroke: "#c2410c" },    // Orange
-};
+const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, iconId = 1) => {
 
-const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, aircraftType = "") => {
-  let color = COLORS.airborne;
-  if (isOnGround) color = COLORS.ground;
-  else if (payload) color = full ? COLORS.full : COLORS.empty;
+  const ICON_SIZE = 72;
+  const iconsPerRow = 8;
 
-  const planePath = "M21 16V14.5L13 9.5V3.5C13 2.67 12.33 2 11.5 2C10.67 2 10 2.67 10 3.5V9.5L2 14.5V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z";
-  
-  const heliPath = "M12 2L11 4.5H5V6.5H11V10.1C9.3 10.4 8 11.9 8 13.5C8 15.5 9.8 17 12 17C14.2 17 16 15.5 16 13.5C16 11.9 14.7 10.4 13 10.1V6.5H19V4.5H13L12 2ZM2 11V13H22V11H2ZM11 18V22H13V18H11Z";
-  
-  const type = aircraftType?.toLowerCase().trim();
-  const selectedPath = (type === 'helicopter') ? heliPath : planePath;
+  const offsetX = -(iconId%iconsPerRow) * ICON_SIZE;
+  const offsetY = -Math.floor(iconId / iconsPerRow)* ICON_SIZE;
+
+  //console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
+
+  let color = AIRCRAFT_COLORS.airborne;
+  if (isOnGround) color = AIRCRAFT_COLORS.ground;
+  else if (payload) color = full ? AIRCRAFT_COLORS.full : AIRCRAFT_COLORS.empty;
 
   return L.divIcon({
     html: `
-      <div style="transform: rotate(${heading}deg); transition: all 0.3s ease;">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-          <path d="${selectedPath}" 
-                fill="${color.fill}" stroke="${color.stroke}" stroke-width="1.5" />
-        </svg>
-      </div>`,
+    <div style="
+      width: ${ICON_SIZE}px; 
+      height: ${ICON_SIZE}px; 
+      transform: rotate(${heading}deg);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      filter: drop-shadow(1px 0px 0px black) 
+              drop-shadow(-1px 0px 0px black) 
+              drop-shadow(0px 1px 0px black) 
+              drop-shadow(0px -1px 0px black);
+    ">
+      <div style="
+        width: ${ICON_SIZE}px; 
+        height: ${ICON_SIZE}px; 
+        background-color: ${color.fill}; 
+        -webkit-mask-image: url('../img/sprites.png');
+        mask-image: url('../img/sprites.png');
+        -webkit-mask-position: ${offsetX}px ${offsetY}px;
+        mask-position: ${offsetX}px ${offsetY}px;
+        -webkit-mask-repeat: no-repeat;
+        transform: scale(0.5); 
+      "></div>
+    </div>`,
     className: "bg-transparent",
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [20, 20],
+    iconAnchor: [36, 36],
   });
 };
 
-const getAltitudeColor = (alt) => {
-  if (alt === null || alt <10 ) return '#94a3b8'; // Gray for unknown
-  if (alt < 950) return '#f97316';    // Orange: Near Ground/Taxi
-  if (alt < 5000) return '#fbce00';   // Yellow: Low altitude/Climb
-  if (alt < 13000) return '#22c55e';  // Green: Mid altitude
-  if (alt < 200000) return '#3b82f6';  // Blue: High altitude
-  return '#a855f7';                     // Purple: Very high/Cruise
-};
 
-const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
+const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, center, mode = 'dark' }) => {
   const [telemetryPaths, setTelemetryPaths] = useState({});
   const position = [43.758662, 4.416307];
+
+  const mapConfig = THEME.modes[mode].map;
 
   useEffect(() => {
   const fetchPaths = async () => {
@@ -109,9 +149,9 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
       zoomControl={false}
     >
       <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-
+        key={mode} 
+        url={mapConfig.url}
+        attribution={mapConfig.attribution}
         eventHandlers={{
           tileloadstart: (e) => {
             e.tile.setAttribute('referrerpolicy', 'no-referrer');
@@ -120,6 +160,49 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
       />
       
       {center && <ChangeView center={center} />}
+
+      {rois.map((roi) => {
+        let finalCoords = [];
+
+        // 1. Parse the string into a real Array
+        try {
+          if (typeof roi.geometry === 'string') {
+            finalCoords = JSON.parse(roi.geometry);
+          } else {
+            finalCoords = roi.geometry;
+          }
+        } catch (e) {
+          console.error(`Parsing error for ROI ${roi.id}:`, e);
+          return null;
+        }
+
+        // 2. Safety check now works because finalCoords is a real Array
+        if (!finalCoords || !Array.isArray(finalCoords) || finalCoords.length === 0) {
+          return null;
+        }
+
+        // 3. Render the Polygon
+        return (
+          <Polygon 
+            key={`roi-${roi.id}`} 
+            positions={finalCoords} 
+            pathOptions={ROI_STYLE}
+          >
+            <Popup>
+              <div className="font-mono min-w-[140px]">
+                <Header mode={mode}>{roi.name}</Header>
+                <div className="mt-2">
+                  <Label mode={mode}>Level</Label>
+                  <Value mode={mode}>{roi.level}</Value>
+                  <Label mode={mode}>Type</Label>
+                  <Value mode={mode}>{roi.type}</Value>
+                </div>
+              </div>
+            </Popup>
+          </Polygon>
+        );
+      })}
+
       {aircraft
         .filter(ac => ac.last_lat !== null && ac.last_lon !== null)
         .map((ac) => {
@@ -146,8 +229,6 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                   [point.lat, point.lon]
                 ];
 
-                if (index === 1) console.log(`Drawing path for ${ac.icao24}:`, point);
-
                 return (
                   <Polyline
                     key={`${ac.icao24}-seg-${index}`}
@@ -157,7 +238,7 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                       [point.lat, point.lon]
                     ]}
                     pathOptions={{
-                      color: getAltitudeColor(point.alt),
+                      color: getAltitudeColor(point.alt, mode),
                       weight: 4,
                       opacity: 1,
                       lineCap: 'round'
@@ -173,34 +254,35 @@ const MapComponent = ({ aircraft = [], timeRangeSeconds = 3600, center }) => {
                   ac.at_airfield, 
                   ac.payload_capacity_kg > 0,
                   ac.is_full,
-                  ac.type
+                  ac.icon
                 )}
               >
                 <Popup>
-                  <div className="text-slate-900 font-mono p-1 min-w-[160px]">
+                  <div className="font-mono min-w-[140px]">
                     {/* Header: Reg and Model */}
                     <div className="mb-2 border-b border-slate-100 pb-1">
-                      <p className="font-bold text-lg text-blue-700 leading-none mb-1">
-                        {ac.registration || "N/A"}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-sans uppercase font-bold tracking-tight">
-                        {ac.model || "Unknown Model"}
-                      </p>
+                      <Header mode={mode}>{ac.registration || "N/A"}</Header>
+                    </div>
+                    <div className="mb-2 border-b border-slate-100 pb-1">
+                      <Label mode={mode}>{ac.model || "Unknown Model"}</Label>
                     </div>
 
                     {/* Instruments: Altitude and Speed */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="flex flex-col">
-                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">Baro Altitude</span>
-                        <span className="text-sm font-bold">
-                          {ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}
-                        </span>
-                      <div className="flex flex-col"></div>
-                        <span className="text-[9px] uppercase text-slate-400 font-sans font-bold">AGL Altitude</span>
-                        <span className="text-sm font-bold">
-                          {ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}
-                        </span>
+                        <Label mode={mode}>Baro Altitude</Label>
+                          <Value mode={mode}>{ac.last_baro_alt_ft ? `${Math.round(ac.last_baro_alt_ft)} ft` : '---'}</Value>
                       </div>
+                      <div className="flex flex-col">
+                        <Label mode={mode}>AGL Altitude</Label>
+                          <Value mode={mode}>{ac.last_agl_alt_ft ? `${Math.round(ac.last_agl_alt_ft)} ft` : '---'}</Value>
+                      </div>
+                    </div>
+
+                    {/* Footer: Last Seen Status */}
+                    <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
+                      <Label mode={mode}>Last seen</Label>
+                      <Value mode={mode}> {getTimeAgo(ac.last_timestamp)}</Value>
                     </div>
                   </div>
                 </Popup>
