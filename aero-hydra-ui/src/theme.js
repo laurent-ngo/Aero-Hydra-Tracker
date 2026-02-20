@@ -3,12 +3,12 @@ export const THEME = {
   // Split colors into modes
   modes: {
     light: {
-      textPrimary: "#1e293b",   // slate-800
-      textSecondary: "#64748b", // slate-500
-      accent: "#1d4ed8",        // blue-700
-      border: "#e2e8f0",        // slate-200
+      textPrimary: "#1e293b",   
+      textSecondary: "#64748b", 
+      accent: "#1d4ed8",        
+      border: "#e2e8f0",        
       background: "#ffffff",
-      sidebar: "#f8fafc",       // slate-50
+      sidebar: "#f8fafc",       
       success: "#16a34a",
       danger: "#ef4444",
       map: {
@@ -17,12 +17,12 @@ export const THEME = {
       }
     },
     dark: {
-      textPrimary: "#f1f5f9",   // slate-100
-      textSecondary: "#94a3b8", // slate-400
-      accent: "#60a5fa",        // blue-400
-      border: "#1e293b",        // slate-800
-      background: "#020617",    // slate-950
-      sidebar: "#0f172a",       // slate-900
+      textPrimary: "#f1f5f9",   
+      textSecondary: "#94a3b8", 
+      accent: "#60a5fa",        
+      border: "#1e293b",        
+      background: "#020617",    
+      sidebar: "#0f172a",       
       success: "#22c55e",
       danger: "#f87171",
       map: {
@@ -57,11 +57,20 @@ export const AIRCRAFT_COLORS = {
 };
 
 export const ROI_STYLE = {
-  color: '#ff9100', 
-  weight: 5, 
-  fillOpacity: 0.25,
-  fillColor: '#aa7400',
-  zIndex: 9999 // Force it to the top
+  fire: {
+    color: '#ff9100', 
+    weight: 5, 
+    fillOpacity: 0.25,
+    fillColor: '#aa7400',
+    zIndex: 9999 // Force it to the top
+  },
+  training:{
+    color: '#16a10a', 
+    weight: 5, 
+    fillOpacity: 0.25,
+    fillColor: '#00aa1c',
+    zIndex: 9999 // Force it to the top
+  }
 };
 
 

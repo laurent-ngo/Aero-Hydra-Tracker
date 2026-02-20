@@ -220,7 +220,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
           <Polygon 
             key={`roi-${roi.id}`} 
             positions={finalCoords} 
-            pathOptions={ROI_STYLE}
+            pathOptions={ROI_STYLE[roi.type] || ROI_STYLE.fire}
           >
             <Popup>
               <div className="font-mono min-w-[140px]">
@@ -284,8 +284,8 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                     ]}
                     pathOptions={{
                       color: getAltitudeColor(point.alt, mode),
-                      weight: 4,
-                      opacity: 1,
+                      weight: 8,
+                      opacity: 5,
                       lineCap: 'round'
                     }}
                   />
@@ -297,8 +297,8 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                 <Polyline
                   positions={[[ac.last_lat, ac.last_lon], projectedPos]}
                   pathOptions={{
-                    color: '#3b82f6', // Bright blue to see it clearly first
-                    weight: 3,
+                    color: getAltitudeColor(ac.last_agl_alt_ft, mode),
+                    weight: 8,
                     dashArray: '5, 10',
                     opacity: 0.8,
                   }}
