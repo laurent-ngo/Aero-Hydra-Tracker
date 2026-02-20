@@ -87,7 +87,7 @@ class RegionOfInterest(Base):
 
     
     __table_args__ = (
-        CheckConstraint(type.in_(['fire', 'water']), name='type_check'),
+        CheckConstraint(type.in_(['fire', 'water', 'training']), name='type_check'),
     )
 
 class GroundElevation(Base):
