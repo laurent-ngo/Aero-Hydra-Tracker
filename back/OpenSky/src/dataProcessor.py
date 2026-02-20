@@ -355,6 +355,11 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
     db.commit()
 
 def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
+
+    TRAINING_POINTS = [
+        Point(43.372922982515504, 5.511696705468189), # Marseille
+    ]
+
     # 1. Fetch only ROIs at the specific starting level
     rois = db.query(migrate.RegionOfInterest).filter(
         migrate.RegionOfInterest.level == starting_level,
@@ -393,9 +398,14 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
     db.query(migrate.RegionOfInterest).filter(
         migrate.RegionOfInterest.level == new_level
     ).delete()
+
     for i, shape in enumerate(final_shapes):
         merged_coords = list(shape.exterior.coords)
         
+        # Check if any training point is inside this specific polygon
+        is_training_zone = any(shape.contains(p) for p in TRAINING_POINTS)
+        final_type = 'training' if is_training_zone else type
+
         new_roi = migrate.RegionOfInterest(
             lat=shape.centroid.y,
             lon=shape.centroid.x,
@@ -404,7 +414,7 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
             level=new_level,
             name=f"Level {new_level} Zone - Area {i+1}",
             detected_at=datetime.now(),
-            type=type
+            type=final_type
         )
         db.add(new_roi)
 
