@@ -13,11 +13,33 @@ class FirefleetCollector:
 
         self.app_json = "application/json"
 
+        self.default_bbox = dict()
+
+        # 250 km2
+        self.default_bbox['lamin'] = 42.48965
+        self.default_bbox['lomin'] = -1.58203
+        self.default_bbox['lamax'] = 45.56406
+        self.default_bbox['lomax'] = 7.47070
+
+         # 1000 km2
+        #self.default_bbox['lamin'] = 41.27781
+        #self.default_bbox['lomin'] = -4.85596
+        #self.default_bbox['lamax'] = 49.21042
+        #self.default_bbox['lomax'] = 9.59106
+
         self.token = token
 
     def get_positions(self, icao_list):
         # Construct the query parameters
         params = [('callsign', icao) for icao in icao_list]
+
+        params.extend([
+            ('lamin', self.default_bbox['lamin']),
+            ('lomin', self.default_bbox['lomin']),
+            ('lamax', self.default_bbox['lamax']),
+            ('lomax', self.default_bbox['lomax'])
+        ])
+
         
         # New Header Format for OAuth2 / JWT
         headers = {
@@ -50,6 +72,13 @@ class FirefleetCollector:
         # Construct the query parameters correctly
         params = [('icao24', icao) for icao in clean_icao]
         
+        params.extend([
+            ('lamin', self.default_bbox['lamin']),
+            ('lomin', self.default_bbox['lomin']),
+            ('lamax', self.default_bbox['lamax']),
+            ('lomax', self.default_bbox['lomax'])
+        ])
+
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": self.app_json
@@ -57,7 +86,12 @@ class FirefleetCollector:
         
         try:
             logger.info( "Calling OpenSky API/states")
-            response = requests.get(self.url, headers=headers, params=params, timeout=15)
+            response = requests.get(
+                self.url, 
+                headers=headers, 
+                params=params, 
+                timeout=15
+            )
             response.raise_for_status()
             data = response.json()
                 
@@ -90,7 +124,11 @@ class FirefleetCollector:
             try:
                 # We fetch all (or use a bounding box for FinOps efficiency)
                 logger.info( "Calling OpenSky API/states")
-                response = requests.get(self.url, headers=headers, timeout=15)
+                response = requests.get(
+                    self.url, 
+                    headers=headers, 
+                    timeout=15
+                )
                 response.raise_for_status()
                 data = response.json()
                 
@@ -125,7 +163,7 @@ class FirefleetCollector:
             'icao24': icao24.lower(),
             'time': target_time
         }
-        
+
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": self.app_json
@@ -133,7 +171,12 @@ class FirefleetCollector:
 
         try:
             logger.info( "Calling OpenSky API/track")
-            response = requests.get(self.track_url, headers=headers, params=params, timeout=20)
+            response = requests.get(
+                self.track_url, 
+                headers=headers, 
+                params=params, 
+                timeout=15
+                )
             response.raise_for_status()
 
             return response.json() # Returns a full track object with path points
@@ -165,22 +208,5 @@ if __name__ == "__main__":
     # For test
     #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
     fleet_status = collector.get_by_icao24(MY_ICAO24S)
-    
-    for plane in fleet_status:
-        logger.debug(f"Unit {plane}")
-    
-
-    # Example: Check where a plane was over the past 60 seconds
-    target_icao = "3b7b39" # A specific Canadair
-    
-    track = collector.get_aircraft_track(target_icao)
-    
-    if track:
-        logger.info(f"History for {target_icao} found!")
-        # The 'path' contains [time, lat, lon, altitude, heading, on_ground]
-        logger.info ( track.get('startTime'))
-        logger.info ( track.get('endTime'))
-        logger.info ( len( track.get('path')))
-        for point in track.get('path', []): # Print first 5 points
-            logger.info(f"Time: {point[0]} | Pos: {point[1]}, {point[2]}, {point}")
+    print(fleet_status)
     
