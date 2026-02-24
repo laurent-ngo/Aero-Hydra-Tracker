@@ -90,14 +90,6 @@ class RegionOfInterest(Base):
         CheckConstraint(type.in_(['fire', 'water', 'training']), name='type_check'),
     )
 
-class GroundElevation(Base):
-    __tablename__ = "ground_elevations"
-
-    latitude = Column(Numeric(8, 3), primary_key=True)
-    longitude = Column(Numeric(8, 3), primary_key=True)
-    elevation_m = Column(Float, nullable=False)
-
-
 class Airfield(Base):
     __tablename__ = 'airfields'
 

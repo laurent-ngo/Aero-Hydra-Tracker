@@ -4,71 +4,51 @@ import requests
 import os
 import time
 import logging
+import rasterio
+from typing import Optional, Tuple
+
 logger = logging.getLogger(__name__)
 
-from sqlalchemy import create_engine, desc
-from sqlalchemy.orm import sessionmaker
+class ElevationProvider:
+    def __init__(self, file_path="../data/output_hh.tif"):
+        self.file_path = file_path
+        self.dataset = rasterio.open(self.file_path)
 
-user = os.getenv('DB_USER', 'neondb_owner')
-password = os.getenv('DB_PASSWORD')
-db_host = os.getenv('DB_HOST')
-db_name = os.getenv('DB_NAME', 'neondb')
-db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
+        self.bounds = self.dataset.bounds
+        logger.info(f"ElevationProvider initialized with {file_path}")
 
-db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
+    def get_elevation(self, lat: float, lon: float) -> Optional[float]:
+        """Returns elevation in meters for a given lat/lon."""
+        try:
+            # 1. Quick boundary check to avoid errors
+            if not (self.bounds.left <= lon <= self.bounds.right and 
+                    self.bounds.bottom <= lat <= self.bounds.top):
+                return None
 
-# --- Database Setup ---
-engine = create_engine(db_url)
-Session = sessionmaker(bind=engine)
-db = Session()
+            # 2. Get the pixel coordinates (row, col) from lat/lon
+            # rasterio.index takes (longitude, latitude)
+            row, col = self.dataset.index(lon, lat)
 
-def get_ground_elevation(lat, lon):
-    try:
-        # Using the Open-Elevation public API
-        url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        # Returns elevation in meters
-        
-        time.sleep(0.5) 
-        return data['results'][0]['elevation']
-    except Exception as e:
-        logger.error(f"Elevation lookup failed: {e}")
-        return None # Default to sea level if lookup fails
-    
-def get_or_fetch_elevation(lat, lon):
-    """
-    Checks the local DB for ground elevation at a 3-decimal precision grid.
-    If not found, calls the API and saves the result.
-    """
-    grid_lat = round(float(lat), 3)
-    grid_lon = round(float(lon), 3)
+            # 3. Read only the specific pixel (1x1 window) for speed
+            # This is much faster than reading the whole band
+            window = rasterio.windows.Window(col, row, 1, 1)
+            data = self.dataset.read(1, window=window)
+            
+            return float(data[0, 0])
+            
+        except Exception as e:
+            # Silent fail for points slightly outside or edge cases
+            return None
 
-    # 1. Check local cache
-    cached = db.query(migrate.GroundElevation).filter_by(
-        latitude=grid_lat, 
-        longitude=grid_lon
-    ).first()
+    def close(self):
+        """Cleanly close the file handle."""
+        self.dataset.close()
 
-    if cached:
-        logger.debug( 'Elevation found in DB')
-        return cached.elevation_m
+# --- Local Test ---
+if __name__ == "__main__":
 
-    # 2. Cache Miss: Call the limited API
+    elevation = ElevationProvider()
 
-    elevation = get_ground_elevation(grid_lat, grid_lon)
-    
-    if elevation is not None:
-        # 3. Store in DB
-        new_elevation = migrate.GroundElevation(
-            latitude=grid_lat,
-            longitude=grid_lon,
-            elevation_m=elevation
-        )
-        db.add(new_elevation)
-        db.commit()
-        
-        logger.debug( 'Elevation collected from API and saved in DB')
-        return elevation
-        
-    return None
+    print( elevation.get_elevation( 43.7533, 4.4166) ) #298 ft
+    print( elevation.get_elevation( 43.7118, 4.4194) ) #210 ft
+
