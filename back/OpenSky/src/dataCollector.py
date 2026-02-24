@@ -20,7 +20,9 @@ def orchestrate_sync(active_only=False):
     
     try:
         session = SessionLocal()
-        full_icao_list = get_all_tracked_icao24(session, active_only)
+        full_db_icao_list = get_all_tracked_icao24(session, active_only)
+        full_icao_list_dict = collector.get_by_icao24(full_db_icao_list)
+        full_icao_list = [ac['icao24'] for ac in full_icao_list_dict]
 
         if active_only:
             EXCLUDED_ICAO = {"3b7b64", "3b7b65", "3b7b66"}
