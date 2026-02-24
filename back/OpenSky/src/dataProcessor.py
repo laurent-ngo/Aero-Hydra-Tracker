@@ -51,6 +51,9 @@ def haversine(lon1, lat1, lon2, lat2):
 def backfill_telemetry( icao_list = None):
     # 1. Get all unique ICAO24s that have empty speed data
 
+    if icao_list == None:
+        logger.info("No aircraft data")
+        return
     aircraft_ids = db.query(migrate.FlightTelemetry.icao24).filter(
         migrate.FlightTelemetry.icao24.in_(icao_list),
         migrate.FlightTelemetry.speed_kph == None
@@ -91,6 +94,7 @@ def backfill_telemetry( icao_list = None):
         # Commit per aircraft to keep memory usage low
         db.commit()
     logger.info("Backfill complete!")
+    
 def backfill_agl():
     # 1. Fetch only records that have baro_altitude but missing AGL
     points_to_fix = db.query(migrate.FlightTelemetry).filter(
@@ -499,12 +503,14 @@ if __name__ == "__main__":
     if args.AGL:
         backfill_agl()
     else:
-        sync_aircraft_metadata()
-        backfill_telemetry(icao_list)
-        backfill_agl()
-        label_flight_phases()
+        if len(icao_list) > 0:
+            sync_aircraft_metadata()
 
-    if not args.ROI: 
+            backfill_telemetry(icao_list)
+            backfill_agl()
+            label_flight_phases()
+
+    if args.ROI: 
 
         detect_regions_of_interest_clustered(type='fire')
         #detect_regions_of_interest_clustered(type='water')
