@@ -16,9 +16,9 @@ class FirefleetCollector:
         self.default_bbox = dict()
 
         # 250 km2
-        self.default_bbox['lamin'] = 42.48965
+        self.default_bbox['lamin'] = 42.42
         self.default_bbox['lomin'] = -1.58203
-        self.default_bbox['lamax'] = 45.56406
+        self.default_bbox['lamax'] = 45.5
         self.default_bbox['lomax'] = 7.47070
 
          # 1000 km2

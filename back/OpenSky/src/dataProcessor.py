@@ -19,7 +19,7 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
 from shapely.ops import unary_union
-import elevation
+from elevation import ElevationProvider
 
 import migrate
 from dataCollector import orchestrate_sync 
@@ -93,13 +93,12 @@ def backfill_telemetry( icao_list = None):
     logger.info("Backfill complete!")
 def backfill_agl():
     # 1. Fetch only records that have baro_altitude but missing AGL
-    # We process in batches to be gentle on the API and memory
     points_to_fix = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.baro_altitude != None,
         migrate.FlightTelemetry.altitude_agl_ft == None
     ).order_by(
         desc(migrate.FlightTelemetry.timestamp)
-    ).limit(120).all() # Processing 200 at a time is safer
+    ).all() # Processing 200 at a time is safer
 
     if not points_to_fix:
         logger.debug("No pending AGL calculations found.")
@@ -107,9 +106,11 @@ def backfill_agl():
 
     logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
 
+    elevation = ElevationProvider()
+    
     for p in points_to_fix:
         # 2. Get the ground height from your new method
-        ground_m = elevation.get_or_fetch_elevation(p.lat, p.lon)
+        ground_m = elevation.get_elevation(p.lat, p.lon)
         
         if ground_m is not None:
             # 3. Calculation: MSL - Ground = AGL
