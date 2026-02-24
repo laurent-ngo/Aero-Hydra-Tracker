@@ -3,6 +3,7 @@ import time
 import argparse
 import sys
 import logging
+import json
 logger = logging.getLogger(__name__)
 
 from migrate import SessionLocal
@@ -13,6 +14,8 @@ from aircraftDataHandler import (
     bulk_insert_telemetry
 )
 
+CACHE_FILE = "tracked_icao_cache.json"
+
 def orchestrate_sync(active_only=False):
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
     collector = FirefleetCollector(TOKEN)
@@ -20,7 +23,27 @@ def orchestrate_sync(active_only=False):
     
     try:
         session = SessionLocal()
-        full_db_icao_list = get_all_tracked_icao24(session, active_only)
+
+        # Caching tracked aircraft
+        full_db_icao_list = None
+        if os.path.exists(CACHE_FILE):
+            try:
+                with open(CACHE_FILE, 'r') as f:
+                    full_db_icao_list = json.load(f)
+                logger.info("Loaded tracked ICAOs from local cache.")
+            except Exception as e:
+                logger.error(f"Cache read failed: {e}")
+
+        if full_db_icao_list is None:
+            full_db_icao_list = get_all_tracked_icao24(session, active_only)
+            # Save to cache for next time
+            try:
+                with open(CACHE_FILE, 'w') as f:
+                    json.dump(full_db_icao_list, f)
+                logger.info("Saved tracked ICAOs to local cache.")
+            except Exception as e:
+                logger.warning(f"Could not write cache file: {e}")
+                    
         full_icao_list_dict = collector.get_by_icao24(full_db_icao_list)
         full_icao_list = [ac['icao24'] for ac in full_icao_list_dict]
 

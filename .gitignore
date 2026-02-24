@@ -45,3 +45,4 @@ back/OpenSky/logs/*
 back/OpenSky/src/migrate.py
 *.sql
 back/OpenSky/data/output_hh.tif
+back/OpenSky/src/tracked_icao_cache.json

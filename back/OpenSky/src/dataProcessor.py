@@ -209,7 +209,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
         return
     
     
-    airfield_dict, is_full_dict = get_lastest_aircraft_data()   pip install rasterio --break-system-packages
+    airfield_dict, is_full_dict = get_lastest_aircraft_data()
     water_bombers_dict = get_water_bombers()
 
     count_low_pass = 0
