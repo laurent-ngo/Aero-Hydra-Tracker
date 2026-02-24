@@ -8,8 +8,6 @@ import { Header, Label, Value } from './components/Typography';
 
 
 const projectPosition = (lat, lon, track, speedKph, timestamp, alt) => {
-
-
   // Check for missing data
   if (!lat || !lon) return null;
   if (track === undefined || track === null) return null;
