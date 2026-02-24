@@ -96,6 +96,10 @@ class FirefleetCollector:
             data = response.json()
                 
             states = data.get('states', [])
+
+            if states == None:
+                logger.info( "No active aircraft...")
+                return []
             
             # Filtering in Python
             # Callsigns in OpenSky are 8 chars long, often padded with spaces
