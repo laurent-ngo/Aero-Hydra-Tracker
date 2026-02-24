@@ -209,7 +209,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
         return
     
     
-    airfield_dict, is_full_dict = get_lastest_aircraft_data()   
+    airfield_dict, is_full_dict = get_lastest_aircraft_data()
     water_bombers_dict = get_water_bombers()
 
     count_low_pass = 0
@@ -484,6 +484,13 @@ if __name__ == "__main__":
         help="Only set AGL altitude"
     )
 
+    
+    parser.add_argument(
+        "--ROI", 
+        action="store_true", 
+        help="Only set ROIs"
+    )
+
     args = parser.parse_args()
 
     icao_list = orchestrate_sync(active_only=args.active)
@@ -497,16 +504,16 @@ if __name__ == "__main__":
         backfill_agl()
         label_flight_phases()
 
-        if not args.active: 
+    if not args.ROI: 
 
-            detect_regions_of_interest_clustered(type='fire')
-            #detect_regions_of_interest_clustered(type='water')
+        detect_regions_of_interest_clustered(type='fire')
+        #detect_regions_of_interest_clustered(type='water')
 
-            grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
-            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
-            
-            #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
-            #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-            #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
+        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
+        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
+        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
+        
+        #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
+        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
     
