@@ -15,11 +15,17 @@ class FirefleetCollector:
 
         self.default_bbox = {}
 
+        # 250 km2 including Corsica
+        self.default_bbox['lamin'] = 41.3
+        self.default_bbox['lomin'] = 1.5
+        self.default_bbox['lamax'] = 44.7
+        self.default_bbox['lomax'] = 9.6
+
         # 250 km2
-        self.default_bbox['lamin'] = 42.42
-        self.default_bbox['lomin'] = -1.58203
-        self.default_bbox['lamax'] = 45.5
-        self.default_bbox['lomax'] = 7.47070
+        #self.default_bbox['lamin'] = 42.42
+        #self.default_bbox['lomin'] = -1.58203
+        #self.default_bbox['lamax'] = 45.5
+        #self.default_bbox['lomax'] = 7.47070
 
          # 1000 km2
         #self.default_bbox['lamin'] = 41.27781
@@ -209,6 +215,7 @@ if __name__ == "__main__":
     
     # All Canadair and Dash (Securité civile)
     MY_ICAO24S = ["3B7B70", "3B7B71", "3B7B72", "3B7B73", "3B7B74", "3B7B75", "3B7B76", "3B7B6B", "3B7B6C", "3B7B6D", "3B7B6E", "3B7B6F", "3B7B39", "3B7B3A", "3B7B3D", "3B7B3E", "3B7B3F", "3B7B63", "3B7B85", "3B7B86" ]
+
     # For test
     #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
     fleet_status = collector.get_by_icao24(MY_ICAO24S)

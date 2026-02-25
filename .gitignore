@@ -44,5 +44,7 @@ back/OpenSky/logs/*
 .agents/skills/neon-postgres/references/neon-rest-api/projects.md
 back/OpenSky/src/migrate.py
 *.sql
-back/OpenSky/data/output_hh.tif
+*.tif
+*.tar
 back/OpenSky/src/tracked_icao_cache.json
+aero-hydra-ui/src/theme.js
