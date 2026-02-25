@@ -13,7 +13,7 @@ class FirefleetCollector:
 
         self.app_json = "application/json"
 
-        self.default_bbox = dict()
+        self.default_bbox = {}
 
         # 250 km2
         self.default_bbox['lamin'] = 42.42
