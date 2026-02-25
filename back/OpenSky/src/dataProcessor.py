@@ -490,19 +490,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    icao_list = orchestrate_sync(active_only=args.active)
-
-
-    if args.AGL:
-        backfill_agl()
-    else:
-        if len(icao_list) > 0:
-            sync_aircraft_metadata()
-
-            backfill_telemetry(icao_list)
-            backfill_agl()
-            label_flight_phases()
-
+    
     if args.ROI: 
 
         detect_regions_of_interest_clustered(type='fire')
@@ -516,3 +504,18 @@ if __name__ == "__main__":
         #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
         #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
     
+    else:
+        icao_list = orchestrate_sync(active_only=args.active)
+
+
+        if args.AGL:
+            backfill_agl()
+        else:
+            if len(icao_list) > 0:
+                sync_aircraft_metadata()
+
+                backfill_telemetry(icao_list)
+                backfill_agl()
+                label_flight_phases()
+
+        
