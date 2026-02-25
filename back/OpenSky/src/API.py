@@ -4,8 +4,8 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
-from typing import List, Optional
-from typing_extensions import Annotated
+from typing import Annotated, Optional
+
 import migrate # Importing your existing models and SessionLocal
 import time, os
 
@@ -172,8 +172,8 @@ def get_telemetry(
 @app.get("/regions-of-interest", dependencies=[Security(get_api_key)]) # Updated to match your frontend fetch URL
 def get_rois(
     db: DbSession,
-    level: Optional[int] = Query(None, ge=1, le=4),
-    type: Optional[str] = Query(None, pattern="^(fire|water)$", description="Filter by 'fire' or 'water'")
+    level: Annotated[Optional[int], Query(ge=1, le=4)] = None,
+    type: Annotated[Optional[str], Query(pattern="^(fire|water)$", description="Filter by 'fire' or 'water'")] = None
     ):
 
     query = db.query(migrate.RegionOfInterest)
