@@ -137,7 +137,7 @@ def get_unprocessed_points():
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
-        migrate.FlightTelemetry.altitude_agl_ft > -10000,
+        migrate.FlightTelemetry.altitude_agl_ft < 30000,
         migrate.FlightTelemetry.is_processed == False 
     ).order_by(
         migrate.FlightTelemetry.timestamp,
