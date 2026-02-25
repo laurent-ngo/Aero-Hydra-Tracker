@@ -110,16 +110,22 @@ def backfill_agl():
 
     logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
 
-    elevation = ElevationProvider()
+    elevation_south = ElevationProvider("../data/elevation_south.tif")
+    elevation_north = ElevationProvider("../data/elevation_north.tif")
     
     for p in points_to_fix:
         # 2. Get the ground height from your new method
-        ground_m = elevation.get_elevation(p.lat, p.lon)
+        ground_m = elevation_south.get_elevation(p.lat, p.lon)
+
+        if ground_m is None:
+            ground_m = elevation_north.get_elevation(p.lat, p.lon)
         
         if ground_m is not None:
             # 3. Calculation: MSL - Ground = AGL
             agl_m = p.baro_altitude - ground_m
             p.altitude_agl_ft = round(agl_m * 3.28084, 0)
+        else:
+            p.altitude_agl_ft = 60000
 
     db.commit()
     logger.info("Batch AGL backfill complete.")
@@ -137,7 +143,7 @@ def get_unprocessed_points():
     points = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.altitude_agl_ft != None,
         migrate.FlightTelemetry.baro_altitude_ft != None,
-        migrate.FlightTelemetry.altitude_agl_ft < 30000,
+        migrate.FlightTelemetry.altitude_agl_ft < 60000,
         migrate.FlightTelemetry.is_processed == False 
     ).order_by(
         migrate.FlightTelemetry.timestamp,
@@ -511,6 +517,7 @@ if __name__ == "__main__":
 
         if args.AGL:
             backfill_agl()
+            label_flight_phases()
         else:
             if len(icao_list) > 0:
                 sync_aircraft_metadata()
