@@ -23,7 +23,7 @@ class ElevationProvider:
             # 1. Quick boundary check to avoid errors
             if not (self.bounds.left <= lon <= self.bounds.right and 
                     self.bounds.bottom <= lat <= self.bounds.top):
-                return -1000 # to differentiate out of bound from umprocessed
+                return -100000 # to differentiate out of bound from umprocessed
 
             # 2. Get the pixel coordinates (row, col) from lat/lon
             # rasterio.index takes (longitude, latitude)
