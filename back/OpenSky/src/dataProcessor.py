@@ -204,8 +204,6 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
 def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=8.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
-
-    level_3_polygons = get_level_poly()
     
     points = get_unprocessed_points()
     if not points:
@@ -260,13 +258,8 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
             if p.altitude_agl_ft <= threshold_ft:
                 p.is_low_pass = True
                 count_low_pass += 1
+                p.is_full = False
 
-                if p.is_full:
-                    point_geom = Point(p.lat, p.lon)
-                    for poly in level_3_polygons:
-                        if poly.contains(point_geom):
-                            p.is_full = False
-                            break
         
         p.is_processed = True
 
