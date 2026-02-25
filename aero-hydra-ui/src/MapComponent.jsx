@@ -74,7 +74,7 @@ function ChangeView({ center }) {
   useEffect(() => {
     if (center) {
       map.flyTo(center, 12, {
-        duration: 2.0, // Increase this for a smoother, more "charming" glide
+        duration: 2, // Increase this for a smoother, more "charming" glide
         easeLinearity: 0.25
       });
     }

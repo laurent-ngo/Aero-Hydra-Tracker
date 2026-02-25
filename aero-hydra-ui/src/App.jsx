@@ -110,7 +110,9 @@ function App() {
           : `http://localhost:8000/aircraft/active?start=${start}&stop=${stop}`;
         const acRes = await fetch(acUrl, { headers });
         const acData = await acRes.json();
-        setAircraft(Array.isArray(acData) ? acData : [acData]);
+
+        const aircraftArray = Array.isArray(acData) ? acData : [acData];
+        setAircraft(aircraftArray);
 
         // Fetch Level 2 ROIs
         const roiRes = await fetch(`http://localhost:8000/regions-of-interest?level=2`, { headers });
@@ -215,10 +217,23 @@ function App() {
             return (
               <div 
                 key={ac.icao24} 
-                // 3. ADD THIS ONCLICK:
+                // 1. Semantic Role
+                role="button"
+                // 2. Keyboard Access (makes it focusable)
+                tabIndex={0}
+                // 3. Mouse/Touch Click
                 onClick={() => handleAircraftClick(ac)}
-                className={`rounded-lg border bg-slate-800/50 hover:bg-slate-800/80 transition-all cursor-pointer group ${isCollapsed ? 'p-2 flex justify-center' : 'p-3'}`}
+                // 4. Keyboard Input (Enter/Space support)
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleAircraftClick(ac);
+                  }
+                }}
+                className={`rounded-lg border bg-slate-800/50 hover:bg-slate-800/80 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer group ${isCollapsed ? 'p-2 flex justify-center' : 'p-3'}`}
                 style={{ borderColor: `${statusColor}33` }}
+                // Optional: Add a label for screen readers
+                aria-label={`Select aircraft ${ac.callsign || ac.icao24}`}
               >
                 <div className="flex items-start" style={{ display: 'flex', alignItems: 'flex-start' }}>
                     {/* ... icon and text logic ... */}

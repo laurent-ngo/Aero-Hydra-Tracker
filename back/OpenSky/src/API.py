@@ -4,7 +4,7 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
-from typing import Annotated, Optional
+from typing_extensions import Annotated
 
 import migrate # Importing your existing models and SessionLocal
 import time, os
