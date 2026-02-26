@@ -122,7 +122,7 @@ def backfill_agl():
         
         if ground_m is not None:
             # 3. Calculation: MSL - Ground = AGL
-            agl_m = p.baro_altitude - ground_m
+            agl_m = max(0, p.baro_altitude - ground_m)
             p.altitude_agl_ft = round(agl_m * 3.28084, 0)
         else:
             p.altitude_agl_ft = 60000
