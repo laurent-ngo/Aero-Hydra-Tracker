@@ -98,12 +98,12 @@ const ALTITUDE_PALETTE = {
 export const getAltitudeColor = (alt, mode = 'dark') => {
   const colors = ALTITUDE_PALETTE[mode] || ALTITUDE_PALETTE.dark;
 
-  if (alt === null || alt < 1) return colors.unknown;
+  if (alt === null || alt > 50000) return colors.unknown;
   if (alt < 100)               return colors.ground; 
   if (alt < 950)               return colors.taxi;
   if (alt < 5000)              return colors.low;
   if (alt < 13000)             return colors.mid;
-  if (alt < 200000)            return colors.high;
+  if (alt < 20000)            return colors.high;
   return colors.cruise;
 };
 
