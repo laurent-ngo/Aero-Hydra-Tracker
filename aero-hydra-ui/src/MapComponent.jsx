@@ -7,8 +7,9 @@ import { THEME, AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
 
-const projectPosition = (lat, lon, track, speedKph, timestamp, alt) => {
+const projectPosition = (lat, lon, track, speedKph, timestamp, alt, type) => {
   // Check for missing data
+  if (type === 'helicopter') return null;
   if (!lat || !lon) return null;
   if (track === undefined || track === null) return null;
   if (!speedKph || speedKph < 5) return null; // Ignore stationary/slow aircraft
@@ -248,6 +249,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
             ac.last_speed_kph, 
             ac.last_timestamp,
             ac.last_agl_alt_ft,
+            ac.type
           );
 
           //console.log(`Projecting ${ac.registration}:`, ac.last_lat, ac.last_lon, ac.true_track, ac.last_speed_kph, ac.last_timestamp, projectedPos);
