@@ -311,7 +311,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                 icon={createAircraftIcon(
                   ac.true_track || 0, 
                   ac.at_airfield, 
-                  ac.payload_capacity_kg > 0,
+                  ac.payload_capacity_kg > 0 && ac.type === 'airplane',
                   ac.is_full,
                   ac.icon
                 )}
