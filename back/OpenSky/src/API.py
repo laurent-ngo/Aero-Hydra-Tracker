@@ -78,6 +78,7 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
             "type": a.aircraft_type,
             "sea_landing": a.sea_landing,
             "icon": a.icon_id, 
+            "icon_size": a.icon_size,
             "is_full": ft.is_full if ft else None,
             "at_airfield": ft.at_airfield if ft else None,
            
