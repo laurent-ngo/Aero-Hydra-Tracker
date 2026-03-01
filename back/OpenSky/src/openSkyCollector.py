@@ -15,20 +15,9 @@ class FirefleetCollector:
 
         self.default_bbox = {}
 
-        # 250 km2 including Corsica
-        #self.default_bbox['lamin'] = 41.3
-        #self.default_bbox['lomin'] = 1.5
-        #self.default_bbox['lamax'] = 44.7
-        #self.default_bbox['lomax'] = 9.6
 
-        # 250 km2
-        #self.default_bbox['lamin'] = 42.42
-        #self.default_bbox['lomin'] = -1.58203
-        #self.default_bbox['lamax'] = 45.5
-        #self.default_bbox['lomax'] = 7.47070
-
-         # ~900 km2
-        self.default_bbox['lamin'] = 41.3
+         # ~1400 km2
+        self.default_bbox['lamin'] = 52.09
         self.default_bbox['lomin'] = -4.8
         self.default_bbox['lamax'] = 48.42
         self.default_bbox['lomax'] = 9.6

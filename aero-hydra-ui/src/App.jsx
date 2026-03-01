@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Clock, ChevronLeft, ChevronRight, Target, Sun, Moon } from 'lucide-react'; // Added Chevrons
+import { Plane, Helicopter, Clock, ChevronLeft, ChevronRight, Target, Sun, Moon } from 'lucide-react'; // Added Chevrons
 import MapComponent from './MapComponent';
 
 import { TRACK_COLORS, THEME } from './theme';
@@ -238,7 +238,11 @@ function App() {
                 <div className="flex items-start" style={{ display: 'flex', alignItems: 'flex-start' }}>
                     {/* ... icon and text logic ... */}
                     <div className="shrink-0" style={{ width: '40px', paddingRight: '15px', display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
-                         <Plane size={18} style={{ color: statusColor, transform: 'rotate(45deg)', flexShrink: 0 }} />
+                      {ac.type === "helicopter" ? (
+                        <Helicopter size={18} style={{ color: statusColor, flexShrink: 0 }} />
+                      ) : (
+                        <Plane size={18} style={{ color: statusColor, transform: 'rotate(45deg)', flexShrink: 0 }} />
+                      )}
                     </div>
                     {!isCollapsed && (
                         <div className="flex-1 min-w-0">

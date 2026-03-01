@@ -48,3 +48,4 @@ back/OpenSky/src/migrate.py
 *.tar
 back/OpenSky/src/tracked_icao_cache.json
 aero-hydra-ui/src/theme.js
+~$*

@@ -111,12 +111,16 @@ def backfill_agl():
     logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
 
     elevation_south = ElevationProvider("../data/elevation_south.tif")
+    elevation_centre = ElevationProvider("../data/elevation_centre.tif")
     elevation_north = ElevationProvider("../data/elevation_north.tif")
     
     for p in points_to_fix:
         # 2. Get the ground height from your new method
         ground_m = elevation_south.get_elevation(p.lat, p.lon)
 
+        if ground_m is None:
+            ground_m = elevation_centre.get_elevation(p.lat, p.lon)
+            
         if ground_m is None:
             ground_m = elevation_north.get_elevation(p.lat, p.lon)
         
@@ -512,7 +516,7 @@ if __name__ == "__main__":
         #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
     
     else:
-        icao_list = orchestrate_sync(active_only=args.active)
+        icao_list = orchestrate_sync()
 
 
         if args.AGL:

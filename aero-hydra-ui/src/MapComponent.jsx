@@ -7,8 +7,9 @@ import { THEME, AIRCRAFT_COLORS, ROI_STYLE, getAltitudeColor } from './theme';
 import { Header, Label, Value } from './components/Typography';
 
 
-const projectPosition = (lat, lon, track, speedKph, timestamp, alt) => {
+const projectPosition = (lat, lon, track, speedKph, timestamp, alt, type) => {
   // Check for missing data
+  if (type === 'helicopter') return null;
   if (!lat || !lon) return null;
   if (track === undefined || track === null) return null;
   if (!speedKph || speedKph < 5) return null; // Ignore stationary/slow aircraft
@@ -82,15 +83,17 @@ function ChangeView({ center }) {
   return null;
 }
 
-const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, iconId = 1) => {
+const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, full = false, iconId = 1, iconSize = 100) => {
 
-  const ICON_SIZE = 72;
+  const SPRITE_UNIT = 72;
   const iconsPerRow = 8;
 
-  const offsetX = -(iconId%iconsPerRow) * ICON_SIZE;
-  const offsetY = -Math.floor(iconId / iconsPerRow)* ICON_SIZE;
+  const display_size = Math.round( iconSize * 20) / 100;
 
-  //console.log(`[Sprite Debug] ID: ${iconId} | Offset: ${offsetX}px, ${offsetY}px`);
+  const offsetX = -(iconId%iconsPerRow) * SPRITE_UNIT;
+  const offsetY = -Math.floor(iconId / iconsPerRow)* SPRITE_UNIT;
+
+  //console.log(`[Sprite Debug] ID: ${iconId} | size: ${display_size}`); 
 
   let color = AIRCRAFT_COLORS.airborne;
   if (isOnGround) color = AIRCRAFT_COLORS.ground;
@@ -99,8 +102,8 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
   return L.divIcon({
     html: `
     <div style="
-      width: ${ICON_SIZE}px; 
-      height: ${ICON_SIZE}px; 
+      width: ${display_size}px; 
+      height: ${display_size}px; 
       transform: rotate(${heading}deg);
       display: flex;
       justify-content: center;
@@ -111,20 +114,21 @@ const createAircraftIcon = (heading = 0, isOnGround = false, payload = false, fu
               drop-shadow(0px -1px 0px black);
     ">
       <div style="
-        width: ${ICON_SIZE}px; 
-        height: ${ICON_SIZE}px; 
+        width: ${SPRITE_UNIT}px; 
+        height: ${SPRITE_UNIT}px; 
+        flex-shrink: 0;
         background-color: ${color.fill}; 
         -webkit-mask-image: url('../img/sprites.png');
         mask-image: url('../img/sprites.png');
         -webkit-mask-position: ${offsetX}px ${offsetY}px;
         mask-position: ${offsetX}px ${offsetY}px;
         -webkit-mask-repeat: no-repeat;
-        transform: scale(0.5); 
+        transform: scale(${iconSize / 100}); 
       "></div>
     </div>`,
     className: "bg-transparent",
-    iconSize: [20, 20],
-    iconAnchor: [36, 36],
+    iconSize: [display_size, display_size],
+    iconAnchor: [display_size/2, display_size/2],
   });
 };
 
@@ -248,6 +252,7 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
             ac.last_speed_kph, 
             ac.last_timestamp,
             ac.last_agl_alt_ft,
+            ac.type
           );
 
           //console.log(`Projecting ${ac.registration}:`, ac.last_lat, ac.last_lon, ac.true_track, ac.last_speed_kph, ac.last_timestamp, projectedPos);
@@ -309,9 +314,10 @@ const MapComponent = ({ aircraft = [], rois = [], timeRangeSeconds = 3600, cente
                 icon={createAircraftIcon(
                   ac.true_track || 0, 
                   ac.at_airfield, 
-                  ac.payload_capacity_kg > 0,
+                  ac.payload_capacity_kg > 0 && ac.type === 'airplane',
                   ac.is_full,
-                  ac.icon
+                  ac.icon,
+                  ac.icon_size
                 )}
               >
                 <Popup>
