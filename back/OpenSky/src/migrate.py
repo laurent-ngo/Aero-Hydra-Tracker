@@ -35,7 +35,7 @@ class TrackedAircraft(Base):
     aircraft_type = Column(String(50))
     sea_landing =Column(Boolean) 
     icon_id = Column(Integer)
-    icon_size = Column(Interger)
+    icon_size = Column(Integer)
 
     last_seen = Column(Integer)
 
