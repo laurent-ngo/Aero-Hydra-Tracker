@@ -279,7 +279,7 @@ def label_flight_phases(threshold_ft=950, water_threshold_ft=2, airfield_radius=
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (5 days ago from now)
-    cutoff_timestamp = int((datetime.now() - timedelta(days=30)).timestamp())
+    cutoff_timestamp = int((datetime.now() - timedelta(days=90)).timestamp())
 
     # 1. Fetch points
     if type == 'fire':
@@ -289,7 +289,9 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 .filter(
                     migrate.FlightTelemetry.is_low_pass == True,
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
-                    migrate.TrackedAircraft.payload_capacity_kg > 0   
+                    migrate.TrackedAircraft.payload_capacity_kg > 0,
+                    migrate.TrackedAircraft.aircraft_type == "airplane",
+                    migrate.FlightTelemetry.is_over_water == False
                 ).all()
             )
     elif type == 'water':
@@ -300,7 +302,9 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                     migrate.FlightTelemetry.is_over_water == True,
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
                     migrate.TrackedAircraft.payload_capacity_kg > 0,
-                    migrate.TrackedAircraft.sea_landing == True
+                    migrate.TrackedAircraft.sea_landing == True,
+                    migrate.TrackedAircraft.aircraft_type == "airplane",
+                    migrate.FlightTelemetry.is_over_water == True  
                 ).all()
             )
     else:
@@ -365,11 +369,7 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
 
 def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
 
-    TRAINING_POINTS = [
-        Point(43.372922982515504, 5.511696705468189), # Marseille
-    ]
-
-    # 1. Fetch only ROIs at the specific starting level
+    # 1. Fetch only ROIs at the specific starting level AND type
     rois = db.query(migrate.RegionOfInterest).filter(
         migrate.RegionOfInterest.level == starting_level,
         migrate.RegionOfInterest.type == type
@@ -379,6 +379,7 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
         logger.debug(f"No {type} ROIs found at Level {starting_level} to grow.")
         return
 
+    # 2. Build buffered polygons from level N ROIs
     polygons = []
     for roi in rois:
         coords = json.loads(roi.geometry)
@@ -392,44 +393,95 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
     if not polygons:
         return
 
-    # 2. REGROUP: Merge all overlapping expanded polygons
+    # 3. Merge all overlapping expanded polygons
     merged_geometry = unary_union(polygons)
+    final_shapes = (
+        [merged_geometry]
+        if isinstance(merged_geometry, Polygon)
+        else list(merged_geometry.geoms)
+    )
 
-    # 3. Handle the result (Single Polygon or MultiPolygon)
-    if isinstance(merged_geometry, Polygon):
-        final_shapes = [merged_geometry]
-    else:
-        final_shapes = list(merged_geometry.geoms)
-
-    
-    # 4. SAVE the new higher-level ROIs
     new_level = starting_level + 1
-    db.query(migrate.RegionOfInterest).filter(
-        migrate.RegionOfInterest.level == new_level
-    ).delete()
 
+    # 4. Fetch existing ROIs at new_level FOR THIS TYPE ONLY (to reuse)
+    existing_rois = db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.level == new_level,
+        migrate.RegionOfInterest.type.in_([type, 'training'])  # also match promoted training zones
+    ).all()
+
+    existing_by_index = {i: roi for i, roi in enumerate(existing_rois)}
+
+    # 5. Update existing ROIs or create new ones — never blindly delete
     for i, shape in enumerate(final_shapes):
         merged_coords = list(shape.exterior.coords)
-        
-        # Check if any training point is inside this specific polygon
-        is_training_zone = any(shape.contains(p) for p in TRAINING_POINTS)
-        final_type = 'training' if is_training_zone else type
 
-        new_roi = migrate.RegionOfInterest(
-            lat=shape.centroid.y,
-            lon=shape.centroid.x,
-            geometry=json.dumps(merged_coords),
-            density=0, # New levels represent area, not raw points
-            level=new_level,
-            name=f"Level {new_level} Zone - Area {i+1}",
-            detected_at=datetime.now(),
-            type=final_type
-        )
-        db.add(new_roi)
+        if i in existing_by_index:
+            # ✅ Reuse existing ROI — update in place
+            roi = existing_by_index[i]
+            roi.lat = shape.centroid.y
+            roi.lon = shape.centroid.x
+            roi.geometry = json.dumps(merged_coords)
+            roi.density = 0
+            roi.level = new_level
+            roi.name = f"Level {new_level} Zone - Area {i + 1}"
+            roi.detected_at = datetime.now()
+            roi.type = type
+        else:
+            # 🆕 No existing ROI for this slot — create a new one
+            new_roi = migrate.RegionOfInterest(
+                lat=shape.centroid.y,
+                lon=shape.centroid.x,
+                geometry=json.dumps(merged_coords),
+                density=0,
+                level=new_level,
+                name=f"Level {new_level} Zone - Area {i + 1}",
+                detected_at=datetime.now(),
+                type=type
+            )
+            db.add(new_roi)
+
+    # 6. Remove stale ROIs if the new merge produced fewer shapes than before
+    stale_rois = [
+        roi for i, roi in existing_by_index.items()
+        if i >= len(final_shapes)
+    ]
+    for stale in stale_rois:
+        db.delete(stale)
 
     db.commit()
-    logger.info(f"Success: Level {starting_level} expanded and merged into {len(final_shapes)} Level {new_level} {type} ROIs.")
+    logger.info(
+        f"Success: Level {starting_level} → {len(final_shapes)} Level {new_level} "
+        f"{type} ROIs (updated: {min(len(existing_rois), len(final_shapes))}, "
+        f"created: {max(0, len(final_shapes) - len(existing_rois))}, "
+        f"removed: {len(stale_rois)})."
+    )
 
+def flag_training_rois(level=2):
+    TRAINING_POINTS = [
+        Point(43.372922982515504, 5.511696705468189),  # Marseille
+    ]
+
+    rois = db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.level == level
+    ).all()
+
+    if not rois:
+        logger.debug(f"No ROIs found at Level {level}.")
+        return
+
+    flagged = 0
+    for roi in rois:
+        coords = json.loads(roi.geometry)
+        if len(coords) < 3:
+            continue
+
+        shape = Polygon(coords)
+        if any(shape.contains(p) for p in TRAINING_POINTS):
+            roi.type = 'training'
+            flagged += 1
+
+    db.commit()
+    logger.info(f"Flagged {flagged} ROIs as 'training' at Level {level}.")
 
 def sync_aircraft_metadata():
     logger.info("Promoting latest telemetry metadata to aircraft table...")
@@ -505,15 +557,17 @@ if __name__ == "__main__":
     if args.ROI: 
 
         detect_regions_of_interest_clustered(type='fire')
-        #detect_regions_of_interest_clustered(type='water')
+        detect_regions_of_interest_clustered(type='water')
 
         grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
         #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
         #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
         
-        #grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
+        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
         #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water')
+        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water
+
+        flag_training_rois(level=2)
     
     else:
         icao_list = orchestrate_sync()

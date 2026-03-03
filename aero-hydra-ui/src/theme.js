@@ -64,6 +64,13 @@ export const ROI_STYLE = {
     fillColor: '#aa7400',
     zIndex: 9999 // Force it to the top
   },
+  water:{
+    color: '#08c0ee', 
+    weight: 5, 
+    fillOpacity: 0.25,
+    fillColor: '#59cbe7',
+    zIndex: 9999 // Force it to the top
+  },
   training:{
     color: '#16a10a', 
     weight: 5, 
