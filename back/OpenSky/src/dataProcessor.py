@@ -249,7 +249,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=2, airfield_radius=
             
             # Update cache and state
             airfield_dict[p.icao24] = nearby_af.icao
-            if p.payload_capacity_kg > 0:
+            if p.icao24 in water_bombers_dict:
                 p.is_full = True
             else:
                 p.is_full = False
