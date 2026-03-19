@@ -265,7 +265,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=2, airfield_radius=
                 p.latest_airfield = None
         
             # 3. Label Phase (Only if NOT at an airfield)
-            if (p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
+            if abs(p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
                 p.is_over_water = True
                 count_over_water += 1
 
@@ -304,8 +304,8 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 .filter(
                     migrate.FlightTelemetry.is_over_water == True,
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
-                    migrate.TrackedAircraft.payload_capacity_kg > 0,
-                    migrate.TrackedAircraft.sea_landing == True,
+                    migrate.TrackedAircraft.payload_capacity_kg > 0, # water tanker
+                    migrate.TrackedAircraft.sea_landing == True, # sea plane
                     migrate.TrackedAircraft.aircraft_type == "airplane",
                     migrate.FlightTelemetry.is_over_water == True  
                 ).all()
