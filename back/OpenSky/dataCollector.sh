@@ -20,4 +20,4 @@ python dataProcessor.py $1 2>&1
 
 kill $WATCHDOG_PID 2>/dev/null
 wait $WATCHDOG_PID 2>/dev/null
-exit 0
+kill 0 2>/dev/null
