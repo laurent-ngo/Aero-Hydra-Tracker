@@ -28,7 +28,7 @@ user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
 db_host = os.getenv('DB_HOST')
 db_name = os.getenv('DB_NAME', 'neondb')
-db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
+db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
 
 db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
@@ -462,6 +462,9 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
 def flag_training_rois(level=2):
     TRAINING_POINTS = [
         Point(43.372922982515504, 5.511696705468189),  # Marseille
+        Point(42.5940251, 2.4465298), # Prades
+        Point(43.8775628, 4.6993997), # Boulbon
+        Point(43.9866038, 4.6378687), # Rochefort
     ]
 
     rois = db.query(migrate.RegionOfInterest).filter(
