@@ -643,7 +643,7 @@
       <div id="alt-legend" style="position:absolute; bottom:16px; right:16px; z-index:10; background:var(--panel); border:1px solid var(--panel-border); border-radius:4px; padding:8px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-dim); line-height:1.8;">
         <div style="margin-bottom:4px; letter-spacing:1px;">AGL ALT</div>
         <div class="leg-row" data-tier="ground" > <span class="leg-swatch"></span> &lt; 100 ft  — Ground</div>
-        <div class="leg-row" data-tier="taxi"   > <span class="leg-swatch"></span> &lt; 950 ft  — Taxi</div>
+        <div class="leg-row" data-tier="taxi"   > <span class="leg-swatch"></span> &lt; 750 ft  — Taxi</div>
         <div class="leg-row" data-tier="low"    > <span class="leg-swatch"></span> &lt; 5 000 ft — Low</div>
         <div class="leg-row" data-tier="mid"    > <span class="leg-swatch"></span> &lt; 13 000 ft — Mid</div>
         <div class="leg-row" data-tier="high"   > <span class="leg-swatch"></span> &lt; 20 000 ft — High</div>
@@ -953,7 +953,7 @@ function altColor(agl) {
   const colors = ALTITUDE_PALETTE[isDark ? 'dark' : 'light'];
   if (agl === null || agl === undefined || agl > 50000) return colors.unknown;
   if (agl < 100)   return colors.ground;
-  if (agl < 950)   return colors.taxi;
+  if (agl < 750)   return colors.taxi;
   if (agl < 5000)  return colors.low;
   if (agl < 13000) return colors.mid;
   if (agl < 20000) return colors.high;

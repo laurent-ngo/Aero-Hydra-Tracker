@@ -10,7 +10,7 @@ user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
 db_host = os.getenv('DB_HOST')
 db_name = os.getenv('DB_NAME', 'neondb')
-db_opts = os.getenv('DB_OPTIONS', 'sslmode=require')
+db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
 
 db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
