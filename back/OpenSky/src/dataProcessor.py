@@ -282,7 +282,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     # 1. Calculate the cutoff (5 days ago from now)
-    cutoff_timestamp = int((datetime.now() - timedelta(days=90)).timestamp())
+    cutoff_timestamp = int((datetime.now() - timedelta(days=5)).timestamp())
 
     # 1. Fetch points
     if type == 'fire':
