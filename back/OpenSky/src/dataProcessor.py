@@ -281,86 +281,113 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
     logger.debug(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
-    # 1. Calculate the cutoff (5 days ago from now)
     cutoff_timestamp = int((datetime.now() - timedelta(days=90)).timestamp())
 
-    # 1. Fetch points
     if type == 'fire':
         points = (
             db.query(migrate.FlightTelemetry)
                 .join(migrate.TrackedAircraft, migrate.FlightTelemetry.icao24 == migrate.TrackedAircraft.icao24)
                 .filter(
                     migrate.FlightTelemetry.is_low_pass == True,
-                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
+                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,
                     migrate.TrackedAircraft.payload_capacity_kg > 0,
                     migrate.TrackedAircraft.aircraft_type == "airplane",
                     migrate.FlightTelemetry.is_over_water == False
                 ).all()
-            )
+        )
     elif type == 'water':
         points = (
             db.query(migrate.FlightTelemetry)
                 .join(migrate.TrackedAircraft, migrate.FlightTelemetry.icao24 == migrate.TrackedAircraft.icao24)
                 .filter(
                     migrate.FlightTelemetry.is_over_water == True,
-                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,   
-                    migrate.TrackedAircraft.payload_capacity_kg > 0, # water tanker
-                    migrate.TrackedAircraft.sea_landing == True, # sea plane
+                    migrate.FlightTelemetry.timestamp >= cutoff_timestamp,
+                    migrate.TrackedAircraft.payload_capacity_kg > 0,
+                    migrate.TrackedAircraft.sea_landing == True,
                     migrate.TrackedAircraft.aircraft_type == "airplane",
-                    migrate.FlightTelemetry.is_over_water == True  
                 ).all()
-            )
+        )
     else:
-        logger.error(f"incorrect value in argument \'type\':{type}")
-
+        logger.error(f"incorrect value in argument 'type': {type}")
+        return
 
     if len(points) < min_samples:
         logger.debug(f"Not enough points to cluster ({type}).")
         return
 
-    # 2. Prepare data for DBSCAN (Coordinates in radians for Haversine distance)
+    # ── Cluster ──────────────────────────────────────────────
     coords = np.array([[p.lat, p.lon] for p in points])
     kms_per_radian = 6371.0088
     epsilon = (distance_meters / 1000) / kms_per_radian
 
-    # 3. Perform Clustering
-    dbscan = DBSCAN(eps=epsilon, min_samples=min_samples, algorithm='ball_tree', metric='haversine').fit(np.radians(coords))
-    labels = dbscan.labels_
+    dbscan = DBSCAN(
+        eps=epsilon, min_samples=min_samples,
+        algorithm='ball_tree', metric='haversine'
+    ).fit(np.radians(coords))
+    labels       = dbscan.labels_
     unique_labels = set(labels) - {-1}
-    
-    # Fetch existing ROIs from DB to compare
-    existing_rois = db.query(migrate.RegionOfInterest).filter(migrate.RegionOfInterest.type == type).all()
 
+    if not unique_labels:
+        logger.debug(f"No clusters found ({type}).")
+        return
+
+    # ── Build one canonical polygon per cluster ───────────────
+    # These are derived purely from telemetry — same data = same polygons
+    cluster_polygons = {}
     for k in unique_labels:
         cluster_points = coords[labels == k]
-        if len(cluster_points) < 3: continue
+        if len(cluster_points) < 3:
+            continue
+        cluster_polygons[k] = MultiPoint(cluster_points).convex_hull
 
-        # Create the new cluster polygon
-        new_poly = MultiPoint(cluster_points).convex_hull
-        
-        merged = False
-        for old_roi in existing_rois:
-            old_poly = Polygon(json.loads(old_roi.geometry))
-            
-            # Identify if new cluster intersects or is inside existing ROI
-            if new_poly.intersects(old_poly):
-                # MERGE the two geometries
-                combined_poly = unary_union([old_poly, new_poly]).convex_hull
-                
-                # Update existing record
-                old_roi.geometry = json.dumps(list(combined_poly.exterior.coords))
-                old_roi.density += len(cluster_points)
-                old_roi.detected_at = datetime.now()
-                merged = True
-                break
-        
-        if not merged:
-            # Save as a brand new ROI if no intersection found
-            hull_points = list(new_poly.exterior.coords)
+    # ── Load existing level-1 ROIs of this type ───────────────
+    existing_rois = db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.level == 1,
+        migrate.RegionOfInterest.type == type
+    ).all()
+
+    # Index existing ROIs by their geometry centroid for spatial matching
+    # (same approach as grow_and_level_up_rois)
+    matched_existing_ids = set()
+
+    for k, new_poly in cluster_polygons.items():
+        cluster_points = coords[labels == k]
+        new_centroid   = new_poly.centroid   # x=lat, y=lon in [lat,lon] space
+
+        # Try to find an existing ROI whose stored geometry overlaps this cluster
+        matched_roi = None
+        for roi in existing_rois:
+            if roi.id in matched_existing_ids:
+                continue
+            try:
+                existing_coords = json.loads(roi.geometry)
+                if len(existing_coords) < 3:
+                    continue
+                existing_poly = Polygon(existing_coords)
+                # Match if centroids are close OR polygons intersect
+                if new_poly.intersects(existing_poly):
+                    matched_roi = roi
+                    break
+            except Exception:
+                continue
+
+        hull_coords = list(new_poly.exterior.coords)
+
+        if matched_roi:
+            # ✅ Reuse — overwrite with freshly computed geometry (idempotent)
+            matched_existing_ids.add(matched_roi.id)
+            matched_roi.lat         = new_centroid.x   # x=lat in [lat,lon] space
+            matched_roi.lon         = new_centroid.y   # y=lon
+            matched_roi.geometry    = json.dumps(hull_coords)
+            matched_roi.density     = len(cluster_points)
+            matched_roi.detected_at = datetime.now()
+            # preserve name and type
+        else:
+            # 🆕 New cluster not seen before
             new_roi = migrate.RegionOfInterest(
-                lat=np.mean(cluster_points[:, 0]),
-                lon=np.mean(cluster_points[:, 1]),
-                geometry=json.dumps(hull_points),
+                lat=new_centroid.x,
+                lon=new_centroid.y,
+                geometry=json.dumps(hull_coords),
                 density=len(cluster_points),
                 name=f"Area {datetime.now().strftime('%H%M%S')}",
                 detected_at=datetime.now(),
@@ -368,72 +395,110 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                 type=type
             )
             db.add(new_roi)
+
+    # ── Remove stale ROIs no longer supported by any cluster ──
+    stale = [roi for roi in existing_rois if roi.id not in matched_existing_ids]
+    for roi in stale:
+        db.delete(roi)
+
     db.commit()
 
 def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
-
-    # 1. Fetch only ROIs at the specific starting level AND type
     rois = db.query(migrate.RegionOfInterest).filter(
         migrate.RegionOfInterest.level == starting_level,
         migrate.RegionOfInterest.type == type
     ).all()
-
     if not rois:
         logger.debug(f"No {type} ROIs found at Level {starting_level} to grow.")
         return
 
-    # 2. Build buffered polygons from level N ROIs
     polygons = []
     for roi in rois:
         coords = json.loads(roi.geometry)
         if len(coords) >= 3:
-            # Convert km to degrees (~111km per degree)
             buffer_deg = buffer_km / 111.0
-            # Buffer (Grow) the polygon
             poly = Polygon(coords).buffer(buffer_deg)
             polygons.append(poly)
-
     if not polygons:
         return
 
-    # 3. Merge all overlapping expanded polygons
     merged_geometry = unary_union(polygons)
     final_shapes = (
         [merged_geometry]
         if isinstance(merged_geometry, Polygon)
         else list(merged_geometry.geoms)
     )
-
     new_level = starting_level + 1
 
-    # 4. Fetch existing ROIs at new_level FOR THIS TYPE ONLY (to reuse)
     existing_rois = db.query(migrate.RegionOfInterest).filter(
         migrate.RegionOfInterest.level == new_level,
-        migrate.RegionOfInterest.type.in_([type, 'training'])  # also match promoted training zones
+        migrate.RegionOfInterest.type.in_([type, 'training'])
     ).all()
 
-    existing_by_index = {i: roi for i, roi in enumerate(existing_rois)}
+    # Revert training ROIs back to base type for clean matching
+    for roi in existing_rois:
+        if roi.type == 'training':
+            roi.type = type
+    db.flush()
 
-    # 5. Update existing ROIs or create new ones — never blindly delete
+    # Pre-parse existing geometries once
+    existing_parsed = []
+    for roi in existing_rois:
+        try:
+            coords = json.loads(roi.geometry)
+            if len(coords) >= 3:
+                existing_parsed.append((roi, Polygon(coords)))
+        except Exception:
+            pass
+
+    matched_existing_ids = set()
+
+    # Build all intersection pairs with overlap area
+    overlap_scores = []
+    for i, shape in enumerate(final_shapes):
+        for roi, roi_poly in existing_parsed:
+            try:
+                if shape.intersects(roi_poly):
+                    area = shape.intersection(roi_poly).area
+                    overlap_scores.append((area, i, roi, roi_poly))
+            except Exception:
+                continue
+
+    # Greedy assignment: highest overlap first, each shape and ROI used once
+    overlap_scores.sort(key=lambda x: x[0], reverse=True)
+    matched_shape_indices  = set()
+    matched_existing_ids   = set()
+    shape_to_roi           = {}
+
+    for area, i, roi, roi_poly in overlap_scores:
+        if i in matched_shape_indices:
+            continue
+        if roi.id in matched_existing_ids:
+            continue
+        shape_to_roi[i] = roi
+        matched_shape_indices.add(i)
+        matched_existing_ids.add(roi.id)
+
+    # Apply matches and create unmatched
     for i, shape in enumerate(final_shapes):
         merged_coords = list(shape.exterior.coords)
+        centroid_lat  = shape.centroid.x
+        centroid_lon  = shape.centroid.y
 
-        if i in existing_by_index:
-            # ✅ Reuse existing ROI — update in place
-            roi = existing_by_index[i]
-            roi.lat = shape.centroid.y
-            roi.lon = shape.centroid.x
-            roi.geometry = json.dumps(merged_coords)
-            roi.density = 0
-            roi.level = new_level
-            roi.name = f"Level {new_level} Zone - Area {i + 1}"
+        if i in shape_to_roi:
+            roi = shape_to_roi[i]
+            roi.lat         = centroid_lat
+            roi.lon         = centroid_lon
+            roi.geometry    = json.dumps(merged_coords)
+            roi.density     = 0
+            roi.level       = new_level
+            roi.name        = f"Level {new_level} Zone - Area {i + 1}"
             roi.detected_at = datetime.now()
-            roi.type = type
+            roi.type        = type
         else:
-            # 🆕 No existing ROI for this slot — create a new one
             new_roi = migrate.RegionOfInterest(
-                lat=shape.centroid.y,
-                lon=shape.centroid.x,
+                lat=centroid_lat,
+                lon=centroid_lon,
                 geometry=json.dumps(merged_coords),
                 density=0,
                 level=new_level,
@@ -443,51 +508,17 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
             )
             db.add(new_roi)
 
-    # 6. Remove stale ROIs if the new merge produced fewer shapes than before
-    stale_rois = [
-        roi for i, roi in existing_by_index.items()
-        if i >= len(final_shapes)
-    ]
-    for stale in stale_rois:
-        db.delete(stale)
+    stale_rois = [roi for roi, _ in existing_parsed if roi.id not in matched_existing_ids]
+    for roi in stale_rois:
+        db.delete(roi)
 
     db.commit()
     logger.info(
         f"Success: Level {starting_level} → {len(final_shapes)} Level {new_level} "
-        f"{type} ROIs (updated: {min(len(existing_rois), len(final_shapes))}, "
-        f"created: {max(0, len(final_shapes) - len(existing_rois))}, "
+        f"{type} ROIs (updated: {len(matched_existing_ids)}, "
+        f"created: {len(final_shapes) - len(matched_existing_ids)}, "
         f"removed: {len(stale_rois)})."
     )
-
-def flag_training_rois(level=2):
-    TRAINING_POINTS = [
-        Point(43.372922982515504, 5.511696705468189),  # Marseille
-        Point(42.5940251, 2.4465298), # Prades
-        Point(43.8775628, 4.6993997), # Boulbon
-        Point(43.9866038, 4.6378687), # Rochefort
-    ]
-
-    rois = db.query(migrate.RegionOfInterest).filter(
-        migrate.RegionOfInterest.level == level
-    ).all()
-
-    if not rois:
-        logger.debug(f"No ROIs found at Level {level}.")
-        return
-
-    flagged = 0
-    for roi in rois:
-        coords = json.loads(roi.geometry)
-        if len(coords) < 3:
-            continue
-
-        shape = Polygon(coords)
-        if any(shape.contains(p) for p in TRAINING_POINTS):
-            roi.type = 'training'
-            flagged += 1
-
-    db.commit()
-    logger.info(f"Flagged {flagged} ROIs as 'training' at Level {level}.")
 
 def sync_aircraft_metadata():
     logger.info("Promoting latest telemetry metadata to aircraft table...")
@@ -573,7 +604,6 @@ if __name__ == "__main__":
         #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
         #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water
 
-        flag_training_rois(level=2)
     
     else:
         icao_list = orchestrate_sync()
