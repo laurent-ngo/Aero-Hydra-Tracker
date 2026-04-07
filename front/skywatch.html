@@ -538,21 +538,38 @@ function showAirfieldPopup(feat,pixel){
 
 function renderAirfieldPopupGrid(aircraft){
   const grid=document.getElementById('ap-grid');grid.innerHTML='';
+
+  // Group by model
+  const byModel={};
   aircraft.forEach(ac=>{
-    const color=acColor(ac);
-    const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
-    const canvas=buildTintedCanvas(ac.icon,color,size);
-    const cell=document.createElement('div');
-    cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
-    cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
-    cell.onclick=()=>selectAircraft(ac.icao24);
-    const disp=document.createElement('canvas');disp.width=size;disp.height=size;
-    disp.getContext('2d').drawImage(canvas,0,0);
-    cell.appendChild(disp);
-    const lbl=document.createElement('div');lbl.className='ap-label';
-    lbl.textContent=ac.registration||ac.icao24;
-    cell.appendChild(lbl);
-    grid.appendChild(cell);
+    const key=ac.model||'Unknown';
+    if(!byModel[key])byModel[key]=[];
+    byModel[key].push(ac);
+  });
+
+  Object.entries(byModel).forEach(([model,acs])=>{
+    // Model header spanning all 5 columns
+    const header=document.createElement('div');
+    header.style.cssText='grid-column:1/-1;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;';
+    header.textContent=model;
+    grid.appendChild(header);
+
+    acs.forEach(ac=>{
+      const color=acColor(ac);
+      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
+      const canvas=buildTintedCanvas(ac.icon,color,size);
+      const cell=document.createElement('div');
+      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
+      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
+      cell.onclick=()=>selectAircraft(ac.icao24);
+      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
+      disp.getContext('2d').drawImage(canvas,0,0);
+      cell.appendChild(disp);
+      const lbl=document.createElement('div');lbl.className='ap-label';
+      lbl.textContent=ac.registration||ac.icao24;
+      cell.appendChild(lbl);
+      grid.appendChild(cell);
+    });
   });
 }
 
