@@ -380,7 +380,7 @@ applyTheme(isDark);
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],mode='live',pollTimer=null;
 
 // MAP
-const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:5}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
+const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:7}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
 const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
 const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
