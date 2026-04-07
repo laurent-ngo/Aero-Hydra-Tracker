@@ -474,7 +474,7 @@ function renderAirfields(){
   // Group ALL fleet aircraft by last_airfield — no time filter
   const groups={};
   fleetSource.forEach(ac=>{
-    if(!ac.last_airfield)return;
+    if(!ac.last_airfield||!ac.at_airfield)return;
     const key=ac.last_airfield;
     if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.airfield_name||key};
     groups[key].aircraft.push(ac);
