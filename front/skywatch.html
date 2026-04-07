@@ -566,7 +566,6 @@ const tooltip=document.getElementById('tooltip');
 map.on('pointermove',evt=>{
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){
-    closeAirfieldPopup();
     const ac=acF.get('aircraft');    tooltip.style.display='block';
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
@@ -587,7 +586,6 @@ map.on('pointermove',evt=>{
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
   if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
   tooltip.style.display='none';map.getTargetElement().style.cursor='';
-  closeAirfieldPopup();
 });
 
 let pointerDownPos = null;
