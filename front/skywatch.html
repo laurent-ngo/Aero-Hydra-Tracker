@@ -112,9 +112,10 @@
       display: none;
       min-width: 140px;
       max-width: 280px;
-      pointer-events: auto;
+      pointer-events: none;
       box-shadow: 0 6px 24px rgba(0,0,0,0.55);
     }
+    #airfield-popup * { pointer-events: auto; }
     #airfield-popup.visible { display: block; }
     #airfield-popup::after {
       content: '';
@@ -194,11 +195,11 @@
 </header>
 
 <div class="body">
-  <div class="sidebar" id="sidebar-left">
+  <div class="sidebar collapsed" id="sidebar-left">
     <div class="sidebar-header" onclick="toggleSidebar('left')">
       <div class="sidebar-title">Filters</div>
       <span class="sidebar-vert-label">Filters</span>
-      <button class="collapse-btn" id="collapse-left">&#x25C4;</button>
+      <button class="collapse-btn" id="collapse-left">&#x25BA;</button>
     </div>
     <div class="sidebar-content">
       <div class="section-label">Time Range</div>
@@ -296,19 +297,19 @@
       </select>
     </div>
 
-    <div class="bottom-panel" id="bottom-panel">
+    <div class="bottom-panel collapsed" id="bottom-panel">
       <div class="bottom-panel-header" onclick="toggleBottomPanel()">
         <div class="bottom-panel-title">Flight Data Table</div>
-        <span id="bottom-arrow" style="margin-left:auto;color:var(--text-dim);font-size:11px;">&#x25BC;</span>
+        <span id="bottom-arrow" style="margin-left:auto;color:var(--text-dim);font-size:11px;">&#x25B2;</span>
         <span id="grid-row-count" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-dim);margin-left:16px;">0 rows</span>
       </div>
       <div id="grid-container" class="ag-theme-alpine-dark"></div>
     </div>
   </div>
 
-  <div class="sidebar right" id="sidebar-right">
+  <div class="sidebar right collapsed" id="sidebar-right">
     <div class="sidebar-header" onclick="toggleSidebar('right')">
-      <button class="collapse-btn" id="collapse-right" style="margin-left:0;margin-right:4px;">&#x25B6;</button>
+      <button class="collapse-btn" id="collapse-right" style="margin-left:0;margin-right:4px;">&#x25C4;</button>
       <div class="sidebar-title">Aircraft</div>
       <span class="sidebar-vert-label">Aircraft</span>
     </div>
@@ -499,7 +500,7 @@ function renderAirfields(){
     feat.setStyle(new ol.style.Style({
       image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
       text:new ol.style.Text({
-        text:`${g.aircraft.filter(a=>a.at_airfield).length}/${g.aircraft.length}`,offsetY:-18,
+        text:`${g.name}\n${g.aircraft.filter(a=>a.at_airfield).length}/${g.aircraft.length}`,offsetY:-22,
         font:"bold 11px 'Share Tech Mono',monospace",
         fill:new ol.style.Fill({color:isDark?'#00e5ff':'#007a9e'}),
         backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
@@ -517,7 +518,10 @@ let activeAirfieldIcao=null;
 function showAirfieldPopup(feat,pixel){
   const g=feat.get('airfieldGroup'),icao=feat.get('airfield');
   activeAirfieldIcao=icao;
-  document.getElementById('ap-title').textContent=icao+(g.name&&g.name!==icao?' · '+g.name:'');
+  const parked=g.aircraft.filter(a=>a.at_airfield).length;
+  const total=g.aircraft.length;
+  const name=g.name&&g.name!==icao?g.name:icao;
+  document.getElementById('ap-title').textContent=`${name} (${parked}/${total})`;
   renderAirfieldPopupGrid(g.aircraft);
   const popup=document.getElementById('airfield-popup');
   popup.classList.add('visible');
@@ -562,8 +566,8 @@ const tooltip=document.getElementById('tooltip');
 map.on('pointermove',evt=>{
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){
-    const ac=acF.get('aircraft');
-    tooltip.style.display='block';
+    closeAirfieldPopup();
+    const ac=acF.get('aircraft');    tooltip.style.display='block';
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
@@ -583,17 +587,26 @@ map.on('pointermove',evt=>{
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
   if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
   tooltip.style.display='none';map.getTargetElement().style.cursor='';
-});
-
-map.on('click',evt=>{
-  const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
-  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
-  const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
-  if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
   closeAirfieldPopup();
 });
 
-// TRACKS & ROIS
+let pointerDownPos = null;
+map.getTargetElement().addEventListener('pointerdown', e => { pointerDownPos = [e.clientX, e.clientY]; });
+
+map.on('click',evt=>{
+  // Ignore if mouse moved more than 5px (drag/pan)
+  if(pointerDownPos){
+    const dx = evt.originalEvent.clientX - pointerDownPos[0];
+    const dy = evt.originalEvent.clientY - pointerDownPos[1];
+    if(Math.sqrt(dx*dx+dy*dy) > 5) return;
+  }
+  const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
+  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
+  const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
+  if(acF){closeAirfieldPopup();selectAircraft(acF.get('aircraft').icao24);return;}
+  closeAirfieldPopup();
+});
+
 function altColor(agl){
   const c=ALTITUDE_PALETTE[isDark?'dark':'light'];
   if(agl===null||agl===undefined||agl>50000)return c.unknown;
