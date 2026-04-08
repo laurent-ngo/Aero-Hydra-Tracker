@@ -127,6 +127,59 @@
       border-right: 8px solid transparent;
       border-top: 8px solid var(--accent);
     }
+
+    /* ── WATERFIELD POPUP ── */
+    #waterfield-popup {
+      position: absolute;
+      background: var(--panel);
+      border: 1px solid #2196f3;
+      border-radius: 6px;
+      padding: 10px 12px 14px;
+      z-index: 300;
+      display: none;
+      min-width: 140px;
+      max-width: 280px;
+      pointer-events: none;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+    }
+    #waterfield-popup * { pointer-events: auto; }
+    #waterfield-popup.visible { display: block; }
+    #waterfield-popup::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid #2196f3;
+    }
+    .wp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .wp-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #2196f3;
+      letter-spacing: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wp-close {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
+    }
+    .wp-close:hover { color: var(--text); }
+    .wp-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+    }
     .ap-header {
       display: flex;
       align-items: center;
@@ -175,6 +228,59 @@
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
+    }
+
+    /* ── WATERFIELD POPUP ── */
+    #waterfield-popup {
+      position: absolute;
+      background: var(--panel);
+      border: 1px solid #2196f3;
+      border-radius: 6px;
+      padding: 10px 12px 14px;
+      z-index: 300;
+      display: none;
+      min-width: 140px;
+      max-width: 280px;
+      pointer-events: none;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+    }
+    #waterfield-popup * { pointer-events: auto; }
+    #waterfield-popup.visible { display: block; }
+    #waterfield-popup::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid #2196f3;
+    }
+    .wp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .wp-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #2196f3;
+      letter-spacing: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wp-close {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
+    }
+    .wp-close:hover { color: var(--text); }
+    .wp-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
     }
   </style>
 </head>
@@ -283,6 +389,24 @@
         </div>
         <div class="ap-grid" id="ap-grid"></div>
       </div>
+
+      <!-- WATERFIELD POPUP -->
+      <div id="waterfield-popup">
+        <div class="wp-header">
+          <div class="wp-title" id="wp-title">XXXX</div>
+          <button class="wp-close" onclick="closeWaterfieldPopup()">&#x2715;</button>
+        </div>
+        <div class="wp-grid" id="wp-grid"></div>
+      </div>
+
+      <!-- WATERFIELD POPUP -->
+      <div id="waterfield-popup">
+        <div class="wp-header">
+          <div class="wp-title" id="wp-title">XXXX</div>
+          <button class="wp-close" onclick="closeWaterfieldPopup()">&#x2715;</button>
+        </div>
+        <div class="wp-grid" id="wp-grid"></div>
+      </div>
     </div>
 
     <div id="replay-bar">
@@ -358,7 +482,7 @@ let mapReady = false;
 let isDark = localStorage.getItem('sw-theme') !== 'light';
 const TILES = {
   dark: 'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light:'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+  light:'https://{a-c}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 };
 const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark:TILES.light,attributions:'© OSM © CARTO'})});
 function applyTheme(dark){
@@ -368,7 +492,7 @@ function applyTheme(dark){
   tileLayer.getSource().setUrl(dark?TILES.dark:TILES.light);
   localStorage.setItem('sw-theme',dark?'dark':'light');
   updateLegendSwatches();
-  if(mapReady){clearIconCache();renderTracks();renderAircraft();renderAirfields();}
+  if(mapReady){clearIconCache();renderTracks();renderAircraft();renderAirfields();renderWaterfields();}
 }
 function updateLegendSwatches(){
   const p=ALTITUDE_PALETTE[isDark?'dark':'light'];
@@ -380,19 +504,20 @@ applyTheme(isDark);
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],mode='live',pollTimer=null;
 
 // MAP
-const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:7}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
+const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
 const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
 const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
-const airfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
-map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);
+const airfieldLayer  =new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
+const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
+map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);
 mapReady=true;
 
 // SPRITES
 const SPRITE_CELL=72,SPRITE_COLS=8;
 const spriteImg=new Image();
 spriteImg.src='sprites.png';
-spriteImg.onload=()=>{clearIconCache();if(mapReady){renderAircraft();renderAirfields();}};
+spriteImg.onload=()=>{clearIconCache();if(mapReady){renderAircraft();renderAirfields();renderWaterfields();}};
 const iconCache={};
 
 function buildTintedCanvas(iconId,color,size){
@@ -578,6 +703,177 @@ function closeAirfieldPopup(){
   activeAirfieldIcao=null;
 }
 
+// WATERFIELD MARKERS + POPUP
+let activeWaterfieldRef=null;
+
+function buildWaterfieldMarkerCanvas(){
+  const size=28,canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='rgba(33,150,243,0.15)';ctx.fill();
+  ctx.strokeStyle='#2196f3';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='#2196f3';
+  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('💧',cx,cy);
+  return canvas;
+}
+
+function renderWaterfields(){
+  const src=waterfieldLayer.getSource();src.clear();
+  if(!allAircraftFleet.length)return;
+
+  // Group fleet aircraft by latest_waterfield
+  const groups={};
+  allAircraftFleet.forEach(ac=>{
+    if(!ac.latest_waterfield)return;
+    const key=ac.latest_waterfield;
+    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:key};
+    groups[key].aircraft.push(ac);
+    // Use waterfield_lat/lon if available
+    if(ac.waterfield_lat!=null&&ac.waterfield_lon!=null){
+      groups[key].lat=ac.waterfield_lat;
+      groups[key].lon=ac.waterfield_lon;
+      if(ac.waterfield_name)groups[key].name=ac.waterfield_name;
+    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
+      groups[key].lat=ac.last_lat;
+      groups[key].lon=ac.last_lon;
+    }
+  });
+
+  const mc=buildWaterfieldMarkerCanvas();
+  Object.entries(groups).forEach(([ref,g])=>{
+    if(g.lat==null||g.lon==null)return;
+    const feat=new ol.Feature({
+      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
+      waterfield:ref,
+      waterfieldGroup:g
+    });
+    feat.setStyle(new ol.style.Style({
+      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
+      text:new ol.style.Text({
+        text:`${g.name}\n${g.aircraft.length}`,offsetY:-22,
+        font:"bold 11px 'Share Tech Mono',monospace",
+        fill:new ol.style.Fill({color:'#2196f3'}),
+        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
+        padding:[2,4,2,4]
+      })
+    }));
+    feat.setId('wf_'+ref);
+    src.addFeature(feat);
+  });
+}
+
+function showWaterfieldPopup(feat,pixel){
+  const g=feat.get('waterfieldGroup'),ref=feat.get('waterfield');
+  activeWaterfieldRef=ref;
+  document.getElementById('wp-title').textContent=`${g.name} (${g.aircraft.length})`;
+  renderWaterfieldPopupGrid(g.aircraft);
+  const popup=document.getElementById('waterfield-popup');
+  popup.classList.add('visible');
+  requestAnimationFrame(()=>{
+    const mapEl=document.getElementById('map');
+    const pw=popup.offsetWidth||180,ph=popup.offsetHeight||80;
+    let left=pixel[0]-pw/2,top=pixel[1]-ph-20;
+    left=Math.max(8,Math.min(left,mapEl.offsetWidth-pw-8));
+    top=Math.max(8,Math.min(top,mapEl.offsetHeight-ph-8));
+    popup.style.left=left+'px';popup.style.top=top+'px';
+  });
+}
+
+function renderWaterfieldPopupGrid(aircraft){
+  const grid=document.getElementById('wp-grid');grid.innerHTML='';
+  const byModel={};
+  aircraft.forEach(ac=>{
+    const key=ac.model||'Unknown';
+    if(!byModel[key])byModel[key]=[];
+    byModel[key].push(ac);
+  });
+  Object.entries(byModel).forEach(([model,acs])=>{
+    const header=document.createElement('div');
+    header.style.cssText='grid-column:1/-1;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;';
+    header.textContent=model;
+    grid.appendChild(header);
+    acs.forEach(ac=>{
+      const color=acColor(ac);
+      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
+      const canvas=buildTintedCanvas(ac.icon,color,size);
+      const cell=document.createElement('div');
+      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
+      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
+      cell.onclick=()=>selectAircraft(ac.icao24);
+      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
+      disp.getContext('2d').drawImage(canvas,0,0);
+      cell.appendChild(disp);
+      const lbl=document.createElement('div');lbl.className='ap-label';
+      lbl.textContent=ac.registration||ac.icao24;
+      cell.appendChild(lbl);
+      grid.appendChild(cell);
+    });
+  });
+}
+
+function closeWaterfieldPopup(){
+  document.getElementById('waterfield-popup').classList.remove('visible');
+  activeWaterfieldRef=null;
+}
+
+
+// WATERFIELD MARKERS
+function buildWaterfieldMarkerCanvas(){
+  const size=28,canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='rgba(33,150,243,0.15)';ctx.fill();
+  ctx.strokeStyle='#2196f3';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='#2196f3';
+  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('\u{1F4A7}',cx,cy);
+  return canvas;
+}
+
+function renderWaterfields(){
+  const src=waterfieldLayer.getSource();src.clear();
+  if(!allAircraftFleet.length)return;
+  const groups={};
+  allAircraftFleet.forEach(ac=>{
+    if(!ac.last_waterfield)return;
+    const key=ac.last_waterfield;
+    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.waterfield_name||key};
+    groups[key].aircraft.push(ac);
+    if(ac.waterfield_lat!=null&&ac.waterfield_lon!=null){
+      groups[key].lat=ac.waterfield_lat;
+      groups[key].lon=ac.waterfield_lon;
+      if(ac.waterfield_name)groups[key].name=ac.waterfield_name;
+    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
+      groups[key].lat=ac.last_lat;
+      groups[key].lon=ac.last_lon;
+    }
+  });
+  const mc=buildWaterfieldMarkerCanvas();
+  Object.entries(groups).forEach(([ref,g])=>{
+    if(g.lat==null||g.lon==null)return;
+    const feat=new ol.Feature({
+      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
+      waterfield:ref,
+      waterfieldGroup:g
+    });
+    feat.setStyle(new ol.style.Style({
+      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
+      text:new ol.style.Text({
+        text:`${g.name}\n${g.aircraft.length}`,offsetY:-22,
+        font:"bold 11px 'Share Tech Mono',monospace",
+        fill:new ol.style.Fill({color:'#2196f3'}),
+        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
+        padding:[2,4,2,4]
+      })
+    }));
+    feat.setId('wf_'+ref);
+    src.addFeature(feat);
+  });
+}
+
 // MAP EVENTS
 const tooltip=document.getElementById('tooltip');
 map.on('pointermove',evt=>{
@@ -602,6 +898,8 @@ map.on('pointermove',evt=>{
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
   if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
+  const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
+  if(wfF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
   tooltip.style.display='none';map.getTargetElement().style.cursor='';
 });
 
@@ -616,10 +914,12 @@ map.on('click',evt=>{
     if(Math.sqrt(dx*dx+dy*dy) > 5) return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
-  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
+  if(afF){closeWaterfieldPopup();showAirfieldPopup(afF,evt.pixel);return;}
+  const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
+  if(wfF){closeAirfieldPopup();showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
-  if(acF){closeAirfieldPopup();selectAircraft(acF.get('aircraft').icao24);return;}
-  closeAirfieldPopup();
+  if(acF){closeAirfieldPopup();closeWaterfieldPopup();selectAircraft(acF.get('aircraft').icao24);return;}
+  closeAirfieldPopup();closeWaterfieldPopup();
 });
 
 function altColor(agl){
@@ -743,6 +1043,7 @@ async function fetchAllAircraftFleet(){
     console.log('[Fleet] Loaded', allAircraftFleet.length, 'aircraft, first:', allAircraftFleet[0]);
     console.log('[Fleet] Sample airfield coords:', allAircraftFleet.slice(0,3).map(a=>({reg:a.registration,last_airfield:a.last_airfield,airfield_lat:a.airfield_lat,airfield_lon:a.airfield_lon})));
     renderAirfields();
+    renderWaterfields();
   }catch(e){console.warn('[Fleet] fetch failed:',e.message);}
 }
 async function fetchTrack(icao24){
@@ -786,17 +1087,29 @@ function applyFilters(){
   document.getElementById('stat-aircraft').textContent=filteredAircraft.length;
   document.getElementById('grid-row-count').textContent=`${filteredAircraft.length} rows`;
   renderAircraftList();
+  // Refresh open waterfield popup
+  if(activeWaterfieldRef){
+    const feat=waterfieldLayer.getSource().getFeatureById('wf_'+activeWaterfieldRef);
+    if(feat)renderWaterfieldPopupGrid(feat.get('waterfieldGroup').aircraft);
+    else closeWaterfieldPopup();
+  }
   // Refresh open airfield popup
   if(activeAirfieldIcao){
     const feat=airfieldLayer.getSource().getFeatureById('af_'+activeAirfieldIcao);
     if(feat)renderAirfieldPopupGrid(feat.get('airfieldGroup').aircraft);
     else closeAirfieldPopup();
   }
+  // Refresh open waterfield popup
+  if(activeWaterfieldRef){
+    const feat=waterfieldLayer.getSource().getFeatureById('wf_'+activeWaterfieldRef);
+    if(feat)renderWaterfieldPopupGrid(feat.get('waterfieldGroup').aircraft);
+    else closeWaterfieldPopup();
+  }
 }
 
 function selectAircraft(icao24){
   selectedIcao=icao24;
-  renderAircraft();renderAirfields();renderTracks();
+  renderAircraft();renderAirfields();renderWaterfields();renderTracks();
   document.querySelectorAll('.aircraft-item').forEach(el=>el.classList.toggle('active',el.dataset.icao===icao24));
   gridApi.forEachNode(n=>{if(n.data.icao24===icao24)n.setSelected(true);});
   const ac=allAircraft.find(a=>a.icao24===icao24);

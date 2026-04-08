@@ -50,7 +50,8 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
     query = db.query(
         migrate.TrackedAircraft, 
         migrate.Airfield,
-        migrate.FlightTelemetry
+        migrate.FlightTelemetry,
+        migrate.WaterLocation
     ).outerjoin(
         migrate.FlightTelemetry,
         and_(
@@ -60,6 +61,9 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
     ).outerjoin(
         migrate.Airfield, 
         migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
+    ).outerjoin(
+        migrate.WaterLocation,
+        migrate.FlightTelemetry.latest_waterfield == migrate.WaterLocation.ref
     )
 
     if icao_filter is not None:
@@ -83,18 +87,25 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
             "at_airfield": ft.at_airfield if ft else None,
            
             "last_timestamp": a.last_seen,
-            "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
             "true_track": ft.true_track if ft else None,
+
+            "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
             "airfield_name": af.name if af else "Unknown", # The full name
             "airfield_lat": af.lat if af else "Unknown", # The full name
             "airfield_lon": af.lon if af else "Unknown", # The full name
+            
+            "last_waterfield": ft.latest_waterfield if ft else "", # The ICAO code (e.g., RA01)
+            "waterfield_name": wl.name if wl else "",
+            "waterfield_lat": wl.lat if wl else None,
+            "waterfield_lon": wl.lon if wl else None,
+
             "last_lat": ft.lat if ft else None,
             "last_lon": ft.lon if ft else None,
             "last_speed_kt": ft.speed_kt if ft else None,
             "last_speed_kph": ft.speed_kph if ft else None,
             "last_baro_alt_ft": ft.baro_altitude_ft if ft else None,
             "last_agl_alt_ft": ft.altitude_agl_ft if ft else None
-        } for a, af, ft in results
+        } for a, af, ft, wl in results
     ]
 
 
