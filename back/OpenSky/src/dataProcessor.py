@@ -160,6 +160,7 @@ def get_lastest_aircraft_data():
     last_known_airfields = db.query(
         migrate.FlightTelemetry.icao24,
         migrate.FlightTelemetry.latest_airfield,
+        migrate.FlightTelemetry.latest_waterfield,
         migrate.FlightTelemetry.is_full,
         migrate.FlightTelemetry.timestamp
     ).filter(
@@ -171,10 +172,11 @@ def get_lastest_aircraft_data():
         desc(migrate.FlightTelemetry.timestamp)
     ).all()
     
-    airfield_dict = {row.icao24: row.latest_airfield for row in last_known_airfields}
-    is_full_dict = {row.icao24: row.is_full for row in last_known_airfields}
+    airfield_dict   = {row.icao24: row.latest_airfield   for row in last_known_airfields}
+    is_full_dict    = {row.icao24: row.is_full            for row in last_known_airfields}
+    waterfield_dict = {row.icao24: row.latest_waterfield  for row in last_known_airfields}
 
-    return airfield_dict, is_full_dict
+    return airfield_dict, is_full_dict, waterfield_dict
 
 def get_water_bombers():
     water_bombers = db.query(
@@ -212,7 +214,7 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
             return af
     return None
 
-def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius=8.0, airfield_alt_threshold=1500):
+def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius=8.0, airfield_alt_threshold=1500, waterfield_alt_threshold=200):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
@@ -239,23 +241,8 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
         logger.debug("No new points to label.")
         return
     
-    
-    airfield_dict, is_full_dict = get_lastest_aircraft_data()
+    airfield_dict, is_full_dict, waterfield_dict  = get_lastest_aircraft_data()
     water_bombers_dict = get_water_bombers()
-
-    last_known_waterfields = db.query(
-        migrate.FlightTelemetry.icao24,
-        migrate.FlightTelemetry.latest_waterfield,
-        migrate.FlightTelemetry.timestamp
-    ).filter(
-        migrate.FlightTelemetry.latest_waterfield.isnot(None)
-    ).distinct(
-        migrate.FlightTelemetry.icao24
-    ).order_by(
-        migrate.FlightTelemetry.icao24,
-        desc(migrate.FlightTelemetry.timestamp)
-    ).all()
-    waterfield_dict = {row.icao24: row.latest_waterfield for row in last_known_waterfields}
 
     count_low_pass = 0
     count_over_water = 0
@@ -280,6 +267,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
             p.at_airfield = True
             p.latest_airfield = nearby_af.icao
             airfield_dict[p.icao24] = nearby_af.icao
+            p.latest_waterfield = None
             p.is_full = True if p.icao24 in water_bombers_dict else False
             count_at_airfield += 1
 
@@ -301,19 +289,21 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
                 count_low_pass += 1
                 p.is_full = False
 
-        # Waterfield check — seaplane inside a linked water ROI below threshold
-        p.latest_waterfield = waterfield_dict.get(p.icao24)  # inherit by default
+            # Waterfield check — seaplane inside a linked water ROI below threshold
+            p.latest_waterfield = waterfield_dict.get(p.icao24)  # inherit by default
 
-        ac = water_bombers_dict.get(p.icao24)
-        is_seaplane = db.query(migrate.TrackedAircraft).filter_by(icao24=p.icao24).first()
-        if is_seaplane and is_seaplane.sea_landing and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
-            pt = Point(p.lat, p.lon)  # [lat,lon] space
-            for poly, ref in water_roi_polys:
-                if poly.contains(pt):
-                    p.latest_waterfield = ref
-                    waterfield_dict[p.icao24] = ref
-                    count_at_waterfield += 1
-                    break
+            ac = water_bombers_dict.get(p.icao24)
+            is_seaplane = db.query(migrate.TrackedAircraft).filter_by(icao24=p.icao24).first()
+            if is_seaplane and is_seaplane.sea_landing and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
+                pt = Point(p.lat, p.lon)  # [lat,lon] space
+                for poly, ref in water_roi_polys:
+                    if poly.contains(pt):
+                        p.latest_waterfield = ref
+                        waterfield_dict[p.icao24] = ref
+                        count_at_waterfield += 1
+                        break
+            else:
+                p.latest_waterfield = waterfield_dict[p.icao24]
 
         p.is_processed = True
 

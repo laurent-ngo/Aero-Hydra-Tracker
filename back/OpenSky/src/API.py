@@ -84,6 +84,7 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
            
             "last_timestamp": a.last_seen,
             "last_airfield": ft.latest_airfield if ft else "", # The ICAO code (e.g., LSGG)
+            "last_waterfield": ft.latest_waterfield if ft else "", # The ICAO code (e.g., RA01)
             "true_track": ft.true_track if ft else None,
             "airfield_name": af.name if af else "Unknown", # The full name
             "airfield_lat": af.lat if af else "Unknown", # The full name
