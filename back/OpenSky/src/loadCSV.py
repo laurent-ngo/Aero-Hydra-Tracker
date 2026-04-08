@@ -3,7 +3,7 @@ import sys
 import csv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from migrate import TrackedAircraft, Airfield
+from migrate import TrackedAircraft, Airfield, WaterLocation
 import logging
 logger = logging.getLogger(__name__)
 
@@ -105,11 +105,56 @@ def load_airfields_from_csv(file_path):
     finally:
         session.close()
 
+def load_water_locations_from_csv(file_path):
+    user     = os.getenv('DB_USER', 'neondb_owner')
+    password = os.getenv('DB_PASSWORD')
+    db_host  = os.getenv('DB_HOST')
+    db_name  = os.getenv('DB_NAME', 'neondb')
+    db_opts  = os.getenv('DB_OPTIONS', 'sslmode=disable')
+
+    db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
+
+    engine  = create_engine(db_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        with open(file_path, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            new_records     = 0
+            skipped_records = 0
+
+            for row in reader:
+                ref = row['ref'].strip()
+
+                exists = session.query(WaterLocation).filter_by(ref=ref).first()
+
+                if not exists:
+                    location = WaterLocation(
+                        ref=ref,
+                        name=row['name'].strip(),
+                        lat=float(row['lat'].strip()),
+                        lon=float(row['lon'].strip())
+                    )
+                    session.add(location)
+                    new_records += 1
+                else:
+                    skipped_records += 1
+
+            session.commit()
+            logger.info(f"Water locations complete: {new_records} added, {skipped_records} already existed.")
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to load water locations CSV: {e}")
+    finally:
+        session.close()
+
+
 if __name__ == "__main__":
-    # Check if argument is provided
-    if len(sys.argv) < 3:
-        logger.warning("Usage: python3 loadCSV.py <aircrafts.csv> <airfields.csv>")
+    if len(sys.argv) < 4:
+        logger.warning("Usage: python3 loadCSV.py <aircrafts.csv> <airfields.csv> <water_locations.csv>")
         sys.exit(1)
-    
+
     load_aircrafts_from_csv(sys.argv[1])
     load_airfields_from_csv(sys.argv[2])
+    load_water_locations_from_csv(sys.argv[3])

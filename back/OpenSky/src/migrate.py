@@ -100,6 +100,15 @@ class Airfield(Base):
     lat = Column(Float)
     lon = Column(Float)
 
+class WaterLocation(Base):
+    __tablename__ = 'water_locations'
+
+    id  = Column(Integer, primary_key=True)
+    ref = Column(String(10), unique=True)
+    name = Column(String)
+    lat = Column(Float)
+    lon = Column(Float)
+    
 
 # --- Migration Logic ---
 def run_migration():

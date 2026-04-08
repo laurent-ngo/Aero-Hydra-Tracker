@@ -64,7 +64,8 @@ case "$1" in
         if [[ -f "$AIRCRAFT_FLEET_CSV" && -f "$AIRFIELDS_CSV" ]]; then
             info "Loading aircrafts from ${AIRCRAFT_FLEET_CSV}..."
             info "Loading airfields from ${AIRFIELDS_CSV}..."
-            python3 "$SCRIPT_DIR/src/loadCSV.py" "${SCRIPT_DIR}/${AIRCRAFT_FLEET_CSV}" "${SCRIPT_DIR}/${AIRFIELDS_CSV}"
+            info "Loading waterfields from ${WATERFIELDS_CSV}..."
+            python3 "$SCRIPT_DIR/src/loadCSV.py" "${SCRIPT_DIR}/${AIRCRAFT_FLEET_CSV}" "${SCRIPT_DIR}/${AIRFIELDS_CSV}" "${SCRIPT_DIR}/${WATERFIELDS_CSV}"
         else
             error "${AIRCRAFT_FLEET_CSV} not found!"
             error "${AIRFIELDS_CSV} not found!"
