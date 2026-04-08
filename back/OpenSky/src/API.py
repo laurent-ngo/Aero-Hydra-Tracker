@@ -144,7 +144,7 @@ def get_telemetry(
                 detail="Start timestamp must be before stop timestamp.")
         if timespan > 86400:
             raise HTTPException(status_code=400, 
-                detail="Timespan exceeds 24 hours. Please reduce the range for a more precise mission view."
+                detail="Timespan exceeds 7 Days. Please reduce the range for a more precise mission view."
             )
         
     # Query construction

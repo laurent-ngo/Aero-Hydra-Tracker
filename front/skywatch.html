@@ -4,510 +4,178 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
-
-  <!-- OpenLayers -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
-
-  <!-- AG Grid Community (free) -->
   <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
-
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap" rel="stylesheet"/>
-
   <style>
-    :root {
-      /* shared */
-      --accent:      #0099bb;
-      --fire:        #e03030;
-      --water:       #1a7fd4;
-      --training:    #8b2ab0;
-      --sidebar-w:   320px;
-      --header-h:    52px;
-    }
+    :root { --accent:#0099bb; --fire:#e03030; --water:#1a7fd4; --training:#8b2ab0; --sidebar-w:320px; --header-h:52px; }
+    :root,[data-theme="dark"]{--bg:#0a0e17;--panel:#0f1623;--panel-border:#1e2d45;--accent:#00e5ff;--text:#c8d8e8;--text-dim:#5a7a9a;--input-bg:#070a12;--row-hover:rgba(0,229,255,0.06);--row-sel:rgba(0,229,255,0.12);--grid-header:#070a12;}
+    [data-theme="light"]{--bg:#f0f4f8;--panel:#ffffff;--panel-border:#d0dce8;--accent:#007a9e;--text:#1a2a3a;--text-dim:#7090a8;--input-bg:#e8eef4;--row-hover:rgba(0,122,158,0.06);--row-sel:rgba(0,122,158,0.12);--grid-header:#e8eef4;--fire:#cc2020;--water:#1565b0;--training:#7b1f9e;}
+    .leg-row{display:flex;align-items:center;gap:7px;white-space:nowrap;}
+    .leg-swatch{display:inline-block;width:22px;height:3px;border-radius:2px;flex-shrink:0;}
+    #replay-bar{display:none;flex-shrink:0;background:var(--panel);border-top:1px solid var(--panel-border);padding:8px 16px;gap:12px;align-items:center;font-family:'Share Tech Mono',monospace;font-size:11px;}
+    #replay-bar.visible{display:flex;}
+    #replay-slider{flex:1;accent-color:var(--accent);height:4px;cursor:pointer;}
+    .replay-btn{background:transparent;border:1px solid var(--panel-border);color:var(--text);width:30px;height:30px;border-radius:3px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;}
+    .replay-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .replay-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+    .replay-time{color:var(--accent);min-width:160px;text-align:center;letter-spacing:1px;}
+    .replay-speed{background:var(--bg);border:1px solid var(--panel-border);color:var(--text);padding:4px 6px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;}
+    body,header,.sidebar,.bottom-panel,input,select,.btn,.modal,.aircraft-item{transition:background 0.25s,border-color 0.25s,color 0.25s;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+    header{height:var(--header-h);background:var(--panel);border-bottom:1px solid var(--panel-border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:100;}
+    .logo{font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--accent);letter-spacing:3px;}
+    .logo span{color:var(--text-dim);}
+    .header-stats{display:flex;gap:24px;margin-left:auto;font-family:'Share Tech Mono',monospace;}
+    .stat{display:flex;flex-direction:column;align-items:flex-end;}
+    .stat-val{color:var(--accent);font-size:15px;}
+    .stat-lbl{color:var(--text-dim);font-size:10px;letter-spacing:1px;}
+    .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.5s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--accent);}50%{opacity:0.3;box-shadow:none;}}
+    .header-btn{background:transparent;border:1px solid var(--panel-border);color:var(--text);padding:6px 14px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:13px;transition:all 0.2s;}
+    .header-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .header-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600;}
+    .body{display:flex;flex:1;overflow:hidden;}
+    .sidebar{width:var(--sidebar-w);background:var(--panel);border-right:1px solid var(--panel-border);display:flex;flex-direction:column;transition:width 0.3s ease;overflow:hidden;flex-shrink:0;}
+    .sidebar.right{border-right:none;border-left:1px solid var(--panel-border);}
+    .sidebar.collapsed{width:36px;}
+    .sidebar.collapsed .sidebar-content{opacity:0;pointer-events:none;}
+    .sidebar-header{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--panel-border);gap:8px;flex-shrink:0;cursor:pointer;user-select:none;min-height:40px;}
+    .sidebar-header:hover{background:rgba(0,229,255,0.04);}
+    .sidebar-title{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;white-space:nowrap;}
+    .collapse-btn{margin-left:auto;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;}
+    .sidebar-content{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;transition:opacity 0.2s;}
+    .sidebar-content::-webkit-scrollbar{width:4px;}
+    .sidebar-content::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:2px;}
+    .sidebar.collapsed .sidebar-title{display:none;}
+    .sidebar-vert-label{writing-mode:vertical-rl;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;display:none;margin:auto;}
+    .sidebar.collapsed .sidebar-vert-label{display:block;}
+    .section-label{font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin:14px 0 8px;}
+    .section-label:first-child{margin-top:0;}
+    .filter-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+    .filter-row label{font-size:12px;color:var(--text-dim);min-width:70px;white-space:nowrap;}
+    input[type="text"],input[type="number"],select{background:var(--input-bg);border:1px solid var(--panel-border);color:var(--text);padding:5px 8px;border-radius:3px;font-size:12px;font-family:'Barlow',sans-serif;flex:1;outline:none;min-width:0;}
+    input:focus,select:focus{border-color:var(--accent);}
+    select option{background:var(--panel);}
+    .btn{background:transparent;border:1px solid var(--panel-border);color:var(--text);padding:7px 12px;border-radius:3px;cursor:pointer;font-size:12px;font-family:'Barlow',sans-serif;transition:all 0.2s;width:100%;margin-bottom:6px;text-align:left;display:flex;align-items:center;gap:8px;}
+    .btn:hover{border-color:var(--accent);color:var(--accent);}
+    .btn.primary{border-color:var(--accent);color:var(--accent);}
+    .btn.primary:hover{background:var(--accent);color:var(--bg);}
+    .aircraft-item{padding:8px 10px;border:1px solid var(--panel-border);border-radius:3px;margin-bottom:6px;cursor:pointer;transition:all 0.15s;font-size:12px;}
+    .aircraft-item:hover,.aircraft-item.active{border-color:var(--accent);background:rgba(0,229,255,0.05);}
+    .aircraft-callsign{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:13px;margin-bottom:3px;}
+    .aircraft-meta{color:var(--text-dim);font-size:11px;}
+    .badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:10px;font-family:'Share Tech Mono',monospace;letter-spacing:1px;text-transform:uppercase;}
+    .badge.fire{background:rgba(255,68,68,0.2);color:var(--fire);}
+    .badge.water{background:rgba(33,150,243,0.2);color:var(--water);}
+    .badge.training{background:rgba(156,39,176,0.2);color:var(--training);}
+    input[type="datetime-local"]{background:var(--input-bg);border:1px solid var(--panel-border);color:var(--text);padding:5px 8px;border-radius:3px;font-size:11px;font-family:'Share Tech Mono',monospace;flex:1;outline:none;min-width:0;color-scheme:dark;}
+    [data-theme="light"] input[type="datetime-local"]{color-scheme:light;}
+    input[type="datetime-local"]:focus{border-color:var(--accent);}
+    #time-range-display{white-space:pre;}
+    #map{position:absolute;inset:0;}
+    .map-overlay{position:absolute;bottom:16px;left:16px;z-index:10;display:flex;gap:6px;}
+    .map-btn{background:var(--panel);border:1px solid var(--panel-border);color:var(--text);width:36px;height:36px;border-radius:3px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+    .map-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .bottom-panel{height:240px;background:var(--panel);border-top:1px solid var(--panel-border);display:flex;flex-direction:column;flex-shrink:0;transition:height 0.3s;}
+    .bottom-panel.collapsed{height:36px;}
+    .bottom-panel-header{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--panel-border);cursor:pointer;flex-shrink:0;gap:10px;min-height:36px;}
+    .bottom-panel-header:hover{background:rgba(0,229,255,0.04);}
+    .bottom-panel-title{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+    #grid-container{flex:1;overflow:hidden;}
+    .ag-theme-alpine-dark{--ag-background-color:var(--panel);--ag-odd-row-background-color:rgba(128,128,128,0.04);--ag-header-background-color:var(--grid-header);--ag-border-color:var(--panel-border);--ag-row-hover-color:var(--row-hover);--ag-selected-row-background-color:var(--row-sel);--ag-foreground-color:var(--text);--ag-font-family:'Barlow',sans-serif;--ag-font-size:12px;--ag-header-foreground-color:var(--text-dim);}
+    .tooltip{position:absolute;background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:10px 14px;font-size:12px;pointer-events:none;z-index:200;display:none;min-width:180px;}
+    .tooltip-callsign{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:14px;margin-bottom:6px;}
+    .tooltip-row{display:flex;justify-content:space-between;gap:16px;margin-bottom:3px;}
+    .tooltip-key{color:var(--text-dim);}
+    .tooltip-val{color:var(--text);font-family:'Share Tech Mono',monospace;}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;display:none;align-items:center;justify-content:center;}
+    .modal-backdrop.open{display:flex;}
+    .modal{background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:24px;min-width:380px;}
+    .modal h2{font-family:'Share Tech Mono',monospace;color:var(--accent);font-size:13px;letter-spacing:2px;margin-bottom:18px;}
+    .modal-row{margin-bottom:12px;}
+    .modal-row label{display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;letter-spacing:1px;}
+    .modal-row input{width:100%;}
+    .modal-actions{display:flex;gap:8px;margin-top:20px;}
+    .modal-actions .btn{margin-bottom:0;flex:1;justify-content:center;}
 
-    /* ── DARK THEME (default) ── */
-    :root, [data-theme="dark"] {
-      --bg:          #0a0e17;
-      --panel:       #0f1623;
-      --panel-border:#1e2d45;
-      --accent:      #00e5ff;
-      --text:        #c8d8e8;
-      --text-dim:    #5a7a9a;
-      --input-bg:    #070a12;
-      --row-hover:   rgba(0,229,255,0.06);
-      --row-sel:     rgba(0,229,255,0.12);
-      --grid-header: #070a12;
-      --map-tiles:   'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    }
-
-    /* ── LIGHT THEME ── */
-    [data-theme="light"] {
-      --bg:          #f0f4f8;
-      --panel:       #ffffff;
-      --panel-border:#d0dce8;
-      --accent:      #007a9e;
-      --text:        #1a2a3a;
-      --text-dim:    #7090a8;
-      --input-bg:    #e8eef4;
-      --row-hover:   rgba(0,122,158,0.06);
-      --row-sel:     rgba(0,122,158,0.12);
-      --grid-header: #e8eef4;
-      --fire:        #cc2020;
-      --water:       #1565b0;
-      --training:    #7b1f9e;
-    }
-
-    .leg-row { display:flex; align-items:center; gap:7px; white-space:nowrap; }
-    .leg-swatch { display:inline-block; width:22px; height:3px; border-radius:2px; flex-shrink:0; }
-
-    /* ── REPLAY BAR ── */
-    #replay-bar {
-      display: none;
-      flex-shrink: 0;
-      background: var(--panel);
-      border-top: 1px solid var(--panel-border);
-      padding: 8px 16px;
-      gap: 12px;
-      align-items: center;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-    }
-    #replay-bar.visible { display: flex; }
-
-    #replay-slider {
-      flex: 1;
-      accent-color: var(--accent);
-      height: 4px;
-      cursor: pointer;
-    }
-
-    .replay-btn {
-      background: transparent;
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      width: 30px; height: 30px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s;
-      flex-shrink: 0;
-    }
-    .replay-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .replay-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-
-    .replay-time {
-      color: var(--accent);
-      min-width: 160px;
-      text-align: center;
-      letter-spacing: 1px;
-    }
-
-    .replay-speed {
-      background: var(--bg);
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      padding: 4px 6px;
-      border-radius: 3px;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      outline: none;
-    }
-
-    /* ── THEME TRANSITION ── */
-    body, header, .sidebar, .bottom-panel,
-    input, select, .btn, .modal, .aircraft-item {
-      transition: background 0.25s, border-color 0.25s, color 0.25s;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'Barlow', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      height: 100vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* ── HEADER ── */
-    header {
-      height: var(--header-h);
-      background: var(--panel);
-      border-bottom: 1px solid var(--panel-border);
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      gap: 12px;
-      flex-shrink: 0;
-      z-index: 100;
-    }
-
-    .logo {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 18px;
-      color: var(--accent);
-      letter-spacing: 3px;
-    }
-    .logo span { color: var(--text-dim); }
-
-    .header-stats {
-      display: flex;
-      gap: 24px;
-      margin-left: auto;
-      font-family: 'Share Tech Mono', monospace;
-    }
-
-    .stat { display: flex; flex-direction: column; align-items: flex-end; }
-    .stat-val { color: var(--accent); font-size: 15px; }
-    .stat-lbl { color: var(--text-dim); font-size: 10px; letter-spacing: 1px; }
-
-    .pulse-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
-      50%       { opacity: 0.3; box-shadow: none; }
-    }
-
-    .header-btn {
-      background: transparent;
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      padding: 6px 14px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: 'Barlow', sans-serif;
-      font-size: 13px;
-      transition: all 0.2s;
-    }
-    .header-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .header-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
-
-    /* ── BODY LAYOUT ── */
-    .body {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    /* ── SIDEBARS ── */
-    .sidebar {
-      width: var(--sidebar-w);
-      background: var(--panel);
-      border-right: 1px solid var(--panel-border);
-      display: flex;
-      flex-direction: column;
-      transition: width 0.3s ease;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .sidebar.right { border-right: none; border-left: 1px solid var(--panel-border); }
-    .sidebar.collapsed { width: 36px; }
-    .sidebar.collapsed .sidebar-content { opacity: 0; pointer-events: none; }
-
-    .sidebar-header {
-      display: flex;
-      align-items: center;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--panel-border);
-      gap: 8px;
-      flex-shrink: 0;
-      cursor: pointer;
-      user-select: none;
-      min-height: 40px;
-    }
-    .sidebar-header:hover { background: rgba(0,229,255,0.04); }
-
-    .sidebar-title {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 2px;
-      color: var(--accent);
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .collapse-btn {
-      margin-left: auto;
-      background: none;
-      border: none;
-      color: var(--text-dim);
-      cursor: pointer;
-      font-size: 14px;
-      padding: 2px 4px;
-      flex-shrink: 0;
-    }
-
-    .sidebar-content {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 12px;
-      transition: opacity 0.2s;
-    }
-    .sidebar-content::-webkit-scrollbar { width: 4px; }
-    .sidebar-content::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
-
-    .sidebar.collapsed .sidebar-title { display: none; }
-    .sidebar-vert-label {
-      writing-mode: vertical-rl;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 9px;
-      letter-spacing: 2px;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      display: none;
-      margin: auto;
-    }
-    .sidebar.collapsed .sidebar-vert-label { display: block; }
-
-    /* ── FORM ELEMENTS ── */
-    .section-label {
-      font-size: 10px;
-      letter-spacing: 2px;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      margin: 14px 0 8px;
-    }
-    .section-label:first-child { margin-top: 0; }
-
-    .filter-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .filter-row label {
-      font-size: 12px;
-      color: var(--text-dim);
-      min-width: 70px;
-      white-space: nowrap;
-    }
-
-    input[type="text"], input[type="number"], select {
-      background: var(--input-bg);
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      padding: 5px 8px;
-      border-radius: 3px;
-      font-size: 12px;
-      font-family: 'Barlow', sans-serif;
-      flex: 1;
-      outline: none;
-      min-width: 0;
-    }
-    input:focus, select:focus { border-color: var(--accent); }
-    select option { background: var(--panel); }
-
-    .btn {
-      background: transparent;
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      padding: 7px 12px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: 'Barlow', sans-serif;
-      transition: all 0.2s;
-      width: 100%;
-      margin-bottom: 6px;
-      text-align: left;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .btn:hover { border-color: var(--accent); color: var(--accent); }
-    .btn.primary { border-color: var(--accent); color: var(--accent); }
-    .btn.primary:hover { background: var(--accent); color: var(--bg); }
-
-    /* ── AIRCRAFT LIST ── */
-    .aircraft-item {
-      padding: 8px 10px;
-      border: 1px solid var(--panel-border);
-      border-radius: 3px;
-      margin-bottom: 6px;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-size: 12px;
-    }
-    .aircraft-item:hover, .aircraft-item.active {
-      border-color: var(--accent);
-      background: rgba(0,229,255,0.05);
-    }
-    .aircraft-callsign {
-      font-family: 'Share Tech Mono', monospace;
-      color: var(--accent);
-      font-size: 13px;
-      margin-bottom: 3px;
-    }
-    .aircraft-meta { color: var(--text-dim); font-size: 11px; }
-
-    .badge {
-      display: inline-block;
-      padding: 1px 6px;
-      border-radius: 2px;
-      font-size: 10px;
-      font-family: 'Share Tech Mono', monospace;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-    .badge.fire     { background: rgba(255,68,68,0.2);   color: var(--fire); }
-    .badge.water    { background: rgba(33,150,243,0.2);  color: var(--water); }
-    .badge.training { background: rgba(156,39,176,0.2);  color: var(--training); }
-
-    input[type="datetime-local"] {
-      background: var(--input-bg);
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      padding: 5px 8px;
-      border-radius: 3px;
-      font-size: 11px;
-      font-family: 'Share Tech Mono', monospace;
-      flex: 1;
-      outline: none;
-      min-width: 0;
-      color-scheme: dark;
-    }
-    [data-theme="light"] input[type="datetime-local"] { color-scheme: light; }
-    input[type="datetime-local"]:focus { border-color: var(--accent); }
-
-    #time-range-display { white-space: pre; }
-
-    /* ── MAP ── */
-    #map {
-      position: absolute;
-      inset: 0;
-    }
-
-    .map-overlay {
-      position: absolute;
-      bottom: 16px;
-      left: 16px;
-      z-index: 10;
-      display: flex;
-      gap: 6px;
-    }
-    .map-btn {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      width: 36px; height: 36px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.2s;
-    }
-    .map-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-    /* ── BOTTOM PANEL ── */
-    .bottom-panel {
-      height: 240px;
-      background: var(--panel);
-      border-top: 1px solid var(--panel-border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      transition: height 0.3s;
-    }
-    .bottom-panel.collapsed { height: 36px; }
-
-    .bottom-panel-header {
-      display: flex;
-      align-items: center;
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--panel-border);
-      cursor: pointer;
-      flex-shrink: 0;
-      gap: 10px;
-      min-height: 36px;
-    }
-    .bottom-panel-header:hover { background: rgba(0,229,255,0.04); }
-
-    .bottom-panel-title {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 2px;
-      color: var(--accent);
-      text-transform: uppercase;
-    }
-
-    #grid-container { flex: 1; overflow: hidden; }
-
-    /* ── AG Grid theme ── */
-    .ag-theme-alpine-dark {
-      --ag-background-color: var(--panel);
-      --ag-odd-row-background-color: rgba(128,128,128,0.04);
-      --ag-header-background-color: var(--grid-header);
-      --ag-border-color: var(--panel-border);
-      --ag-row-hover-color: var(--row-hover);
-      --ag-selected-row-background-color: var(--row-sel);
-      --ag-foreground-color: var(--text);
-      --ag-font-family: 'Barlow', sans-serif;
-      --ag-font-size: 12px;
-      --ag-header-foreground-color: var(--text-dim);
-    }
-
-    /* ── TOOLTIP ── */
-    .tooltip {
+    /* ── AIRFIELD POPUP ── */
+    #airfield-popup {
       position: absolute;
       background: var(--panel);
       border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 10px 14px;
-      font-size: 12px;
-      pointer-events: none;
-      z-index: 200;
-      display: none;
-      min-width: 180px;
-    }
-    .tooltip-callsign {
-      font-family: 'Share Tech Mono', monospace;
-      color: var(--accent);
-      font-size: 14px;
-      margin-bottom: 6px;
-    }
-    .tooltip-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 3px; }
-    .tooltip-key { color: var(--text-dim); }
-    .tooltip-val { color: var(--text); font-family: 'Share Tech Mono', monospace; }
-
-    /* ── MODAL ── */
-    .modal-backdrop {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.75);
-      z-index: 500;
-      display: none;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-backdrop.open { display: flex; }
-    .modal {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
       border-radius: 6px;
-      padding: 24px;
-      min-width: 380px;
+      padding: 10px 12px 14px;
+      z-index: 300;
+      display: none;
+      min-width: 140px;
+      max-width: 280px;
+      pointer-events: none;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
     }
-    .modal h2 {
+    #airfield-popup * { pointer-events: auto; }
+    #airfield-popup.visible { display: block; }
+    #airfield-popup::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid var(--accent);
+    }
+    .ap-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .ap-title {
       font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
       color: var(--accent);
-      font-size: 13px;
       letter-spacing: 2px;
-      margin-bottom: 18px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .modal-row { margin-bottom: 12px; }
-    .modal-row label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 1px; }
-    .modal-row input { width: 100%; }
-    .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
-    .modal-actions .btn { margin-bottom: 0; flex: 1; justify-content: center; }
+    .ap-close {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
+    }
+    .ap-close:hover { color: var(--text); }
+    .ap-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+    }
+    .ap-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      cursor: pointer;
+      padding: 3px 2px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .ap-cell:hover { border-color: var(--panel-border); background: rgba(0,229,255,0.06); }
+    .ap-cell.selected { border-color: var(--accent); background: rgba(0,229,255,0.12); }
+    .ap-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 8px;
+      color: var(--text-dim);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -515,10 +183,10 @@
 <header>
   <div class="pulse-dot"></div>
   <div class="logo">Sky<span>Watch</span></div>
-  <button class="header-btn active" id="btn-live" onclick="setMode('live')">⬤ LIVE</button>
-  <button class="header-btn" id="btn-replay" onclick="setMode('replay')">▶ REPLAY</button>
-  <button class="header-btn" onclick="openModal()">⚙ API CONFIG</button>
-  <button class="header-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle light/dark mode">☀</button>
+  <button class="header-btn active" id="btn-live" onclick="setMode('live')">&#x25CF; LIVE</button>
+  <button class="header-btn" id="btn-replay" onclick="setMode('replay')">&#x25B6; REPLAY</button>
+  <button class="header-btn" onclick="openModal()">&#x2699; API CONFIG</button>
+  <button class="header-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle light/dark mode">&#x2600;</button>
   <div class="header-stats">
     <div class="stat"><span class="stat-val" id="stat-aircraft">0</span><span class="stat-lbl">AIRCRAFT</span></div>
     <div class="stat"><span class="stat-val" id="stat-rois">0</span><span class="stat-lbl">ROI ZONES</span></div>
@@ -527,13 +195,11 @@
 </header>
 
 <div class="body">
-
-  <!-- LEFT SIDEBAR: Filters -->
-  <div class="sidebar" id="sidebar-left">
+  <div class="sidebar collapsed" id="sidebar-left">
     <div class="sidebar-header" onclick="toggleSidebar('left')">
       <div class="sidebar-title">Filters</div>
       <span class="sidebar-vert-label">Filters</span>
-      <button class="collapse-btn" id="collapse-left">◀</button>
+      <button class="collapse-btn" id="collapse-left">&#x25BA;</button>
     </div>
     <div class="sidebar-content">
       <div class="section-label">Time Range</div>
@@ -546,956 +212,697 @@
           <option value="60" selected>Last 1 hour</option>
           <option value="360">Last 6 hours</option>
           <option value="1440">Last 24 hours</option>
-          <option value="custom">Custom…</option>
+          <option value="custom">Custom...</option>
         </select>
       </div>
       <div id="custom-time-range" style="display:none;">
-        <div class="filter-row">
-          <label>Start</label>
-          <input type="datetime-local" id="filter-start" onchange="onCustomTimeChange()"/>
-        </div>
-        <div class="filter-row">
-          <label>Stop</label>
-          <input type="datetime-local" id="filter-stop" onchange="onCustomTimeChange()"/>
-        </div>
+        <div class="filter-row"><label>Start</label><input type="datetime-local" id="filter-start" onchange="onCustomTimeChange()"/></div>
+        <div class="filter-row"><label>Stop</label><input type="datetime-local" id="filter-stop" onchange="onCustomTimeChange()"/></div>
       </div>
-      <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-dim); margin-bottom:10px; line-height:1.6;" id="time-range-display"></div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-bottom:10px;line-height:1.6;" id="time-range-display"></div>
 
       <div class="section-label">Aircraft</div>
-      <div class="filter-row">
-        <label>Reg / Owner</label>
-        <input type="text" id="filter-callsign" placeholder="e.g. HB-ZKF" oninput="applyFilters()"/>
-      </div>
-      <div class="filter-row">
-        <label>Type</label>
+      <div class="filter-row"><label>Reg / Owner</label><input type="text" id="filter-callsign" placeholder="e.g. HB-ZKF" oninput="applyFilters()"/></div>
+      <div class="filter-row"><label>Type</label>
         <select id="filter-type" onchange="applyFilters()">
-          <option value="">All</option>
-          <option value="fire">Fire</option>
-          <option value="water">Water</option>
-          <option value="training">Training</option>
+          <option value="">All</option><option value="fire">Fire</option><option value="water">Water</option><option value="training">Training</option>
         </select>
       </div>
-      <div class="filter-row">
-        <label>Min Alt ft</label>
-        <input type="number" id="filter-alt-min" placeholder="0" oninput="applyFilters()"/>
-      </div>
-      <div class="filter-row">
-        <label>Max Alt ft</label>
-        <input type="number" id="filter-alt-max" placeholder="50000" oninput="applyFilters()"/>
-      </div>
+      <div class="filter-row"><label>Min Alt ft</label><input type="number" id="filter-alt-min" placeholder="0" oninput="applyFilters()"/></div>
+      <div class="filter-row"><label>Max Alt ft</label><input type="number" id="filter-alt-max" placeholder="50000" oninput="applyFilters()"/></div>
 
       <div class="section-label">Display</div>
-      <div class="filter-row">
-        <label>Tracks</label>
-        <select id="toggle-tracks" onchange="renderTracks()">
-          <option value="all">All</option>
-          <option value="selected">Selected</option>
-          <option value="none">None</option>
-        </select>
+      <div class="filter-row"><label>Tracks</label>
+        <select id="toggle-tracks" onchange="renderTracks()"><option value="all">All</option><option value="selected">Selected</option><option value="none">None</option></select>
       </div>
-      <div class="filter-row">
-        <label>ROIs</label>
-        <select id="toggle-rois" onchange="renderROIs()">
-          <option value="all">All types</option>
-          <option value="fire">Fire only</option>
-          <option value="water">Water only</option>
-          <option value="training">Training only</option>
-          <option value="none">Hidden</option>
-        </select>
+      <div class="filter-row"><label>ROIs</label>
+        <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="water">Water only</option><option value="training">Training only</option><option value="none">Hidden</option></select>
       </div>
 
       <div class="section-label">Quick Filters</div>
-      <div class="filter-row">
-        <label>At airfield</label>
-        <select id="filter-at-airfield" onchange="applyFilters()">
-          <option value="">All</option>
-          <option value="yes">Yes</option>
-          <option value="no">No (airborne)</option>
-        </select>
+      <div class="filter-row"><label>At airfield</label>
+        <select id="filter-at-airfield" onchange="applyFilters()"><option value="">All</option><option value="yes">Yes</option><option value="no">No (airborne)</option></select>
       </div>
-      <div class="filter-row">
-        <label>Full</label>
-        <select id="filter-is-full" onchange="applyFilters()">
-          <option value="">All</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
+      <div class="filter-row"><label>Full</label>
+        <select id="filter-is-full" onchange="applyFilters()"><option value="">All</option><option value="yes">Yes</option><option value="no">No</option></select>
       </div>
 
       <div class="section-label">Actions</div>
-      <div id="fetch-status" style="font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-dim); margin-bottom:8px; min-height:14px;"></div>
-      <button class="btn primary" onclick="fetchAll()"><span>↻</span> Refresh Data</button>
-      <button class="btn" onclick="fitMap()"><span>⊡</span> Fit to Aircraft</button>
-      <button class="btn" onclick="exportCSV()"><span>↓</span> Export CSV</button>
+      <div id="fetch-status" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-bottom:8px;min-height:14px;"></div>
+      <button class="btn primary" onclick="fetchAll()"><span>&#x21BB;</span> Refresh Data</button>
+      <button class="btn" onclick="fitMap()"><span>&#x229F;</span> Fit to Aircraft</button>
+      <button class="btn" onclick="exportCSV()"><span>&#x2193;</span> Export CSV</button>
     </div>
   </div>
 
-  <!-- CENTER: Map + Grid -->
-  <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0;">
-    <div style="flex:1; position:relative; overflow:hidden; min-height:0;">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
+    <div style="flex:1;position:relative;overflow:hidden;min-height:0;">
       <div id="map"></div>
       <div class="map-overlay">
         <button class="map-btn" onclick="map.getView().setZoom(map.getView().getZoom()+1)">+</button>
-        <button class="map-btn" onclick="map.getView().setZoom(map.getView().getZoom()-1)">−</button>
-        <button class="map-btn" onclick="fitMap()" title="Fit all">⊡</button>
+        <button class="map-btn" onclick="map.getView().setZoom(map.getView().getZoom()-1)">-</button>
+        <button class="map-btn" onclick="fitMap()">&#x229F;</button>
       </div>
-      <!-- AGL altitude legend -->
-      <div id="alt-legend" style="position:absolute; bottom:16px; right:16px; z-index:10; background:var(--panel); border:1px solid var(--panel-border); border-radius:4px; padding:8px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-dim); line-height:1.8;">
-        <div style="margin-bottom:4px; letter-spacing:1px;">AGL ALT</div>
-        <div class="leg-row" data-tier="ground" > <span class="leg-swatch"></span> &lt; 100 ft  — Ground</div>
-        <div class="leg-row" data-tier="taxi"   > <span class="leg-swatch"></span> &lt; 750 ft  — Taxi</div>
-        <div class="leg-row" data-tier="low"    > <span class="leg-swatch"></span> &lt; 5 000 ft — Low</div>
-        <div class="leg-row" data-tier="mid"    > <span class="leg-swatch"></span> &lt; 13 000 ft — Mid</div>
-        <div class="leg-row" data-tier="high"   > <span class="leg-swatch"></span> &lt; 20 000 ft — High</div>
-        <div class="leg-row" data-tier="cruise" > <span class="leg-swatch"></span> 20 000+ ft — Cruise</div>
-        <div class="leg-row" data-tier="unknown"> <span class="leg-swatch"></span> Unknown</div>
+      <div id="alt-legend" style="position:absolute;bottom:16px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+        <div style="margin-bottom:4px;letter-spacing:1px;">AGL ALT</div>
+        <div class="leg-row" data-tier="ground"><span class="leg-swatch"></span> &lt; 100 ft - Ground</div>
+        <div class="leg-row" data-tier="taxi"><span class="leg-swatch"></span> &lt; 750 ft - Taxi</div>
+        <div class="leg-row" data-tier="low"><span class="leg-swatch"></span> &lt; 5000 ft - Low</div>
+        <div class="leg-row" data-tier="mid"><span class="leg-swatch"></span> &lt; 13000 ft - Mid</div>
+        <div class="leg-row" data-tier="high"><span class="leg-swatch"></span> &lt; 20000 ft - High</div>
+        <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft - Cruise</div>
+        <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
       <div class="tooltip" id="tooltip"></div>
+
+      <!-- AIRFIELD POPUP -->
+      <div id="airfield-popup">
+        <div class="ap-header">
+          <div class="ap-title" id="ap-title">XXXX</div>
+          <button class="ap-close" onclick="closeAirfieldPopup()">&#x2715;</button>
+        </div>
+        <div class="ap-grid" id="ap-grid"></div>
+      </div>
     </div>
 
-    <!-- REPLAY BAR -->
     <div id="replay-bar">
-      <button class="replay-btn" id="replay-playpause" onclick="replayTogglePlay()" title="Play / Pause">▶</button>
-      <button class="replay-btn" onclick="replayStepBack()"  title="Step back">⏮</button>
-      <button class="replay-btn" onclick="replayStepFwd()"   title="Step forward">⏭</button>
-      <input  type="range" id="replay-slider" min="0" max="1000" value="0" oninput="replayScrub(this.value)"/>
+      <button class="replay-btn" id="replay-playpause" onclick="replayTogglePlay()">&#x25B6;</button>
+      <button class="replay-btn" onclick="replayStepBack()">&#x23EE;</button>
+      <button class="replay-btn" onclick="replayStepFwd()">&#x23ED;</button>
+      <input type="range" id="replay-slider" min="0" max="1000" value="0" oninput="replayScrub(this.value)"/>
       <div class="replay-time" id="replay-time">--:--:-- UTC</div>
-      <select class="replay-speed" id="replay-speed" title="Playback speed">
-        <option value="1">×1</option>
-        <option value="5">×5</option>
-        <option value="10">×10</option>
-        <option value="30" selected>×30</option>
-        <option value="60">×60</option>
-        <option value="120">×120</option>
+      <select class="replay-speed" id="replay-speed">
+        <option value="1">x1</option><option value="5">x5</option><option value="10">x10</option>
+        <option value="30" selected>x30</option><option value="60">x60</option><option value="120">x120</option>
       </select>
     </div>
 
-    <div class="bottom-panel" id="bottom-panel">
+    <div class="bottom-panel collapsed" id="bottom-panel">
       <div class="bottom-panel-header" onclick="toggleBottomPanel()">
         <div class="bottom-panel-title">Flight Data Table</div>
-        <span id="bottom-arrow" style="margin-left:auto; color:var(--text-dim); font-size:11px;">▼</span>
-        <span id="grid-row-count" style="font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); margin-left:16px;">0 rows</span>
+        <span id="bottom-arrow" style="margin-left:auto;color:var(--text-dim);font-size:11px;">&#x25B2;</span>
+        <span id="grid-row-count" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-dim);margin-left:16px;">0 rows</span>
       </div>
       <div id="grid-container" class="ag-theme-alpine-dark"></div>
     </div>
   </div>
 
-  <!-- RIGHT SIDEBAR: Aircraft list -->
-  <div class="sidebar right" id="sidebar-right">
+  <div class="sidebar right collapsed" id="sidebar-right">
     <div class="sidebar-header" onclick="toggleSidebar('right')">
-      <button class="collapse-btn" id="collapse-right" style="margin-left:0; margin-right:4px;">▶</button>
+      <button class="collapse-btn" id="collapse-right" style="margin-left:0;margin-right:4px;">&#x25C4;</button>
       <div class="sidebar-title">Aircraft</div>
       <span class="sidebar-vert-label">Aircraft</span>
     </div>
     <div class="sidebar-content" id="aircraft-list">
-      <div style="color:var(--text-dim); font-size:12px; text-align:center; margin-top:40px;">
-        No data yet.<br><br>
-        Click <strong style="color:var(--accent)">Refresh Data</strong><br>or configure your API.
+      <div style="color:var(--text-dim);font-size:12px;text-align:center;margin-top:40px;">
+        No data yet.<br><br>Click <strong style="color:var(--accent)">Refresh Data</strong><br>or configure your API.
       </div>
     </div>
   </div>
 </div>
 
-<!-- API CONFIG MODAL -->
 <div class="modal-backdrop" id="modal">
   <div class="modal">
-    <h2>⚙ API CONFIGURATION</h2>
-    <div class="modal-row">
-      <label>BASE URL</label>
-      <input type="text" id="cfg-base-url" placeholder="http://localhost:8000"/>
-    </div>
-    <div class="modal-row">
-      <label>API KEY</label>
-      <input type="password" id="cfg-api-key" placeholder="your-api-key" autocomplete="off"/>
-    </div>
-    <div class="modal-row">
-      <label>POLL INTERVAL (seconds)</label>
-      <input type="number" id="cfg-interval" value="10" min="5"/>
-    </div>
+    <h2>&#x2699; API CONFIGURATION</h2>
+    <div class="modal-row"><label>BASE URL</label><input type="text" id="cfg-base-url" placeholder="http://localhost:8000"/></div>
+    <div class="modal-row"><label>API KEY</label><input type="password" id="cfg-api-key" placeholder="your-api-key" autocomplete="off"/></div>
+    <div class="modal-row"><label>POLL INTERVAL (seconds)</label><input type="number" id="cfg-interval" value="10" min="5"/></div>
     <div class="modal-actions">
-      <button class="btn primary" onclick="saveConfig()">SAVE & CONNECT</button>
+      <button class="btn primary" onclick="saveConfig()">SAVE &amp; CONNECT</button>
       <button class="btn" onclick="closeModal()">CANCEL</button>
     </div>
   </div>
 </div>
 
 <script>
-// ══════════════════════════════════════════════════
-// CONFIG  (persisted in localStorage)
-// ══════════════════════════════════════════════════
+console.log('SkyWatch script loaded');
+// CONFIG
 let config = {
   baseUrl:  localStorage.getItem('sw-baseUrl')  || 'http://localhost:8000',
   interval: parseInt(localStorage.getItem('sw-interval') || '30'),
   apiKey:   localStorage.getItem('sw-apiKey')   || ''
 };
+function openModal(){document.getElementById('cfg-base-url').value=config.baseUrl;document.getElementById('cfg-interval').value=config.interval;document.getElementById('cfg-api-key').value=config.apiKey;document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function saveConfig(){config.baseUrl=document.getElementById('cfg-base-url').value.trim();config.interval=parseInt(document.getElementById('cfg-interval').value);config.apiKey=document.getElementById('cfg-api-key').value.trim();localStorage.setItem('sw-baseUrl',config.baseUrl);localStorage.setItem('sw-interval',config.interval);localStorage.setItem('sw-apiKey',config.apiKey);closeModal();fetchAll();}
 
-function openModal() {
-  document.getElementById('cfg-base-url').value = config.baseUrl;
-  document.getElementById('cfg-interval').value = config.interval;
-  document.getElementById('cfg-api-key').value  = config.apiKey;
-  document.getElementById('modal').classList.add('open');
-}
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
-function saveConfig() {
-  config.baseUrl  = document.getElementById('cfg-base-url').value.trim();
-  config.interval = parseInt(document.getElementById('cfg-interval').value);
-  config.apiKey   = document.getElementById('cfg-api-key').value.trim();
-  localStorage.setItem('sw-baseUrl',  config.baseUrl);
-  localStorage.setItem('sw-interval', config.interval);
-  localStorage.setItem('sw-apiKey',   config.apiKey);
-  closeModal();
-  fetchAll();
-}
-
-// ══════════════════════════════════════════════════
-// ALTITUDE PALETTE  (must be before applyTheme)
-// ══════════════════════════════════════════════════
+// ALTITUDE PALETTE
 const ALTITUDE_PALETTE = {
-  light: {
-    unknown: '#94a3b8',
-    ground:  '#ff0000',
-    taxi:    '#f97316',
-    low:     '#fbce00',
-    mid:     '#22c55e',
-    high:    '#3b82f6',
-    cruise:  '#a855f7'
-  },
-  dark: {
-    unknown: '#64748b',
-    ground:  '#b60d0d',
-    taxi:    '#a04819',
-    low:     '#a06f06',
-    mid:     '#107736',
-    high:    '#1d4db4',
-    cruise:  '#6c26ad'
-  }
+  light:{unknown:'#94a3b8',ground:'#ff0000',taxi:'#f97316',low:'#fbce00',mid:'#22c55e',high:'#3b82f6',cruise:'#a855f7'},
+  dark: {unknown:'#64748b',ground:'#b60d0d',taxi:'#a04819',low:'#a06f06',mid:'#107736',high:'#1d4db4',cruise:'#6c26ad'}
 };
 
 let mapReady = false;
 
-// ══════════════════════════════════════════════════
 // THEME
-// ══════════════════════════════════════════════════
 let isDark = localStorage.getItem('sw-theme') !== 'light';
-
 const TILES = {
-  dark:  'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light: 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+  dark: 'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  light:'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 };
-
-// The basemap tile layer (declared here so toggleTheme can update it)
-const tileLayer = new ol.layer.Tile({
-  source: new ol.source.XYZ({
-    url: isDark ? TILES.dark : TILES.light,
-    attributions: '© OpenStreetMap © CARTO'
-  })
-});
-
-function applyTheme(dark) {
-  isDark = dark;
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  document.getElementById('btn-theme').textContent = dark ? '☀' : '☾';
-  tileLayer.getSource().setUrl(dark ? TILES.dark : TILES.light);
-  localStorage.setItem('sw-theme', dark ? 'dark' : 'light');
+const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark:TILES.light,attributions:'© OSM © CARTO'})});
+function applyTheme(dark){
+  isDark=dark;
+  document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+  document.getElementById('btn-theme').textContent=dark?'☀':'☾';
+  tileLayer.getSource().setUrl(dark?TILES.dark:TILES.light);
+  localStorage.setItem('sw-theme',dark?'dark':'light');
   updateLegendSwatches();
-  if (mapReady) { clearIconCache(); renderTracks(); renderAircraft(); }
+  if(mapReady){clearIconCache();renderTracks();renderAircraft();renderAirfields();}
 }
-
-function updateLegendSwatches() {
-  const palette = ALTITUDE_PALETTE[isDark ? 'dark' : 'light'];
-  document.querySelectorAll('#alt-legend .leg-row').forEach(row => {
-    const tier = row.dataset.tier;
-    if (palette[tier]) row.querySelector('.leg-swatch').style.background = palette[tier];
-  });
+function updateLegendSwatches(){
+  const p=ALTITUDE_PALETTE[isDark?'dark':'light'];
+  document.querySelectorAll('#alt-legend .leg-row').forEach(r=>{const t=r.dataset.tier;if(p[t])r.querySelector('.leg-swatch').style.background=p[t];});
 }
-
-function toggleTheme() { applyTheme(!isDark); }
-
-// Apply on load
+function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
-let allAircraft      = [];
-let filteredAircraft = [];
-let selectedIcao     = null;
-let tracksCache      = {};
-let roiData          = [];
-let mode             = 'live';
-let pollTimer        = null;
 
-// ══════════════════════════════════════════════════
-// OPENLAYERS MAP
-// ══════════════════════════════════════════════════
-const map = new ol.Map({
-  target: 'map',
-  layers: [
-    tileLayer
-  ],
-  view: new ol.View({ center: ol.proj.fromLonLat([2.3, 46.6]), zoom: 5 }),
-  controls: ol.control.defaults.defaults({ zoom: false, attribution: false })
-});
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],mode='live',pollTimer=null;
 
-const roiLayer      = new ol.layer.Vector({ source: new ol.source.Vector(), zIndex: 1 });
-const trackLayer    = new ol.layer.Vector({ source: new ol.source.Vector(), zIndex: 2 });
-const aircraftLayer = new ol.layer.Vector({ source: new ol.source.Vector(), zIndex: 3 });
-map.addLayer(roiLayer);
-map.addLayer(trackLayer);
-map.addLayer(aircraftLayer);
-mapReady = true;
+// MAP
+const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:7}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
+const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
+const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
+const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
+const airfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
+map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);
+mapReady=true;
 
-// ── Sprite sheet setup ──
-const SPRITE_CELL   = 72;   // px per cell in sprites.png
-const SPRITE_COLS   = 8;
-const spriteImg     = new Image();
-spriteImg.src       = 'sprites.png';
-spriteImg.onload    = () => { clearIconCache(); if (mapReady) renderAircraft(); };
+// SPRITES
+const SPRITE_CELL=72,SPRITE_COLS=8;
+const spriteImg=new Image();
+spriteImg.src='sprites.png';
+spriteImg.onload=()=>{clearIconCache();if(mapReady){renderAircraft();renderAirfields();}};
+const iconCache={};
 
-// Cache of rendered canvases keyed by "iconId_color_size_selected"
-const iconCache = {};
+function buildTintedCanvas(iconId,color,size){
+  const id=iconId??0;
+  const key='t_'+id+'_'+color+'_'+size;
+  if(iconCache[key])return iconCache[key];
+  const col=id%SPRITE_COLS,row=Math.floor(id/SPRITE_COLS);
+  const tmp=document.createElement('canvas');tmp.width=SPRITE_CELL;tmp.height=SPRITE_CELL;
+  const tctx=tmp.getContext('2d');
+  tctx.drawImage(spriteImg,col*SPRITE_CELL,row*SPRITE_CELL,SPRITE_CELL,SPRITE_CELL,0,0,SPRITE_CELL,SPRITE_CELL);
+  tctx.globalCompositeOperation='source-in';tctx.fillStyle=color;tctx.fillRect(0,0,SPRITE_CELL,SPRITE_CELL);
+  const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+  canvas.getContext('2d').drawImage(tmp,0,0,size,size);
+  iconCache[key]=canvas;return canvas;
+}
 
-function aircraftStyle(iconId, heading, color, iconSize, selected) {
-  const id    = iconId ?? 0;
-  const displaySize = Math.round((iconSize ?? 100) * 20) / 100;
-  const size        = Math.round(displaySize * (selected ? 1.3 : 1));
-  const key   = `${id}_${color}_${size}_${selected}`;
-
-  if (!iconCache[key]) {
-    const col    = id % SPRITE_COLS;
-    const row    = Math.floor(id / SPRITE_COLS);
-    const sx     = col * SPRITE_CELL;
-    const sy     = row * SPRITE_CELL;
-
-    const canvas = document.createElement('canvas');
-    canvas.width  = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-
-    // Draw sprite into temp canvas to extract alpha mask
-    const tmp    = document.createElement('canvas');
-    tmp.width    = SPRITE_CELL;
-    tmp.height   = SPRITE_CELL;
-    const tctx   = tmp.getContext('2d');
-    tctx.drawImage(spriteImg, sx, sy, SPRITE_CELL, SPRITE_CELL, 0, 0, SPRITE_CELL, SPRITE_CELL);
-
-    // Tint: fill with desired color, mask with sprite alpha
-    tctx.globalCompositeOperation = 'source-in';
-    tctx.fillStyle = color;
-    tctx.fillRect(0, 0, SPRITE_CELL, SPRITE_CELL);
-
-    // Draw tinted icon onto final canvas (scaled + no rotation — OL handles rotation via style)
-    ctx.drawImage(tmp, 0, 0, size, size);
-
-    // Selection ring
-    if (selected) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth   = 2;
-      ctx.strokeRect(1, 1, size - 2, size - 2);
-    }
-
-    iconCache[key] = canvas;
+function aircraftStyle(iconId,heading,color,iconSize,selected){
+  const displaySize=Math.round((iconSize??100)*20)/100;
+  const size=Math.round(displaySize*(selected?1.3:1));
+  const key='s_'+iconId+'_'+color+'_'+size+'_'+selected;
+  if(iconCache[key])return iconCache[key];
+  let canvas=buildTintedCanvas(iconId,color,size);
+  if(selected){
+    const c2=document.createElement('canvas');c2.width=size;c2.height=size;
+    const ctx=c2.getContext('2d');ctx.drawImage(canvas,0,0);
+    ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;ctx.strokeRect(1,1,size-2,size-2);
+    canvas=c2;
   }
-
-  return new ol.style.Style({
-    image: new ol.style.Icon({
-      img:      iconCache[key],
-      imgSize:  [iconCache[key].width, iconCache[key].height],
-      rotation: ((heading || 0) * Math.PI) / 180,
-    })
-  });
+  iconCache[key]=new ol.style.Style({image:new ol.style.Icon({img:canvas,imgSize:[size,size],rotation:((heading||0)*Math.PI)/180})});
+  return iconCache[key];
 }
+function clearIconCache(){Object.keys(iconCache).forEach(k=>delete iconCache[k]);}
 
-// Clear icon cache on theme change (colors differ)
-function clearIconCache() { Object.keys(iconCache).forEach(k => delete iconCache[k]); }
-
-function roiStyle(type, level) {
-  const colors = { fire: '#ff4444', water: '#2196f3', training: '#9c27b0' };
-  const hex    = colors[type] || '#00e5ff';
-  return new ol.style.Style({
-    fill:   new ol.style.Fill({ color: hex + '26' }),   // ~15% opacity
-    stroke: new ol.style.Stroke({ color: hex, width: 1.5, lineDash: level > 1 ? [] : [5, 4] })
-  });
-}
-
-const AIRCRAFT_COLORS = {
-  ground:  { fill: '#94a3b8' },  // Grey
-  airborne: { fill: '#22c55e' }, // Green
-  full:    { fill: '#60a5fa' },  // Blue
-  empty:   { fill: '#f97316' },  // Orange
-};
-
-function acColor(ac) {
-  const isOnGround = ac.at_airfield || false;
-  const payload    = ac.payload_capacity_kg != null && ac.payload_capacity_kg > 0;
-  const full       = ac.is_full || false;
-  if (isOnGround)      return AIRCRAFT_COLORS.ground.fill;
-  if (payload && full) return AIRCRAFT_COLORS.full.fill;
-  if (payload)         return AIRCRAFT_COLORS.empty.fill;
+const AIRCRAFT_COLORS={ground:{fill:'#94a3b8'},airborne:{fill:'#22c55e'},full:{fill:'#60a5fa'},empty:{fill:'#f97316'}};
+function acColor(ac){
+  if(ac.at_airfield)return AIRCRAFT_COLORS.ground.fill;
+  const p=ac.payload_capacity_kg!=null&&ac.payload_capacity_kg>0;
+  if(p&&ac.is_full)return AIRCRAFT_COLORS.full.fill;
+  if(p)return AIRCRAFT_COLORS.empty.fill;
   return AIRCRAFT_COLORS.airborne.fill;
 }
 
-function renderAircraft() {
-  const src = aircraftLayer.getSource(); src.clear();
-  filteredAircraft.forEach(ac => {
-    const lon = ac.last_lon;
-    const lat = ac.last_lat;
-    if (lon == null || lat == null) return;
-    const color = acColor(ac);
-    const feat  = new ol.Feature({
-      geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
-      aircraft: ac
-    });
-    feat.setStyle(aircraftStyle(ac.icon, ac.true_track, color, ac.icon_size, ac.icao24 === selectedIcao));
+function roiStyle(type,level){
+  const hex={fire:'#ff4444',water:'#2196f3',training:'#9c27b0'}[type]||'#00e5ff';
+  return new ol.style.Style({fill:new ol.style.Fill({color:hex+'26'}),stroke:new ol.style.Stroke({color:hex,width:1.5,lineDash:level>1?[]:[5,4]})});
+}
+
+// RENDER AIRCRAFT
+function renderAircraft(){
+  const src=aircraftLayer.getSource();src.clear();
+  filteredAircraft.forEach(ac=>{
+    if(ac.last_lon==null||ac.last_lat==null)return;
+    if(ac.at_airfield)return;  // shown in airfield popup instead
+    const feat=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([ac.last_lon,ac.last_lat])),aircraft:ac});
+    feat.setStyle(aircraftStyle(ac.icon,ac.true_track,acColor(ac),ac.icon_size,ac.icao24===selectedIcao));
     feat.setId(ac.icao24);
     src.addFeature(feat);
   });
 }
 
-
-function altColor(agl) {
-  const colors = ALTITUDE_PALETTE[isDark ? 'dark' : 'light'];
-  if (agl === null || agl === undefined || agl > 50000) return colors.unknown;
-  if (agl < 100)   return colors.ground;
-  if (agl < 750)   return colors.taxi;
-  if (agl < 5000)  return colors.low;
-  if (agl < 13000) return colors.mid;
-  if (agl < 20000) return colors.high;
-  return colors.cruise;
+// AIRFIELD MARKERS
+function buildAirfieldMarkerCanvas(){
+  const size=28,canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle=isDark?'rgba(0,229,255,0.15)':'rgba(0,122,158,0.15)';ctx.fill();
+  ctx.strokeStyle=isDark?'#00e5ff':'#007a9e';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle=isDark?'#00e5ff':'#007a9e';
+  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('✈',cx,cy);
+  return canvas;
 }
 
-function renderTracks() {
-  const src = trackLayer.getSource(); src.clear();
-  const trackMode = document.getElementById('toggle-tracks').value;
-  if (trackMode === 'none') return;
+function renderAirfields(){
+  const src=airfieldLayer.getSource();src.clear();
+  if(!allAircraftFleet.length)return;  // wait until fleet data is loaded
+  const fleetSource=allAircraftFleet;
 
-  Object.entries(tracksCache).forEach(([icao24, points]) => {
-    if (trackMode === 'selected' && icao24 !== selectedIcao) return;
-    if (points.length < 2) return;
+  // Group ALL fleet aircraft by last_airfield — no time filter
+  const groups={};
+  fleetSource.forEach(ac=>{
+    if(!ac.last_airfield)return;
+    const key=ac.last_airfield;
+    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.airfield_name||key};
+    groups[key].aircraft.push(ac);
+    // Prefer airfield_lat/lon — overwrite whenever we find it (any aircraft in group may have it)
+    if(ac.airfield_lat!=null&&ac.airfield_lon!=null){
+      groups[key].lat=ac.airfield_lat;
+      groups[key].lon=ac.airfield_lon;
+    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
+      groups[key].lat=ac.last_lat;  // only use as last resort if nothing better yet
+      groups[key].lon=ac.last_lon;
+    }
+  });
 
-    const isSelected = icao24 === selectedIcao;
-    const width      = isSelected ? 3 : 1.5;
-    const alpha      = isSelected ? 0.95 : 0.65;
+  const mc=buildAirfieldMarkerCanvas();
+  Object.entries(groups).forEach(([icao,g])=>{
+    if(g.lat==null||g.lon==null)return;  // skip if no coords at all
+    const feat=new ol.Feature({
+      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
+      airfield:icao,
+      airfieldGroup:g
+    });
+    feat.setStyle(new ol.style.Style({
+      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
+      text:new ol.style.Text({
+        text:`${g.name}\n${g.aircraft.filter(a=>a.at_airfield).length}/${g.aircraft.length}`,offsetY:-22,
+        font:"bold 11px 'Share Tech Mono',monospace",
+        fill:new ol.style.Fill({color:isDark?'#00e5ff':'#007a9e'}),
+        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
+        padding:[2,4,2,4]
+      })
+    }));
+    feat.setId('af_'+icao);
+    src.addFeature(feat);
+  });
+}
 
-    // Draw one LineString per consecutive pair of points, colored by AGL
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0  = points[i];
-      const p1  = points[i + 1];
-      const agl   = p0.altitude_agl_ft ?? p0.agl ?? null;
-      const color = altColor(agl);
+// AIRFIELD POPUP
+let activeAirfieldIcao=null;
 
-      const feat = new ol.Feature({
-        geometry: new ol.geom.LineString([
-          ol.proj.fromLonLat([p0.lon, p0.lat]),
-          ol.proj.fromLonLat([p1.lon, p1.lat])
-        ])
-      });
-      feat.setStyle(new ol.style.Style({
-        stroke: new ol.style.Stroke({
-          color,
-          width,
-          lineCap: 'round'
-        })
-      }));
+function showAirfieldPopup(feat,pixel){
+  const g=feat.get('airfieldGroup'),icao=feat.get('airfield');
+  activeAirfieldIcao=icao;
+  const parked=g.aircraft.filter(a=>a.at_airfield).length;
+  const total=g.aircraft.length;
+  const name=g.name&&g.name!==icao?g.name:icao;
+  document.getElementById('ap-title').textContent=`${name} (${parked}/${total})`;
+  renderAirfieldPopupGrid(g.aircraft);
+  const popup=document.getElementById('airfield-popup');
+  popup.classList.add('visible');
+  // position after visible so offsetWidth is correct
+  requestAnimationFrame(()=>{
+    const mapEl=document.getElementById('map');
+    const pw=popup.offsetWidth||180,ph=popup.offsetHeight||80;
+    let left=pixel[0]-pw/2,top=pixel[1]-ph-20;
+    left=Math.max(8,Math.min(left,mapEl.offsetWidth-pw-8));
+    top=Math.max(8,Math.min(top,mapEl.offsetHeight-ph-8));
+    popup.style.left=left+'px';popup.style.top=top+'px';
+  });
+}
+
+function renderAirfieldPopupGrid(aircraft){
+  const grid=document.getElementById('ap-grid');grid.innerHTML='';
+
+  // Group by model
+  const byModel={};
+  aircraft.forEach(ac=>{
+    const key=ac.model||'Unknown';
+    if(!byModel[key])byModel[key]=[];
+    byModel[key].push(ac);
+  });
+
+  Object.entries(byModel).forEach(([model,acs])=>{
+    // Model header spanning all 5 columns
+    const header=document.createElement('div');
+    header.style.cssText='grid-column:1/-1;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;';
+    header.textContent=model;
+    grid.appendChild(header);
+
+    acs.forEach(ac=>{
+      const color=acColor(ac);
+      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
+      const canvas=buildTintedCanvas(ac.icon,color,size);
+      const cell=document.createElement('div');
+      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
+      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
+      cell.onclick=()=>selectAircraft(ac.icao24);
+      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
+      disp.getContext('2d').drawImage(canvas,0,0);
+      cell.appendChild(disp);
+      const lbl=document.createElement('div');lbl.className='ap-label';
+      lbl.textContent=ac.registration||ac.icao24;
+      cell.appendChild(lbl);
+      grid.appendChild(cell);
+    });
+  });
+}
+
+function closeAirfieldPopup(){
+  document.getElementById('airfield-popup').classList.remove('visible');
+  activeAirfieldIcao=null;
+}
+
+// MAP EVENTS
+const tooltip=document.getElementById('tooltip');
+map.on('pointermove',evt=>{
+  const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
+  if(acF){
+    const ac=acF.get('aircraft');    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
+      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield?'✔ Yes':'✘ No'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true?'✔ Yes':ac.is_full===false?'✘ No':'--'}</span></div>`;
+    map.getTargetElement().style.cursor='pointer';return;
+  }
+  const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
+  if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
+  tooltip.style.display='none';map.getTargetElement().style.cursor='';
+});
+
+let pointerDownPos = null;
+map.getTargetElement().addEventListener('pointerdown', e => { pointerDownPos = [e.clientX, e.clientY]; });
+
+map.on('click',evt=>{
+  // Ignore if mouse moved more than 5px (drag/pan)
+  if(pointerDownPos){
+    const dx = evt.originalEvent.clientX - pointerDownPos[0];
+    const dy = evt.originalEvent.clientY - pointerDownPos[1];
+    if(Math.sqrt(dx*dx+dy*dy) > 5) return;
+  }
+  const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
+  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
+  const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
+  if(acF){closeAirfieldPopup();selectAircraft(acF.get('aircraft').icao24);return;}
+  closeAirfieldPopup();
+});
+
+function altColor(agl){
+  const c=ALTITUDE_PALETTE[isDark?'dark':'light'];
+  if(agl===null||agl===undefined||agl>50000)return c.unknown;
+  if(agl<100)return c.ground;if(agl<750)return c.taxi;if(agl<5000)return c.low;
+  if(agl<13000)return c.mid;if(agl<20000)return c.high;return c.cruise;
+}
+function renderTracks(){
+  const src=trackLayer.getSource();src.clear();
+  const tm=document.getElementById('toggle-tracks').value;if(tm==='none')return;
+  Object.entries(tracksCache).forEach(([icao24,pts])=>{
+    if(tm==='selected'&&icao24!==selectedIcao)return;
+    if(pts.length<2)return;
+    const sel=icao24===selectedIcao;
+    for(let i=0;i<pts.length-1;i++){
+      const p0=pts[i],p1=pts[i+1];
+      const feat=new ol.Feature({geometry:new ol.geom.LineString([ol.proj.fromLonLat([p0.lon,p0.lat]),ol.proj.fromLonLat([p1.lon,p1.lat])])});
+      feat.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({color:altColor(p0.altitude_agl_ft??null),width:sel?3:1.5,lineCap:'round'})}));
       src.addFeature(feat);
     }
   });
 }
-
-function renderROIs() {
-  const src = roiLayer.getSource(); src.clear();
-  const roiMode = document.getElementById('toggle-rois').value;
-  if (roiMode === 'none') return;
-  roiData.forEach(roi => {
-    if (roiMode !== 'all' && roi.type !== roiMode) return;
-    try {
-      const coords = typeof roi.geometry === 'string' ? JSON.parse(roi.geometry) : roi.geometry;
-      if (!coords || coords.length < 3) return;
-      const feat = new ol.Feature({
-        geometry: new ol.geom.Polygon([coords.map(c => ol.proj.fromLonLat([c[1], c[0]]))])
-      });
-      feat.setStyle(roiStyle(roi.type, roi.level));
-      src.addFeature(feat);
-    } catch(e) { console.warn('Bad ROI geometry', e); }
+function renderROIs(){
+  const src=roiLayer.getSource();src.clear();
+  const rm=document.getElementById('toggle-rois').value;if(rm==='none')return;
+  roiData.forEach(roi=>{
+    if(rm!=='all'&&roi.type!==rm)return;
+    try{
+      const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
+      if(!coords||coords.length<3)return;
+      const feat=new ol.Feature({geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))])});
+      feat.setStyle(roiStyle(roi.type,roi.level));src.addFeature(feat);
+    }catch(e){}
   });
 }
 
-// Tooltip on hover
-const tooltip = document.getElementById('tooltip');
-map.on('pointermove', evt => {
-  const feat = map.forEachFeatureAtPixel(evt.pixel, f => f, { layerFilter: l => l === aircraftLayer });
-  if (feat) {
-    const ac = feat.get('aircraft');
-    tooltip.style.display = 'block';
-    tooltip.style.left    = (evt.originalEvent.offsetX + 16) + 'px';
-    tooltip.style.top     = (evt.originalEvent.offsetY - 10) + 'px';
-    tooltip.innerHTML = `
-      <div class="tooltip-callsign">${ac.registration || ac.icao24}</div>
-      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'—'} ${ac.airfield_name ? '('+ac.airfield_name+')' : ''}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null ? ac.last_baro_alt_ft.toLocaleString()+' ft' : '—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null ? ac.last_agl_alt_ft.toLocaleString()+' ft' : '—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null ? ac.last_speed_kt+' kt' : '—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null ? ac.true_track+'°' : '—'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield ? '✔ Yes' : '✘ No'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true ? '✔ Yes' : ac.is_full===false ? '✘ No' : '—'}</span></div>
-    `;
-    map.getTargetElement().style.cursor = 'pointer';
-  } else {
-    tooltip.style.display = 'none';
-    map.getTargetElement().style.cursor = '';
-  }
-});
-
-// Click to select
-map.on('click', evt => {
-  const feat = map.forEachFeatureAtPixel(evt.pixel, f => f, { layerFilter: l => l === aircraftLayer });
-  if (feat) selectAircraft(feat.get('aircraft').icao);
-});
-
-// ══════════════════════════════════════════════════
 // AG GRID
-// ══════════════════════════════════════════════════
-const gridOptions = {
-  columnDefs: [
-    { field: 'registration',      headerName: 'REG',          width: 100, pinned: 'left',
-      cellStyle: { fontFamily: "'Share Tech Mono', monospace", color: 'var(--accent)' } },
-    { field: 'icao24',            headerName: 'ICAO24',       width: 95 },
-    { field: 'type',              headerName: 'AC TYPE',      width: 95,
-      cellRenderer: p => `<span class="badge ${p.value||''}">${p.value||'—'}</span>` },
-    { field: 'model',             headerName: 'MODEL',        width: 130 },
-    { field: 'owner',             headerName: 'OWNER',        width: 130 },
-    { field: 'country',           headerName: 'COUNTRY',      width: 90 },
-    { field: 'last_airfield',     headerName: 'AIRFIELD',     width: 90 },
-    { field: 'airfield_name',     headerName: 'AIRFIELD NAME',width: 160 },
-    { field: 'last_baro_alt_ft',  headerName: 'BARO ALT ft',  width: 110, valueFormatter: p => p.value?.toLocaleString() },
-    { field: 'last_agl_alt_ft',   headerName: 'AGL ALT ft',   width: 105, valueFormatter: p => p.value?.toLocaleString() },
-    { field: 'last_speed_kt',     headerName: 'SPEED kt',     width: 95 },
-    { field: 'last_speed_kph',    headerName: 'SPEED kph',    width: 100 },
-    { field: 'true_track',        headerName: 'TRACK °',      width: 85 },
-    { field: 'last_lat',          headerName: 'LAT',          width: 90,  valueFormatter: p => p.value?.toFixed(4) },
-    { field: 'last_lon',          headerName: 'LON',          width: 90,  valueFormatter: p => p.value?.toFixed(4) },
-    { field: 'is_full',           headerName: 'FULL',         width: 75,
-      cellRenderer: p => p.value === true ? '✔' : p.value === false ? '✘' : '—' },
-    { field: 'at_airfield',       headerName: 'AT FIELD',     width: 85,
-      cellRenderer: p => p.value === true ? '✔' : p.value === false ? '✘' : '—' },
-    { field: 'sea_landing',       headerName: 'SEA',          width: 65,
-      cellRenderer: p => p.value ? '✔' : '—' },
-    { field: 'payload_capacity_kg', headerName: 'PAYLOAD kg', width: 105 },
-    { field: 'last_timestamp',    headerName: 'LAST SEEN',    width: 170,
-      valueFormatter: p => p.value ? new Date(p.value * 1000).toUTCString().slice(0, 25) : '—' }
+const gridOptions={
+  columnDefs:[
+    {field:'registration',headerName:'REG',width:100,pinned:'left',cellStyle:{fontFamily:"'Share Tech Mono',monospace",color:'var(--accent)'}},
+    {field:'icao24',headerName:'ICAO24',width:95},
+    {field:'type',headerName:'AC TYPE',width:95,cellRenderer:p=>`<span class="badge ${p.value||''}">${p.value||'--'}</span>`},
+    {field:'model',headerName:'MODEL',width:130},{field:'owner',headerName:'OWNER',width:130},
+    {field:'country',headerName:'COUNTRY',width:90},{field:'last_airfield',headerName:'AIRFIELD',width:90},
+    {field:'airfield_name',headerName:'AIRFIELD NAME',width:160},
+    {field:'last_baro_alt_ft',headerName:'BARO ALT ft',width:110,valueFormatter:p=>p.value?.toLocaleString()},
+    {field:'last_agl_alt_ft',headerName:'AGL ALT ft',width:105,valueFormatter:p=>p.value?.toLocaleString()},
+    {field:'last_speed_kt',headerName:'SPEED kt',width:95},{field:'last_speed_kph',headerName:'SPEED kph',width:100},
+    {field:'true_track',headerName:'TRACK',width:85},
+    {field:'last_lat',headerName:'LAT',width:90,valueFormatter:p=>p.value?.toFixed(4)},
+    {field:'last_lon',headerName:'LON',width:90,valueFormatter:p=>p.value?.toFixed(4)},
+    {field:'is_full',headerName:'FULL',width:75,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
+    {field:'at_airfield',headerName:'AT FIELD',width:85,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
+    {field:'sea_landing',headerName:'SEA',width:65,cellRenderer:p=>p.value?'✔':'--'},
+    {field:'payload_capacity_kg',headerName:'PAYLOAD kg',width:105},
+    {field:'last_timestamp',headerName:'LAST SEEN',width:170,valueFormatter:p=>p.value?new Date(p.value*1000).toUTCString().slice(0,25):'--'}
   ],
-  defaultColDef: { sortable: true, resizable: true, filter: true },
-  rowSelection: 'single',
-  onRowClicked: e => selectAircraft(e.data.icao24),
-  rowData: [],
-  suppressCellFocus: true
+  defaultColDef:{sortable:true,resizable:true,filter:true},
+  rowSelection:'single',onRowClicked:e=>selectAircraft(e.data.icao24),rowData:[],suppressCellFocus:true
 };
+const gridApi=agGrid.createGrid(document.getElementById('grid-container'),gridOptions);
 
-const gridApi = agGrid.createGrid(document.getElementById('grid-container'), gridOptions);
-
-// ══════════════════════════════════════════════════
 // TIME RANGE
-// ══════════════════════════════════════════════════
-let timeStart = null; // Unix timestamp (seconds)
-let timeStop  = null;
-
-function applyTimePreset() {
-  const preset = document.getElementById('filter-time-preset').value;
-  const customDiv = document.getElementById('custom-time-range');
-  if (preset === 'custom') {
-    customDiv.style.display = 'block';
-    // Pre-fill with last 1h if empty
-    if (!document.getElementById('filter-start').value) {
-      const now  = new Date();
-      const ago  = new Date(now - 3600000);
-      document.getElementById('filter-stop').value  = toDatetimeLocal(now);
-      document.getElementById('filter-start').value = toDatetimeLocal(ago);
+let timeStart=null,timeStop=null;
+function applyTimePreset(){
+  const preset=document.getElementById('filter-time-preset').value;
+  const cd=document.getElementById('custom-time-range');
+  if(preset==='custom'){
+    cd.style.display='block';
+    if(!document.getElementById('filter-start').value){
+      const now=new Date(),ago=new Date(now-3600000);
+      document.getElementById('filter-stop').value=toDatetimeLocal(now);
+      document.getElementById('filter-start').value=toDatetimeLocal(ago);
     }
     onCustomTimeChange();
   } else {
-    customDiv.style.display = 'none';
-    const minutes = parseInt(preset);
-    timeStop  = Math.floor(Date.now() / 1000);
-    timeStart = timeStop - minutes * 60;
-    updateTimeDisplay();
-    fetchAircraft();
+    cd.style.display='none';
+    timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-parseInt(preset)*60;
+    updateTimeDisplay();fetchAircraft();
   }
 }
-
-function onCustomTimeChange() {
-  const s = document.getElementById('filter-start').value;
-  const e = document.getElementById('filter-stop').value;
-  if (s && e) {
-    timeStart = Math.floor(new Date(s).getTime() / 1000);
-    timeStop  = Math.floor(new Date(e).getTime() / 1000);
-    updateTimeDisplay();
-    fetchAircraft();
-  }
+function onCustomTimeChange(){
+  const s=document.getElementById('filter-start').value,e=document.getElementById('filter-stop').value;
+  if(s&&e){timeStart=Math.floor(new Date(s).getTime()/1000);timeStop=Math.floor(new Date(e).getTime()/1000);updateTimeDisplay();fetchAircraft();}
 }
-
-function toDatetimeLocal(d) {
-  // Format for datetime-local input (YYYY-MM-DDTHH:MM)
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 16);
+function toDatetimeLocal(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
+function updateTimeDisplay(){
+  const fmt=ts=>new Date(ts*1000).toUTCString().slice(0,25);
+  document.getElementById('time-range-display').textContent=timeStart&&timeStop?`${fmt(timeStart)}
+-> ${fmt(timeStop)}`:'';
 }
+function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-3600;updateTimeDisplay();}
 
-function updateTimeDisplay() {
-  const fmt = ts => new Date(ts * 1000).toUTCString().slice(0, 25);
-  document.getElementById('time-range-display').textContent =
-    timeStart && timeStop ? `${fmt(timeStart)}\n→ ${fmt(timeStop)}` : '';
-}
-
-// Initialise to last 1 hour on load
-function initTimeRange() {
-  timeStop  = Math.floor(Date.now() / 1000);
-  timeStart = timeStop - 3600;
-  updateTimeDisplay();
-}
-
-// ══════════════════════════════════════════════════
 // DATA FETCHING
-// ══════════════════════════════════════════════════
-function apiHeaders() {
-  const h = { 'Content-Type': 'application/json' };
-  if (config.apiKey) h['X-API-Key'] = config.apiKey;
-  return h;
-}
-
-async function fetchAll() {
-  await Promise.all([fetchAircraft(), fetchROIs()]);
-}
-async function fetchAircraft() {
-  const statusEl = document.getElementById('fetch-status');
-  try {
-    if (mode === 'live') {
-      const preset = document.getElementById('filter-time-preset').value;
-      if (preset !== 'custom') {
-        timeStop  = Math.floor(Date.now() / 1000);
-        timeStart = timeStop - parseInt(preset) * 60;
-        updateTimeDisplay();
-      }
-    }
-
-    const params = new URLSearchParams();
-    if (timeStart) params.set('start', timeStart);
-    if (timeStop)  params.set('stop',  timeStop);
-
-    if (statusEl) statusEl.textContent = '⟳ Fetching…';
-    const url = `${config.baseUrl}/aircraft/active?${params}`;
-    const res  = await fetch(url, { headers: apiHeaders() });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data  = await res.json();
-    allAircraft = Array.isArray(data) ? data : (data.aircraft || []);
-
-    // Reset track cache — tracks will be re-fetched for the current time window
-    tracksCache = {};
-    trackLayer.getSource().clear();
-
+function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs()]);}
+async function fetchAircraft(){
+  const se=document.getElementById('fetch-status');
+  try{
+    if(mode==='live'){const p=document.getElementById('filter-time-preset').value;if(p!=='custom'){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-parseInt(p)*60;updateTimeDisplay();}}
+    const params=new URLSearchParams();if(timeStart)params.set('start',timeStart);if(timeStop)params.set('stop',timeStop);
+    if(se)se.textContent='Fetching...';
+    const res=await fetch(`${config.baseUrl}/aircraft/active?${params}`,{headers:apiHeaders()});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();allAircraft=Array.isArray(data)?data:(data.aircraft||[]);
+    tracksCache={};trackLayer.getSource().clear();
     applyFilters();
-    if (statusEl) statusEl.textContent = `✔ ${allAircraft.length} ac · ${new Date().toUTCString().slice(17,25)}`;
-    allAircraft.forEach(ac => fetchTrack(ac.icao24));
-  } catch(e) {
-    console.warn('[SkyWatch] Aircraft fetch failed:', e.message);
-    if (statusEl) statusEl.textContent = `✘ ${e.message}`;
-  }
+    if(se)se.textContent=`OK ${allAircraft.length} ac · ${new Date().toUTCString().slice(17,25)}`;
+    allAircraft.forEach(ac=>fetchTrack(ac.icao24));
+  }catch(e){console.warn(e.message);if(se)se.textContent='ERR '+e.message;}
 }
-
-async function fetchTrack(icao24) {
-  if (!icao24) return;
-  try {
-    const params = new URLSearchParams();
-    if (timeStart) params.set('start', timeStart);
-    if (timeStop)  params.set('stop',  timeStop);
-    const res  = await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}`, { headers: apiHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
-    // Store full points sorted by time — we need altitude_agl_ft for coloring
-    tracksCache[icao24] = [...data].sort((a, b) => a.timestamp - b.timestamp);
+async function fetchAllAircraftFleet(){
+  try{
+    console.log('[Fleet] Fetching from', `${config.baseUrl}/aircraft`);
+    const res=await fetch(`${config.baseUrl}/aircraft`,{headers:apiHeaders()});
+    console.log('[Fleet] Response status:', res.status);
+    if(!res.ok)return;
+    const data=await res.json();
+    allAircraftFleet=Array.isArray(data)?data:(data.aircraft||[]);
+    console.log('[Fleet] Loaded', allAircraftFleet.length, 'aircraft, first:', allAircraftFleet[0]);
+    console.log('[Fleet] Sample airfield coords:', allAircraftFleet.slice(0,3).map(a=>({reg:a.registration,last_airfield:a.last_airfield,airfield_lat:a.airfield_lat,airfield_lon:a.airfield_lon})));
+    renderAirfields();
+  }catch(e){console.warn('[Fleet] fetch failed:',e.message);}
+}
+async function fetchTrack(icao24){
+  if(!icao24)return;
+  try{
+    const params=new URLSearchParams();if(timeStart)params.set('start',timeStart);if(timeStop)params.set('stop',timeStop);
+    const res=await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}`,{headers:apiHeaders()});
+    if(!res.ok)return;
+    const data=await res.json();
+    tracksCache[icao24]=[...data].sort((a,b)=>a.timestamp-b.timestamp);
     renderTracks();
-  } catch(e) {}
+  }catch(e){}
+}
+async function fetchROIs(){
+  try{
+    const res=await fetch(`${config.baseUrl}/regions-of-interest?level=2`,{headers:apiHeaders()});
+    roiData=res.ok?await res.json():[];
+    document.getElementById('stat-rois').textContent=roiData.length;renderROIs();
+  }catch(e){}
 }
 
-async function fetchROIs() {
-  try {
-    const res  = await fetch(`${config.baseUrl}/regions-of-interest?level=2`, { headers: apiHeaders() });
-    roiData = res.ok ? await res.json() : [];
-    document.getElementById('stat-rois').textContent = roiData.length;
-    renderROIs();
-  } catch(e) {
-    console.warn('[SkyWatch] ROI fetch failed:', e.message);
-  }
-}
-
-// ══════════════════════════════════════════════════
 // FILTERS & SELECTION
-// ══════════════════════════════════════════════════
-function applyFilters() {
-  const reg    = document.getElementById('filter-callsign').value.toLowerCase();
-  const type   = document.getElementById('filter-type').value;
-  const altMin = parseFloat(document.getElementById('filter-alt-min').value) || 0;
-  const altMax = parseFloat(document.getElementById('filter-alt-max').value) || Infinity;
-
-  filteredAircraft = allAircraft.filter(ac => {
-    if (reg    && !(ac.registration||'').toLowerCase().includes(reg) &&
-                  !(ac.icao24||'').toLowerCase().includes(reg) &&
-                  !(ac.owner||'').toLowerCase().includes(reg))        return false;
-    if (type   && ac.type !== type)                                    return false;
-    if (ac.last_baro_alt_ft != null && ac.last_baro_alt_ft < altMin)  return false;
-    if (ac.last_baro_alt_ft != null && ac.last_baro_alt_ft > altMax)  return false;
-    const atField = document.getElementById('filter-at-airfield').value;
-    if (atField === 'yes' && !ac.at_airfield)  return false;
-    if (atField === 'no'  &&  ac.at_airfield)  return false;
-    const isFull = document.getElementById('filter-is-full').value;
-    if (isFull === 'yes' && !ac.is_full)  return false;
-    if (isFull === 'no'  &&  ac.is_full)  return false;
+function applyFilters(){
+  const reg=document.getElementById('filter-callsign').value.toLowerCase();
+  const type=document.getElementById('filter-type').value;
+  const altMin=parseFloat(document.getElementById('filter-alt-min').value)||0;
+  const altMax=parseFloat(document.getElementById('filter-alt-max').value)||Infinity;
+  filteredAircraft=allAircraft.filter(ac=>{
+    if(reg&&!(ac.registration||'').toLowerCase().includes(reg)&&!(ac.icao24||'').toLowerCase().includes(reg)&&!(ac.owner||'').toLowerCase().includes(reg))return false;
+    if(type&&ac.type!==type)return false;
+    if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft<altMin)return false;
+    if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft>altMax)return false;
+    const af=document.getElementById('filter-at-airfield').value;
+    if(af==='yes'&&!ac.at_airfield)return false;if(af==='no'&&ac.at_airfield)return false;
+    const fl=document.getElementById('filter-is-full').value;
+    if(fl==='yes'&&!ac.is_full)return false;if(fl==='no'&&ac.is_full)return false;
     return true;
   });
-
-  renderAircraft();
-  renderTracks();
-  gridApi.setGridOption('rowData', filteredAircraft);
-  document.getElementById('stat-aircraft').textContent = filteredAircraft.length;
-  document.getElementById('grid-row-count').textContent = `${filteredAircraft.length} rows`;
+  renderAircraft();renderTracks();
+  gridApi.setGridOption('rowData',filteredAircraft);
+  document.getElementById('stat-aircraft').textContent=filteredAircraft.length;
+  document.getElementById('grid-row-count').textContent=`${filteredAircraft.length} rows`;
   renderAircraftList();
-}
-
-function selectAircraft(icao24) {
-  selectedIcao = icao24;
-  renderAircraft();
-  renderTracks();
-  document.querySelectorAll('.aircraft-item').forEach(el =>
-    el.classList.toggle('active', el.dataset.icao === icao24)
-  );
-  gridApi.forEachNode(n => { if (n.data.icao24 === icao24) n.setSelected(true); });
-  const ac = allAircraft.find(a => a.icao24 === icao24);
-  if (ac?.last_lon && ac?.last_lat)
-    map.getView().animate({ center: ol.proj.fromLonLat([ac.last_lon, ac.last_lat]), duration: 500 });
-}
-
-function renderAircraftList() {
-  const el = document.getElementById('aircraft-list');
-  if (!filteredAircraft.length) {
-    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;margin-top:40px;">No aircraft match filters.</div>';
-    return;
+  // Refresh open airfield popup
+  if(activeAirfieldIcao){
+    const feat=airfieldLayer.getSource().getFeatureById('af_'+activeAirfieldIcao);
+    if(feat)renderAirfieldPopupGrid(feat.get('airfieldGroup').aircraft);
+    else closeAirfieldPopup();
   }
-  el.innerHTML = filteredAircraft.map(ac => `
+}
+
+function selectAircraft(icao24){
+  selectedIcao=icao24;
+  renderAircraft();renderAirfields();renderTracks();
+  document.querySelectorAll('.aircraft-item').forEach(el=>el.classList.toggle('active',el.dataset.icao===icao24));
+  gridApi.forEachNode(n=>{if(n.data.icao24===icao24)n.setSelected(true);});
+  const ac=allAircraft.find(a=>a.icao24===icao24);
+  if(ac?.last_lon!=null&&ac?.last_lat!=null)map.getView().animate({center:ol.proj.fromLonLat([ac.last_lon,ac.last_lat]),duration:500});
+  // Highlight in popup if open
+  document.querySelectorAll('.ap-cell').forEach(c=>c.classList.toggle('selected',c.dataset&&c.dataset.icao===icao24));
+}
+
+function renderAircraftList(){
+  const el=document.getElementById('aircraft-list');
+  if(!filteredAircraft.length){el.innerHTML='<div style="color:var(--text-dim);font-size:12px;text-align:center;margin-top:40px;">No aircraft match filters.</div>';return;}
+  el.innerHTML=filteredAircraft.map(ac=>`
     <div class="aircraft-item" data-icao="${ac.icao24}" onclick="selectAircraft('${ac.icao24}')">
-      <div class="aircraft-callsign">${ac.registration || ac.icao24}</div>
-      <div class="aircraft-meta" style="margin-bottom:3px;">${ac.model || '—'} · ${ac.owner || '—'}</div>
+      <div class="aircraft-callsign">${ac.registration||ac.icao24}</div>
+      <div class="aircraft-meta" style="margin-bottom:3px;">${ac.model||'--'} · ${ac.owner||'--'}</div>
       <div class="aircraft-meta" style="margin-bottom:4px;">${ac.last_airfield||'?'} · ${ac.airfield_name||''}</div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <span class="badge ${ac.type}">${ac.type||'?'}</span>
-        <span class="aircraft-meta">${ac.last_baro_alt_ft!=null ? ac.last_baro_alt_ft.toLocaleString()+' ft' : ''}</span>
-        <span class="aircraft-meta">${ac.last_speed_kt!=null ? ac.last_speed_kt+' kt' : ''}</span>
-        ${ac.at_airfield ? '<span class="badge" style="background:rgba(0,229,255,0.1);color:var(--accent)">AT FIELD</span>' : ''}
-        ${ac.is_full     ? '<span class="badge" style="background:rgba(255,204,0,0.15);color:#ffcc00">FULL</span>' : ''}
+        <span class="aircraft-meta">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':''}</span>
+        <span class="aircraft-meta">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':''}</span>
+        ${ac.at_airfield?'<span class="badge" style="background:rgba(0,229,255,0.1);color:var(--accent)">AT FIELD</span>':''}
+        ${ac.is_full?'<span class="badge" style="background:rgba(255,204,0,0.15);color:#ffcc00">FULL</span>':''}
       </div>
     </div>`).join('');
 }
 
-// ══════════════════════════════════════════════════
 // UI HELPERS
-// ══════════════════════════════════════════════════
-
-function fitMap() {
-  const src = aircraftLayer.getSource();
-  if (!src.isEmpty()) {
-    map.getView().fit(src.getExtent(), { padding:[60,60,60,60], duration:500 });
-  } else if (allAircraft.length) {
-    const lons = allAircraft.map(a => a.last_lon).filter(Boolean);
-    const lats = allAircraft.map(a => a.last_lat).filter(Boolean);
-    if (lons.length) {
-      const ext = ol.extent.boundingExtent(lons.map((lon, i) => ol.proj.fromLonLat([lon, lats[i]])));
-      map.getView().fit(ext, { padding:[60,60,60,60], duration:500 });
-    }
+function fitMap(){
+  const src=aircraftLayer.getSource();
+  if(!src.isEmpty()){map.getView().fit(src.getExtent(),{padding:[60,60,60,60],duration:500});}
+  else if(allAircraft.length){
+    const lons=allAircraft.map(a=>a.last_lon).filter(v=>v!=null);
+    const lats=allAircraft.map(a=>a.last_lat).filter(v=>v!=null);
+    if(lons.length){const ext=ol.extent.boundingExtent(lons.map((lon,i)=>ol.proj.fromLonLat([lon,lats[i]])));map.getView().fit(ext,{padding:[60,60,60,60],duration:500});}
   }
 }
-
-function exportCSV() { gridApi.exportDataAsCsv({ fileName: 'skywatch_export.csv' }); }
-
-function toggleSidebar(side) {
-  const el  = document.getElementById(`sidebar-${side}`);
-  const btn = document.getElementById(`collapse-${side}`);
-  el.classList.toggle('collapsed');
-  const c = el.classList.contains('collapsed');
-  btn.textContent = side === 'left' ? (c ? '▶' : '◀') : (c ? '◀' : '▶');
+function exportCSV(){gridApi.exportDataAsCsv({fileName:'skywatch_export.csv'});}
+function toggleSidebar(side){
+  const el=document.getElementById(`sidebar-${side}`),btn=document.getElementById(`collapse-${side}`);
+  el.classList.toggle('collapsed');const c=el.classList.contains('collapsed');
+  btn.textContent=side==='left'?(c?'▶':'◀'):(c?'◀':'▶');
 }
-
-function toggleBottomPanel() {
-  const panel = document.getElementById('bottom-panel');
-  panel.classList.toggle('collapsed');
-  document.getElementById('bottom-arrow').textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+function toggleBottomPanel(){
+  const p=document.getElementById('bottom-panel');p.classList.toggle('collapsed');
+  document.getElementById('bottom-arrow').textContent=p.classList.contains('collapsed')?'▲':'▼';
 }
-
-function setMode(m) {
-  mode = m;
-  document.getElementById('btn-live').classList.toggle('active',   m === 'live');
-  document.getElementById('btn-replay').classList.toggle('active', m === 'replay');
-  if (m === 'live') {
-    stopReplay();
-    stopPolling();
-    pollTimer = setInterval(fetchAll, config.interval * 1000);
-    fetchAll();
-  } else {
-    startReplay();
-  }
+function setMode(m){
+  mode=m;
+  document.getElementById('btn-live').classList.toggle('active',m==='live');
+  document.getElementById('btn-replay').classList.toggle('active',m==='replay');
+  if(m==='live'){stopReplay();stopPolling();pollTimer=setInterval(fetchAll,config.interval*1000);fetchAll();}
+  else startReplay();
 }
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+setInterval(()=>{document.getElementById('stat-time').textContent=new Date().toUTCString().slice(17,25);},1000);
 
-function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
-
-// UTC clock
-setInterval(() => {
-  document.getElementById('stat-time').textContent = new Date().toUTCString().slice(17, 25);
-}, 1000);
-
-
-// ══════════════════════════════════════════════════
-// REPLAY ENGINE
-// ══════════════════════════════════════════════════
-let replayTimer    = null;
-let replayCursor   = 0;      // current replay Unix timestamp (seconds)
-let replayPlaying  = false;
-
-// Build a flat sorted timeline of all telemetry points across all aircraft
-function buildReplayTimeline() {
-  const points = [];
-  Object.entries(tracksCache).forEach(([icao24, pts]) => {
-    pts.forEach(p => points.push({ ...p, icao24 }));
-  });
-  return points.sort((a, b) => a.timestamp - b.timestamp);
-}
-
-// Render aircraft positions at a given timestamp using interpolation
-function replayRenderAt(ts) {
-  const src = aircraftLayer.getSource(); src.clear();
-  const trk = trackLayer.getSource();   trk.clear();
-
-  filteredAircraft.forEach(ac => {
-    const points = tracksCache[ac.icao24];
-    if (!points || points.length === 0) return;
-
-    // Find the latest point at or before ts
-    let idx = -1;
-    for (let i = 0; i < points.length; i++) {
-      if (points[i].timestamp <= ts) idx = i; else break;
-    }
-    if (idx < 0) return; // aircraft not yet active
-
-    const p    = points[idx];
-    const lon  = p.lon;
-    const lat  = p.lat;
-    if (lon == null || lat == null) return;
-
-    // Draw aircraft icon at this position
-    const color = acColor({ ...ac, at_airfield: p.at_airfield, is_full: p.is_full });
-    const feat  = new ol.Feature({
-      geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
-      aircraft: { ...ac, last_lon: lon, last_lat: lat, at_airfield: p.at_airfield, is_full: p.is_full }
-    });
-    feat.setStyle(aircraftStyle(ac.icon, p.true_track, color, ac.icon_size, ac.icao24 === selectedIcao));
-    feat.setId(ac.icao24);
-    src.addFeature(feat);
-
-    // Draw progressive tail up to ts
-    const tail = points.slice(0, idx + 1);
-    for (let i = 0; i < tail.length - 1; i++) {
-      const p0 = tail[i], p1 = tail[i + 1];
-      if (p0.lon == null || p1.lon == null) continue;
-      const segFeat = new ol.Feature({
-        geometry: new ol.geom.LineString([
-          ol.proj.fromLonLat([p0.lon, p0.lat]),
-          ol.proj.fromLonLat([p1.lon, p1.lat])
-        ])
-      });
-      const agl = p0.altitude_agl_ft ?? null;
-      segFeat.setStyle(new ol.style.Style({
-        stroke: new ol.style.Stroke({
-          color: altColor(agl),
-          width: ac.icao24 === selectedIcao ? 3 : 1.5,
-          lineCap: 'round'
-        })
-      }));
-      trk.addFeature(segFeat);
+// REPLAY
+let replayTimer=null,replayCursor=0,replayPlaying=false;
+function replayRenderAt(ts){
+  const src=aircraftLayer.getSource();src.clear();const trk=trackLayer.getSource();trk.clear();
+  filteredAircraft.forEach(ac=>{
+    const pts=tracksCache[ac.icao24];if(!pts||!pts.length)return;
+    let idx=-1;for(let i=0;i<pts.length;i++){if(pts[i].timestamp<=ts)idx=i;else break;}
+    if(idx<0)return;const p=pts[idx];if(p.lon==null||p.lat==null)return;
+    const color=acColor({...ac,at_airfield:p.at_airfield,is_full:p.is_full});
+    const feat=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([p.lon,p.lat])),aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full}});
+    feat.setStyle(aircraftStyle(ac.icon,p.true_track,color,ac.icon_size,ac.icao24===selectedIcao));feat.setId(ac.icao24);src.addFeature(feat);
+    const tail=pts.slice(0,idx+1);
+    for(let i=0;i<tail.length-1;i++){
+      const p0=tail[i],p1=tail[i+1];if(p0.lon==null||p1.lon==null)continue;
+      const sf=new ol.Feature({geometry:new ol.geom.LineString([ol.proj.fromLonLat([p0.lon,p0.lat]),ol.proj.fromLonLat([p1.lon,p1.lat])])});
+      sf.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({color:altColor(p0.altitude_agl_ft??null),width:ac.icao24===selectedIcao?3:1.5,lineCap:'round'})}));
+      trk.addFeature(sf);
     }
   });
-
-  // Update time display and slider
-  document.getElementById('replay-time').textContent =
-    new Date(ts * 1000).toUTCString().slice(0, 25);
-  const pct = timeStart && timeStop && timeStop > timeStart
-    ? ((ts - timeStart) / (timeStop - timeStart)) * 1000
-    : 0;
-  document.getElementById('replay-slider').value = Math.round(pct);
+  document.getElementById('replay-time').textContent=new Date(ts*1000).toUTCString().slice(0,25);
+  const pct=timeStart&&timeStop&&timeStop>timeStart?((ts-timeStart)/(timeStop-timeStart))*1000:0;
+  document.getElementById('replay-slider').value=Math.round(pct);
 }
-
-function replayTogglePlay() {
-  replayPlaying = !replayPlaying;
-  document.getElementById('replay-playpause').textContent = replayPlaying ? '⏸' : '▶';
-  document.getElementById('replay-playpause').classList.toggle('active', replayPlaying);
-  if (replayPlaying) replayTick(); else { clearTimeout(replayTimer); replayTimer = null; }
+function replayTogglePlay(){
+  replayPlaying=!replayPlaying;
+  document.getElementById('replay-playpause').textContent=replayPlaying?'⏸':'▶';
+  document.getElementById('replay-playpause').classList.toggle('active',replayPlaying);
+  if(replayPlaying)replayTick();else{clearTimeout(replayTimer);replayTimer=null;}
 }
-
-function replayTick() {
-  if (!replayPlaying) return;
-  const speed    = parseInt(document.getElementById('replay-speed').value);
-  const frameMs  = 100; // advance every 100ms real time
-  const stepSecs = speed * (frameMs / 1000);
-
-  replayCursor += stepSecs;
-  if (replayCursor >= timeStop) {
-    replayCursor = timeStop;
-    replayPlaying = false;
-    document.getElementById('replay-playpause').textContent = '▶';
-    document.getElementById('replay-playpause').classList.remove('active');
-  }
-  replayRenderAt(replayCursor);
-  if (replayPlaying) replayTimer = setTimeout(replayTick, frameMs);
+function replayTick(){
+  if(!replayPlaying)return;
+  replayCursor+=parseInt(document.getElementById('replay-speed').value)*0.1;
+  if(replayCursor>=timeStop){replayCursor=timeStop;replayPlaying=false;document.getElementById('replay-playpause').textContent='▶';document.getElementById('replay-playpause').classList.remove('active');}
+  replayRenderAt(replayCursor);if(replayPlaying)replayTimer=setTimeout(replayTick,100);
 }
-
-function replayScrub(val) {
-  replayCursor = timeStart + (val / 1000) * (timeStop - timeStart);
-  replayRenderAt(replayCursor);
+function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart);replayRenderAt(replayCursor);}
+function replayStepBack(){replayCursor=Math.max(timeStart,replayCursor-60);replayRenderAt(replayCursor);}
+function replayStepFwd(){replayCursor=Math.min(timeStop,replayCursor+60);replayRenderAt(replayCursor);}
+function startReplay(){
+  stopPolling();document.getElementById('replay-bar').classList.add('visible');
+  fetchAll().then(()=>{replayCursor=timeStart;replayPlaying=false;document.getElementById('replay-playpause').textContent='▶';document.getElementById('replay-playpause').classList.remove('active');document.getElementById('replay-slider').value=0;replayRenderAt(replayCursor);});
 }
-
-function replayStepBack() {
-  const step = 60; // 1 minute
-  replayCursor = Math.max(timeStart, replayCursor - step);
-  replayRenderAt(replayCursor);
-}
-
-function replayStepFwd() {
-  const step = 60;
-  replayCursor = Math.min(timeStop, replayCursor + step);
-  replayRenderAt(replayCursor);
-}
-
-function startReplay() {
-  // Stop live polling, fetch data for current time window then enter replay
-  stopPolling();
-  document.getElementById('replay-bar').classList.add('visible');
-  // Fetch data (tracks needed for replay)
-  fetchAll().then(() => {
-    replayCursor  = timeStart;
-    replayPlaying = false;
-    document.getElementById('replay-playpause').textContent = '▶';
-    document.getElementById('replay-playpause').classList.remove('active');
-    document.getElementById('replay-slider').value = 0;
-    replayRenderAt(replayCursor);
-  });
-}
-
-function stopReplay() {
-  replayPlaying = false;
-  if (replayTimer) { clearTimeout(replayTimer); replayTimer = null; }
-  document.getElementById('replay-bar').classList.remove('visible');
-  document.getElementById('replay-playpause').textContent = '▶';
+function stopReplay(){
+  replayPlaying=false;if(replayTimer){clearTimeout(replayTimer);replayTimer=null;}
+  document.getElementById('replay-bar').classList.remove('visible');document.getElementById('replay-playpause').textContent='▶';
 }
 
 initTimeRange();
-// Force map to recalculate size after layout is fully rendered
-setTimeout(() => { map.updateSize(); updateLegendSwatches(); }, 50);
-window.addEventListener('resize', () => map.updateSize());
+setTimeout(()=>{map.updateSize();updateLegendSwatches();},50);
+window.addEventListener('resize',()=>map.updateSize());
 setMode('live');
 </script>
 </body>
