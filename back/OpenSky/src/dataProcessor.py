@@ -215,7 +215,25 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
 def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius=8.0, airfield_alt_threshold=1500):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
+
+    water_rois = db.query(migrate.RegionOfInterest).filter(
+        migrate.RegionOfInterest.type == 'water',
+        migrate.RegionOfInterest.level == 2,
+        migrate.RegionOfInterest.water_location_id.isnot(None)
+    ).all()
     
+    water_roi_polys = []
+    for roi in water_rois:
+        try:
+            coords = json.loads(roi.geometry)
+            if len(coords) >= 3:
+                poly = Polygon(coords)
+                wl = db.query(migrate.WaterLocation).filter_by(id=roi.water_location_id).first()
+                if wl:
+                    water_roi_polys.append((poly, wl.ref))
+        except Exception:
+            continue
+
     points = get_unprocessed_points()
     if not points:
         logger.debug("No new points to label.")
@@ -225,9 +243,24 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
     airfield_dict, is_full_dict = get_lastest_aircraft_data()
     water_bombers_dict = get_water_bombers()
 
+    last_known_waterfields = db.query(
+        migrate.FlightTelemetry.icao24,
+        migrate.FlightTelemetry.latest_waterfield,
+        migrate.FlightTelemetry.timestamp
+    ).filter(
+        migrate.FlightTelemetry.latest_waterfield.isnot(None)
+    ).distinct(
+        migrate.FlightTelemetry.icao24
+    ).order_by(
+        migrate.FlightTelemetry.icao24,
+        desc(migrate.FlightTelemetry.timestamp)
+    ).all()
+    waterfield_dict = {row.icao24: row.latest_waterfield for row in last_known_waterfields}
+
     count_low_pass = 0
-    count_over_water = 0 
+    count_over_water = 0
     count_at_airfield = 0
+    count_at_waterfield = 0
 
     # Runs throught every new points
     for p in points:
@@ -246,14 +279,8 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
         if nearby_af:
             p.at_airfield = True
             p.latest_airfield = nearby_af.icao
-            
-            # Update cache and state
             airfield_dict[p.icao24] = nearby_af.icao
-            if p.icao24 in water_bombers_dict:
-                p.is_full = True
-            else:
-                p.is_full = False
-            
+            p.is_full = True if p.icao24 in water_bombers_dict else False
             count_at_airfield += 1
 
         # 2. Inheritance Logic (If not currently at an airfield)
@@ -274,11 +301,27 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
                 count_low_pass += 1
                 p.is_full = False
 
-        
+        # Waterfield check — seaplane inside a linked water ROI below threshold
+        p.latest_waterfield = waterfield_dict.get(p.icao24)  # inherit by default
+
+        ac = water_bombers_dict.get(p.icao24)
+        is_seaplane = db.query(migrate.TrackedAircraft).filter_by(icao24=p.icao24).first()
+        if is_seaplane and is_seaplane.sea_landing and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
+            pt = Point(p.lat, p.lon)  # [lat,lon] space
+            for poly, ref in water_roi_polys:
+                if poly.contains(pt):
+                    p.latest_waterfield = ref
+                    waterfield_dict[p.icao24] = ref
+                    count_at_waterfield += 1
+                    break
+
         p.is_processed = True
 
     db.commit()
-    logger.debug(f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, {count_at_airfield} near Airfields.")
+    logger.debug(
+        f"Labeling complete: {count_low_pass} Low Pass, {count_over_water} Over Water, "
+        f"{count_at_airfield} near Airfields, {count_at_waterfield} near Waterfields."
+    )
 
 def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, type='fire'):
     cutoff_timestamp = int((datetime.now() - timedelta(days=90)).timestamp())
@@ -412,6 +455,11 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
         logger.debug(f"No {type} ROIs found at Level {starting_level} to grow.")
         return
 
+    # Fetch water landing locations for linking (water type only)
+    water_locations = []
+    if type == 'water':
+        water_locations = db.query(migrate.WaterLocation).all()
+
     polygons = []
     for roi in rois:
         coords = json.loads(roi.geometry)
@@ -435,13 +483,11 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
         migrate.RegionOfInterest.type.in_([type, 'training'])
     ).all()
 
-    # Revert training ROIs back to base type for clean matching
     for roi in existing_rois:
         if roi.type == 'training':
             roi.type = type
     db.flush()
 
-    # Pre-parse existing geometries once
     existing_parsed = []
     for roi in existing_rois:
         try:
@@ -451,9 +497,7 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
         except Exception:
             pass
 
-    matched_existing_ids = set()
-
-    # Build all intersection pairs with overlap area
+    # Build overlap scores for greedy matching
     overlap_scores = []
     for i, shape in enumerate(final_shapes):
         for roi, roi_poly in existing_parsed:
@@ -464,37 +508,45 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
             except Exception:
                 continue
 
-    # Greedy assignment: highest overlap first, each shape and ROI used once
     overlap_scores.sort(key=lambda x: x[0], reverse=True)
-    matched_shape_indices  = set()
-    matched_existing_ids   = set()
-    shape_to_roi           = {}
+    matched_shape_indices = set()
+    matched_existing_ids  = set()
+    shape_to_roi          = {}
 
     for area, i, roi, roi_poly in overlap_scores:
-        if i in matched_shape_indices:
-            continue
-        if roi.id in matched_existing_ids:
+        if i in matched_shape_indices or roi.id in matched_existing_ids:
             continue
         shape_to_roi[i] = roi
         matched_shape_indices.add(i)
         matched_existing_ids.add(roi.id)
 
-    # Apply matches and create unmatched
     for i, shape in enumerate(final_shapes):
         merged_coords = list(shape.exterior.coords)
         centroid_lat  = shape.centroid.x
         centroid_lon  = shape.centroid.y
 
+        # Check if any water location falls inside this shape
+        water_location_id = None
+        roi_name          = f"Level {new_level} Zone - Area {i + 1}"
+        if type == 'water':
+            for wl in water_locations:
+                if shape.contains(Point(wl.lat, wl.lon)):  # [lat,lon] space
+                    water_location_id = wl.id
+                    roi_name          = wl.name
+                    logger.debug(f"Level {new_level} water ROI linked to: {wl.name} (id={wl.id})")
+                    break
+
         if i in shape_to_roi:
             roi = shape_to_roi[i]
-            roi.lat         = centroid_lat
-            roi.lon         = centroid_lon
-            roi.geometry    = json.dumps(merged_coords)
-            roi.density     = 0
-            roi.level       = new_level
-            roi.name        = f"Level {new_level} Zone - Area {i + 1}"
-            roi.detected_at = datetime.now()
-            roi.type        = type
+            roi.lat              = centroid_lat
+            roi.lon              = centroid_lon
+            roi.geometry         = json.dumps(merged_coords)
+            roi.density          = 0
+            roi.level            = new_level
+            roi.name             = roi_name
+            roi.detected_at      = datetime.now()
+            roi.type             = type
+            roi.water_location_id = water_location_id
         else:
             new_roi = migrate.RegionOfInterest(
                 lat=centroid_lat,
@@ -502,9 +554,10 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
                 geometry=json.dumps(merged_coords),
                 density=0,
                 level=new_level,
-                name=f"Level {new_level} Zone - Area {i + 1}",
+                name=roi_name,
                 detected_at=datetime.now(),
-                type=type
+                type=type,
+                water_location_id=water_location_id
             )
             db.add(new_roi)
 
@@ -515,8 +568,8 @@ def grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire'):
     db.commit()
     logger.info(
         f"Success: Level {starting_level} → {len(final_shapes)} Level {new_level} "
-        f"{type} ROIs (updated: {len(matched_existing_ids)}, "
-        f"created: {len(final_shapes) - len(matched_existing_ids)}, "
+        f"{type} ROIs (updated: {len(matched_shape_indices)}, "
+        f"created: {len(final_shapes) - len(matched_shape_indices)}, "
         f"removed: {len(stale_rois)})."
     )
 

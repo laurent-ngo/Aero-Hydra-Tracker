@@ -70,11 +70,13 @@ class FlightTelemetry(Base):
     
     at_airfield = Column(Boolean, default=False)
     latest_airfield = Column(String(4), nullable=True)
+    latest_waterfield = Column(String(4), nullable=True)
     
 class RegionOfInterest(Base):
     __tablename__ = "regions_of_interest"
     
     id = Column(Integer, primary_key=True, index=True)
+    water_location_id = Column(Integer, ForeignKey('water_locations.id'), nullable=True)
     name = Column(String, nullable=True)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
@@ -104,11 +106,11 @@ class WaterLocation(Base):
     __tablename__ = 'water_locations'
 
     id  = Column(Integer, primary_key=True)
-    ref = Column(String(10), unique=True)
+    ref = Column(String(4), unique=True)
     name = Column(String)
     lat = Column(Float)
     lon = Column(Float)
-    
+
 
 # --- Migration Logic ---
 def run_migration():
