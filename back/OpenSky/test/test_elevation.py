@@ -27,7 +27,7 @@ def test_get_elevation_valid(mock_provider):
     provider, mock_ds = mock_provider
     # Test a point inside the bounds
     elevation = provider.get_elevation(45.0, 5.0)
-    assert elevation == 150.0
+    assert elevation == pytest.approx(150.0, rel=1e-6)
     mock_ds.index.assert_called_with(5.0, 45.0)
 
 def test_get_elevation_out_of_bounds(mock_provider):
