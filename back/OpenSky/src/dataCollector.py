@@ -25,6 +25,7 @@ def orchestrate_sync():
         AdsbV2Collector('adsbfi'),
         AdsbV2Collector('airplaneslive'),
         AdsbV2Collector('adsbonelol'),
+        AdsbV2Collector('adsboneapi'),
     ]
     session = None
     
