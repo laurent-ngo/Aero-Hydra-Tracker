@@ -190,6 +190,55 @@ class FirefleetCollector:
             logger.error(f"Unexpected error fetching track for {icao24}: {e}")
             return None
 
+class AdsbFiCollector:
+    def __init__(self):
+        self.base_url = "https://opendata.adsb.fi/api/v2/icao"
+
+    def get_by_icao24(self, icao_list):
+        clean_icao = {icao.lower() for icao in icao_list}
+        # v2/icao accepts comma-separated list
+        icao_param = ','.join(clean_icao)
+        url = f"{self.base_url}/{icao_param}"
+
+        try:
+            logger.info("Calling ADSB.fi API")
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            aircraft = data.get('ac', [])
+
+            results = {}
+            for ac in aircraft:
+                icao24 = str(ac.get('hex', '')).lower().strip()
+                if icao24 not in clean_icao:
+                    continue
+                lat = ac.get('lat')
+                lon = ac.get('lon')
+                if lat is None or lon is None:
+                    continue
+                seen_ago  = ac.get('seen', 0) or 0
+                timestamp = int(time.time()) - int(seen_ago)
+                baro_alt  = ac.get('alt_baro')
+
+                results[icao24] = {
+                    'icao24':     icao24,
+                    'timestamp':  timestamp,
+                    'lat':        lat,
+                    'lon':        lon,
+                    'baro_alt':   baro_alt if baro_alt != 'ground' else None,
+                    'on_ground':  baro_alt == 'ground',
+                    'true_track': ac.get('track'),
+                    'velocity':   ac.get('gs'),
+                }
+
+            logger.info(f"ADSB.fi returned {len(results)} tracked aircraft")
+            return results
+
+        except Exception as e:
+            logger.error(f"ADSB.fi error: {e}")
+            return {}
+
+
 # --- Local Test ---
 if __name__ == "__main__":
     # In Github, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
@@ -198,15 +247,19 @@ if __name__ == "__main__":
     logger.debug(f"Token found: {'Yes' if TOKEN else 'No'}")
 
     collector = FirefleetCollector(TOKEN)
+    adsb_fi = AdsbFiCollector()
 
        
     MY_CALLSIGNS = ["MILAN7V"] # Example water bombers
     
     # All Canadair and Dash (Securité civile)
-    MY_ICAO24S = ["3B7B70", "3B7B71", "3B7B72", "3B7B73", "3B7B74", "3B7B75", "3B7B76", "3B7B6B", "3B7B6C", "3B7B6D", "3B7B6E", "3B7B6F", "3B7B39", "3B7B3A", "3B7B3D", "3B7B3E", "3B7B3F", "3B7B63", "3B7B85", "3B7B86" ]
+    MY_ICAO24S = ["3b7b39", "3b7b6c" ]
 
     # For test
     #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
-    fleet_status = collector.get_by_icao24(MY_ICAO24S)
-    print(fleet_status)
+    opensky_states = collector.get_by_icao24(MY_ICAO24S)
+    adsb_fi_results = adsb_fi.get_by_icao24(MY_ICAO24S)
+    
+    print(opensky_states)
+    print(adsb_fi_results)
     
