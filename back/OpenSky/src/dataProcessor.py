@@ -303,7 +303,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
                         count_at_waterfield += 1
                         break
             else:
-                p.latest_waterfield = waterfield_dict[p.icao24]
+                p.latest_waterfield = waterfield_dict.get(p.icao24)
 
         p.is_processed = True
 

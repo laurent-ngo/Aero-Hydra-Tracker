@@ -71,6 +71,8 @@ class FlightTelemetry(Base):
     at_airfield = Column(Boolean, default=False)
     latest_airfield = Column(String(4), nullable=True)
     latest_waterfield = Column(String(4), nullable=True)
+
+    source = Column(String(20), default='opensky', nullable=False)
     
 class RegionOfInterest(Base):
     __tablename__ = "regions_of_interest"

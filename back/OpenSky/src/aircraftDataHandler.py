@@ -71,15 +71,10 @@ def sync_flight_data(session, icao_code, raw_path_data):
     logger.info(f"Added {len(new_points)} new waypoints.")
 
 
-def bulk_insert_telemetry(session, icao24, path_data):
-    """
-    Inserts a list of waypoints in a single transaction.
-    If a timestamp+icao24 already exists, it does nothing (prevents duplicates).
-    """
+def bulk_insert_telemetry(session, icao24, path_data, source='opensky'):
     if not path_data:
         return
 
-    # 1. Transform the raw OpenSky list into a list of dictionaries
     values = [
         {
             "icao24": icao24,
@@ -87,9 +82,10 @@ def bulk_insert_telemetry(session, icao24, path_data):
             "lat": p[1],
             "lon": p[2],
             "baro_altitude": p[3],
-            "baro_altitude_ft":round(p[3] * 3.28084) if p[3] else 0,
+            "baro_altitude_ft": round(p[3] * 3.28084) if p[3] else 0,
             "true_track": p[4],
-            "on_ground": p[5]
+            "on_ground": p[5],
+            "source": source
         }
         for p in path_data
     ]

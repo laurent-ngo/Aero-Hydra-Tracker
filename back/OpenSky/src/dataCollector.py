@@ -88,7 +88,15 @@ def orchestrate_sync():
                 sup = merged_supplementary[icao]
                 if sup['timestamp'] > last_ts:
                     sup_alt_m = round(sup['baro_alt'] / 3.28084, 1) if sup['baro_alt'] not in (None, 'ground') else None
-                    bulk_insert_telemetry(session, icao, [[sup['timestamp'], sup['lat'], sup['lon'], sup_alt_m, sup['true_track'], sup['on_ground']]])
+                    bulk_insert_telemetry(session, icao, [[
+                            sup['timestamp'],
+                            sup['lat'],
+                            sup['lon'],
+                            sup_alt_m,
+                            sup['true_track'],
+                            sup['on_ground']
+                        ]], 
+                        source=sup['source'])
                     logger.info(f"[{icao}] Inserted 1 supplementary point (ts={sup['timestamp']}).")
                 else:
                     logger.debug(f"[{icao}] Supplementary point already covered.")
