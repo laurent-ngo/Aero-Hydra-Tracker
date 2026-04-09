@@ -55,7 +55,7 @@ jobs:
          
       - name: Install dependencies
         run: |
-          pip install pytest pytest-mock requests-mock pytest-cov
+          pip install pytest pytest-mock requests-mock pytest-cov sqlalchemy
 
       - name: Run tests and generate coverage
         run: |
