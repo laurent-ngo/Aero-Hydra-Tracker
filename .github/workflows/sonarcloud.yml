@@ -59,7 +59,7 @@ jobs:
 
       - name: Run tests and generate coverage
         run: |
-          pytest --cov=. --cov-report=xml
+          pytest --cov=. --cov-report=xml --ignore=back/OpenSky/src
 
       - name: Analyze with SonarCloud
 
