@@ -883,17 +883,12 @@ map.on('pointermove',evt=>{
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
-      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield?'✔ Yes':'✘ No'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true?'✔ Yes':ac.is_full===false?'✘ No':'--'}</span></div>`;
+      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
@@ -961,20 +956,14 @@ function renderROIs(){
 const gridOptions={
   columnDefs:[
     {field:'registration',headerName:'REG',width:100,pinned:'left',cellStyle:{fontFamily:"'Share Tech Mono',monospace",color:'var(--accent)'}},
-    {field:'icao24',headerName:'ICAO24',width:95},
-    {field:'type',headerName:'AC TYPE',width:95,cellRenderer:p=>`<span class="badge ${p.value||''}">${p.value||'--'}</span>`},
-    {field:'model',headerName:'MODEL',width:130},{field:'owner',headerName:'OWNER',width:130},
-    {field:'country',headerName:'COUNTRY',width:90},{field:'last_airfield',headerName:'AIRFIELD',width:90},
+    {field:'owner',headerName:'OWNER',width:130},
+    {field:'model',headerName:'MODEL',width:130},
     {field:'airfield_name',headerName:'AIRFIELD NAME',width:160},
     {field:'last_baro_alt_ft',headerName:'BARO ALT ft',width:110,valueFormatter:p=>p.value?.toLocaleString()},
     {field:'last_agl_alt_ft',headerName:'AGL ALT ft',width:105,valueFormatter:p=>p.value?.toLocaleString()},
-    {field:'last_speed_kt',headerName:'SPEED kt',width:95},{field:'last_speed_kph',headerName:'SPEED kph',width:100},
+    {field:'last_speed_kt',headerName:'SPEED kt',width:95},
+    {field:'last_speed_kph',headerName:'SPEED kph',width:100},
     {field:'true_track',headerName:'TRACK',width:85},
-    {field:'last_lat',headerName:'LAT',width:90,valueFormatter:p=>p.value?.toFixed(4)},
-    {field:'last_lon',headerName:'LON',width:90,valueFormatter:p=>p.value?.toFixed(4)},
-    {field:'is_full',headerName:'FULL',width:75,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
-    {field:'at_airfield',headerName:'AT FIELD',width:85,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
-    {field:'sea_landing',headerName:'SEA',width:65,cellRenderer:p=>p.value?'✔':'--'},
     {field:'payload_capacity_kg',headerName:'PAYLOAD kg',width:105},
     {field:'last_timestamp',headerName:'LAST SEEN',width:170,valueFormatter:p=>p.value?new Date(p.value*1000).toUTCString().slice(0,25):'--'}
   ],
