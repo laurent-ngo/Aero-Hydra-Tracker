@@ -888,7 +888,8 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>`;
+      <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(17,25)+' UTC':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
