@@ -190,39 +190,43 @@ class FirefleetCollector:
             logger.error(f"Unexpected error fetching track for {icao24}: {e}")
             return None
 
-class AdsbFiCollector:
-    def __init__(self):
-        self.base_url = "https://opendata.adsb.fi/api/v2/icao"
+class AdsbV2Collector:
+    """Generic collector for any ADSBexchange v2 compatible API."""
+    
+    SOURCES = {
+        'adsbfi':       'https://opendata.adsb.fi/api/v2/icao',
+        'airplaneslive':'https://api.airplanes.live/v2/icao',
+        'adsbonelol':   'https://api.adsb.lol/v2/icao',
+        'adsboneapi':   'https://api.adsb.one/v2/icao',
+    }
+
+    def __init__(self, source='adsbfi'):
+        if source not in self.SOURCES:
+            raise ValueError(f"Unknown source '{source}'. Choose from: {list(self.SOURCES)}")
+        self.source = source
+        self.base_url = self.SOURCES[source]
 
     def get_by_icao24(self, icao_list):
         clean_icao = {icao.lower() for icao in icao_list}
-        # v2/icao accepts comma-separated list
-        icao_param = ','.join(clean_icao)
-        url = f"{self.base_url}/{icao_param}"
-
+        url = f"{self.base_url}/{','.join(clean_icao)}"
         try:
-            logger.info("Calling ADSB.fi API")
+            logger.info(f"Calling {self.source} API")
             response = requests.get(url, timeout=15)
             response.raise_for_status()
-            data = response.json()
-            aircraft = data.get('ac', [])
+            aircraft = response.json().get('ac', [])
 
             results = {}
             for ac in aircraft:
                 icao24 = str(ac.get('hex', '')).lower().strip()
                 if icao24 not in clean_icao:
                     continue
-                lat = ac.get('lat')
-                lon = ac.get('lon')
+                lat, lon = ac.get('lat'), ac.get('lon')
                 if lat is None or lon is None:
                     continue
-                seen_ago  = ac.get('seen', 0) or 0
-                timestamp = int(time.time()) - int(seen_ago)
-                baro_alt  = ac.get('alt_baro')
-
+                baro_alt = ac.get('alt_baro')
                 results[icao24] = {
                     'icao24':     icao24,
-                    'timestamp':  timestamp,
+                    'timestamp':  int(time.time()) - int(ac.get('seen', 0) or 0),
                     'lat':        lat,
                     'lon':        lon,
                     'baro_alt':   baro_alt if baro_alt != 'ground' else None,
@@ -231,14 +235,13 @@ class AdsbFiCollector:
                     'velocity':   ac.get('gs'),
                 }
 
-            logger.info(f"ADSB.fi returned {len(results)} tracked aircraft")
+            logger.info(f"{self.source} returned {len(results)} tracked aircraft")
             return results
 
         except Exception as e:
-            logger.error(f"ADSB.fi error: {e}")
+            logger.error(f"{self.source} error: {e}")
             return {}
-
-
+        
 # --- Local Test ---
 if __name__ == "__main__":
     # In Github, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
@@ -247,19 +250,25 @@ if __name__ == "__main__":
     logger.debug(f"Token found: {'Yes' if TOKEN else 'No'}")
 
     collector = FirefleetCollector(TOKEN)
-    adsb_fi = AdsbFiCollector()
+    adsb_fi = AdsbV2Collector('adsbfi')
+    airplaneslive = AdsbV2Collector('airplaneslive')
+    adsbonelol = AdsbV2Collector('adsbonelol')
 
        
     MY_CALLSIGNS = ["MILAN7V"] # Example water bombers
     
     # All Canadair and Dash (Securité civile)
-    MY_ICAO24S = ["3b7b39", "3b7b6c" ]
+    MY_ICAO24S = ["39856F", "3b7b39", "3b7b6c" ]
 
     # For test
     #fleet_status = collector.get_by_callsigns(MY_CALLSIGNS)
     opensky_states = collector.get_by_icao24(MY_ICAO24S)
     adsb_fi_results = adsb_fi.get_by_icao24(MY_ICAO24S)
+    airplaneslive_results = airplaneslive.get_by_icao24(MY_ICAO24S)
+    adsbonelol_results = adsbonelol.get_by_icao24(MY_ICAO24S)
     
     print(opensky_states)
     print(adsb_fi_results)
+    print(airplaneslive_results)
+    print(adsbonelol_results)
     

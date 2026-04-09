@@ -7,7 +7,9 @@ import json
 logger = logging.getLogger(__name__)
 
 from migrate import SessionLocal
-from openSkyCollector import FirefleetCollector, AdsbFiCollector
+from concurrent.futures import ThreadPoolExecutor
+from openSkyCollector import FirefleetCollector, AdsbV2Collector
+
 from aircraftDataHandler import (
     get_all_tracked_icao24, 
     get_latest_timestamp, 
@@ -18,9 +20,13 @@ CACHE_FILE = "tracked_icao_cache.json"
 
 def orchestrate_sync():
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
-    collector = FirefleetCollector(TOKEN)
-    adsb_fi   = AdsbFiCollector()
-    session   = None
+    collector     = FirefleetCollector(TOKEN)
+    supplementary = [
+        AdsbV2Collector('adsbfi'),
+        AdsbV2Collector('airplaneslive'),
+        AdsbV2Collector('adsbonelol'),
+    ]
+    session = None
     
     try:
         session = SessionLocal()
@@ -49,8 +55,15 @@ def orchestrate_sync():
         if len(icao_list) < 1:
             logger.info("No active aircraft...")
 
-        # Fetch ADSB.fi snapshot once for the whole fleet
-        adsb_fi_results = adsb_fi.get_by_icao24(full_db_icao_list)
+        # Fetch all supplementary sources in parallel, merge keeping freshest per icao24
+        with ThreadPoolExecutor() as ex:
+            all_results = list(ex.map(lambda s: s.get_by_icao24(full_db_icao_list), supplementary))
+
+        merged_supplementary = {}
+        for source_results in all_results:
+            for icao24, data in source_results.items():
+                if icao24 not in merged_supplementary or data['timestamp'] > merged_supplementary[icao24]['timestamp']:
+                    merged_supplementary[icao24] = data
 
         logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
         for icao in icao_list:
@@ -69,15 +82,15 @@ def orchestrate_sync():
             else:
                 logger.debug(f"[{icao}] No live data available.")
 
-            # ADSB.fi supplement — only insert if timestamp is newer
-            if icao in adsb_fi_results:
-                fi = adsb_fi_results[icao]
-                if fi['timestamp'] > last_ts:
-                    fi_alt_m = round(fi['baro_alt'] / 3.28084, 1) if fi['baro_alt'] not in (None, 'ground') else None
-                    bulk_insert_telemetry(session, icao, [[fi['timestamp'], fi['lat'], fi['lon'], fi_alt_m, fi['true_track']]])
-                    logger.info(f"[{icao}] Inserted 1 ADSB.fi point (ts={fi['timestamp']}).")
+            # Supplementary sources — only insert if timestamp is newer
+            if icao in merged_supplementary:
+                sup = merged_supplementary[icao]
+                if sup['timestamp'] > last_ts:
+                    sup_alt_m = round(sup['baro_alt'] / 3.28084, 1) if sup['baro_alt'] not in (None, 'ground') else None
+                    bulk_insert_telemetry(session, icao, [[sup['timestamp'], sup['lat'], sup['lon'], sup_alt_m, sup['true_track']]])
+                    logger.info(f"[{icao}] Inserted 1 supplementary point (ts={sup['timestamp']}).")
                 else:
-                    logger.debug(f"[{icao}] ADSB.fi point already covered.")
+                    logger.debug(f"[{icao}] Supplementary point already covered.")
 
             time.sleep(0.5)
 
