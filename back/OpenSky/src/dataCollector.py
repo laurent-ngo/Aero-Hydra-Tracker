@@ -7,7 +7,9 @@ import json
 logger = logging.getLogger(__name__)
 
 from migrate import SessionLocal
-from openSkyCollector import FirefleetCollector
+from concurrent.futures import ThreadPoolExecutor
+from openSkyCollector import FirefleetCollector, AdsbV2Collector
+
 from aircraftDataHandler import (
     get_all_tracked_icao24, 
     get_latest_timestamp, 
@@ -16,15 +18,20 @@ from aircraftDataHandler import (
 
 CACHE_FILE = "tracked_icao_cache.json"
 
-def orchestrate_sync(active_only=False):
+def orchestrate_sync():
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
-    collector = FirefleetCollector(TOKEN)
+    collector     = FirefleetCollector(TOKEN)
+    supplementary = [
+        AdsbV2Collector('adsbfi'),
+        AdsbV2Collector('airplaneslive'),
+        AdsbV2Collector('adsbonelol'),
+    ]
     session = None
     
     try:
         session = SessionLocal()
 
-        # Caching tracked aircraft
+        # Load tracked ICAO list
         full_db_icao_list = None
         if os.path.exists(CACHE_FILE):
             try:
@@ -33,52 +40,58 @@ def orchestrate_sync(active_only=False):
                 logger.info("Loaded tracked ICAOs from local cache.")
             except Exception as e:
                 logger.error(f"Cache read failed: {e}")
-
         if full_db_icao_list is None:
-            full_db_icao_list = get_all_tracked_icao24(session, active_only)
-            # Save to cache for next time
+            full_db_icao_list = get_all_tracked_icao24(session, False)
             try:
                 with open(CACHE_FILE, 'w') as f:
                     json.dump(full_db_icao_list, f)
                 logger.info("Saved tracked ICAOs to local cache.")
             except Exception as e:
                 logger.warning(f"Could not write cache file: {e}")
-                    
-        full_icao_list_dict = collector.get_by_icao24(full_db_icao_list)
-        full_icao_list = [ac['icao24'] for ac in full_icao_list_dict]
 
-        if active_only:
-            EXCLUDED_ICAO = {"3b7b64", "3b7b65", "3b7b66"}
-            icao_list = [icao for icao in full_icao_list if icao not in EXCLUDED_ICAO]
-        else:
-            icao_list = full_icao_list
+        full_icao_list_dict = collector.get_by_icao24(full_db_icao_list)
+        icao_list = [ac['icao24'] for ac in full_icao_list_dict]
 
         if len(icao_list) < 1:
             logger.info("No active aircraft...")
 
+        # Fetch all supplementary sources in parallel, merge keeping freshest per icao24
+        with ThreadPoolExecutor() as ex:
+            all_results = list(ex.map(lambda s: s.get_by_icao24(full_db_icao_list), supplementary))
+
+        merged_supplementary = {}
+        for source_results in all_results:
+            for icao24, data in source_results.items():
+                if icao24 not in merged_supplementary or data['timestamp'] > merged_supplementary[icao24]['timestamp']:
+                    merged_supplementary[icao24] = data
+
         logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
-
-
         for icao in icao_list:
-            # 1. Get high-water mark
             last_ts = get_latest_timestamp(session, icao)
-            
-            # 2. Fetch track
-            track_data = collector.get_aircraft_track(icao)
 
+            # OpenSky track
+            track_data = collector.get_aircraft_track(icao)
             if track_data and 'path' in track_data:
-                # 3. Filter and Insert
                 new_points = [p for p in track_data['path'] if p[0] > last_ts]
-                
                 if new_points:
                     bulk_insert_telemetry(session, icao, new_points)
                     logger.info(f"[{icao}] Inserted {len(new_points)} new points.")
+                    last_ts = max(p[0] for p in new_points)
                 else:
                     logger.debug(f"[{icao}] Up-to-date.")
             else:
                 logger.debug(f"[{icao}] No live data available.")
-            
-            # 4. API Throttling
+
+            # Supplementary sources — only insert if timestamp is newer
+            if icao in merged_supplementary:
+                sup = merged_supplementary[icao]
+                if sup['timestamp'] > last_ts:
+                    sup_alt_m = round(sup['baro_alt'] / 3.28084, 1) if sup['baro_alt'] not in (None, 'ground') else None
+                    bulk_insert_telemetry(session, icao, [[sup['timestamp'], sup['lat'], sup['lon'], sup_alt_m, sup['true_track']]])
+                    logger.info(f"[{icao}] Inserted 1 supplementary point (ts={sup['timestamp']}).")
+                else:
+                    logger.debug(f"[{icao}] Supplementary point already covered.")
+
             time.sleep(0.5)
 
         logger.info("[DONE] Fleet sync completed successfully.")
@@ -86,6 +99,7 @@ def orchestrate_sync(active_only=False):
 
     except Exception as e:
         logger.critical(f"Orchestrator failed: {e}")
+        raise
     finally:
         if session:
             session.close()
@@ -108,17 +122,5 @@ if __name__ == "__main__":
         ]
     )
 
-    # 1. Setup the argument parser
-    parser = argparse.ArgumentParser(description="AERO-HYDRA Sync Orchestrator")
-    
-    # 2. Add the toggle (action="store_true" means it's False by default)
-    parser.add_argument(
-        "--active", 
-        action="store_true", 
-        help="Only sync aircraft active in the last 5 minutes"
-    )
-
-    args = parser.parse_args()
-
     # 3. Pass the argument to your function
-    orchestrate_sync(active_only=args.active)
+    orchestrate_sync()
