@@ -17,18 +17,77 @@ from aircraftDataHandler import (
 )
 
 CACHE_FILE = "tracked_icao_cache.json"
+ADSB_CACHE_FILE = "adsb_supplement_cache.json"
 
-def orchestrate_sync():
-    TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
-    collector     = FirefleetCollector(TOKEN)
+
+def update_adsb_cache():
+    """Fetch from all supplementary sources and store new points in cache."""
     supplementary = [
         AdsbV2Collector('adsbfi'),
         AdsbV2Collector('airplaneslive'),
         AdsbV2Collector('adsbonelol'),
         AdsbV2Collector('adsboneapi'),
     ]
-    session = None
-    
+
+    # Load full ICAO list from cache
+    if not os.path.exists(CACHE_FILE):
+        logger.warning("No tracked ICAO cache found, skipping ADSB update.")
+        return
+
+    with open(CACHE_FILE, 'r') as f:
+        full_db_icao_list = json.load(f)
+
+    # Fetch all sources in parallel, merge keeping freshest per icao24
+    with ThreadPoolExecutor() as ex:
+        all_results = list(ex.map(lambda s: s.get_by_icao24(full_db_icao_list), supplementary))
+
+    merged = {}
+    for source_results in all_results:
+        for icao24, data in source_results.items():
+            if icao24 not in merged or data['timestamp'] > merged[icao24]['timestamp']:
+                merged[icao24] = data
+
+    if not merged:
+        logger.info("ADSB cache update: no data returned.")
+        return
+
+    # Load existing cache
+    cache = {}
+    if os.path.exists(ADSB_CACHE_FILE):
+        try:
+            with open(ADSB_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not read ADSB cache: {e}")
+
+    # Add new points — one entry per timestamp per icao24
+    new_count = 0
+    for icao24, data in merged.items():
+        ts = str(data['timestamp'])
+        if icao24 not in cache:
+            cache[icao24] = {}
+        if ts not in cache[icao24]:
+            cache[icao24][ts] = {
+                'lat':       data['lat'],
+                'lon':       data['lon'],
+                'baro_alt':  data['baro_alt'],
+                'on_ground': data['on_ground'],
+                'true_track':data['true_track'],
+                'source':    data['source'],
+            }
+            new_count += 1
+
+    # Write back
+    with open(ADSB_CACHE_FILE, 'w') as f:
+        json.dump(cache, f)
+
+    logger.info(f"ADSB cache updated: {new_count} new points cached.")
+
+def orchestrate_sync():
+    TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
+    collector = FirefleetCollector(TOKEN)
+    session   = None
+
     try:
         session = SessionLocal()
 
@@ -56,15 +115,15 @@ def orchestrate_sync():
         if len(icao_list) < 1:
             logger.info("No active aircraft...")
 
-        # Fetch all supplementary sources in parallel, merge keeping freshest per icao24
-        with ThreadPoolExecutor() as ex:
-            all_results = list(ex.map(lambda s: s.get_by_icao24(full_db_icao_list), supplementary))
-
-        merged_supplementary = {}
-        for source_results in all_results:
-            for icao24, data in source_results.items():
-                if icao24 not in merged_supplementary or data['timestamp'] > merged_supplementary[icao24]['timestamp']:
-                    merged_supplementary[icao24] = data
+        # Load ADSB supplement cache
+        adsb_cache = {}
+        if os.path.exists(ADSB_CACHE_FILE):
+            try:
+                with open(ADSB_CACHE_FILE, 'r') as f:
+                    adsb_cache = json.load(f)
+                logger.info(f"Loaded ADSB cache with {sum(len(v) for v in adsb_cache.values())} points.")
+            except Exception as e:
+                logger.warning(f"Could not read ADSB cache: {e}")
 
         logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
         for icao in icao_list:
@@ -77,31 +136,42 @@ def orchestrate_sync():
                 if new_points:
                     bulk_insert_telemetry(session, icao, new_points)
                     logger.info(f"[{icao}] Inserted {len(new_points)} new points.")
-                    last_ts = max(p[0] for p in new_points)
+                    # Collect all OpenSky timestamps to avoid duplicates
+                    opensky_timestamps = {p[0] for p in track_data['path']}
                 else:
+                    opensky_timestamps = set()
                     logger.debug(f"[{icao}] Up-to-date.")
             else:
+                opensky_timestamps = set()
                 logger.debug(f"[{icao}] No live data available.")
 
-            # Supplementary sources — only insert if timestamp is newer
-            if icao in merged_supplementary:
-                sup = merged_supplementary[icao]
-                if sup['timestamp'] > last_ts:
-                    sup_alt_m = round(sup['baro_alt'] / 3.28084, 1) if sup['baro_alt'] not in (None, 'ground') else None
+            # Merge ADSB cache — skip timestamps already in OpenSky
+            if icao in adsb_cache:
+                cached_points = adsb_cache[icao]
+                inserted = 0
+                for ts_str, point in sorted(cached_points.items(), key=lambda x: int(x[0])):
+                    ts = int(ts_str)
+                    if ts in opensky_timestamps or ts <= last_ts:
+                        continue
+                    sup_alt_m = round(point['baro_alt'] / 3.28084, 1) if point['baro_alt'] not in (None, 'ground') else None
                     bulk_insert_telemetry(session, icao, [[
-                            sup['timestamp'],
-                            sup['lat'],
-                            sup['lon'],
-                            sup_alt_m,
-                            sup['true_track'],
-                            sup['on_ground']
-                        ]], 
-                        source=sup['source'])
-                    logger.info(f"[{icao}] Inserted 1 supplementary point (ts={sup['timestamp']}).")
-                else:
-                    logger.debug(f"[{icao}] Supplementary point already covered.")
+                        ts,
+                        point['lat'],
+                        point['lon'],
+                        sup_alt_m,
+                        point['true_track'],
+                        point['on_ground'],
+                    ]], source=point['source'])
+                    inserted += 1
+                if inserted:
+                    logger.info(f"[{icao}] Inserted {inserted} cached ADSB points.")
 
             time.sleep(0.5)
+
+        # Clear the cache after successful merge
+        if os.path.exists(ADSB_CACHE_FILE):
+            os.remove(ADSB_CACHE_FILE)
+            logger.info("ADSB cache cleared after merge.")
 
         logger.info("[DONE] Fleet sync completed successfully.")
         return icao_list

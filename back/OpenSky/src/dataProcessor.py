@@ -22,7 +22,7 @@ from shapely.ops import unary_union
 from elevation import ElevationProvider
 
 import migrate
-from dataCollector import orchestrate_sync 
+from dataCollector import orchestrate_sync, update_adsb_cache
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -623,7 +623,6 @@ if __name__ == "__main__":
         action="store_true", 
         help="Only set AGL altitude"
     )
-
     
     parser.add_argument(
         "--ROI", 
@@ -631,7 +630,17 @@ if __name__ == "__main__":
         help="Only set ROIs"
     )
 
+    parser.add_argument(
+        "--adsb-cache",
+        action="store_true",
+        help="Only update ADSB supplement cache (fast, no OpenSky call)"
+    )
+
     args = parser.parse_args()
+
+    if args.adsb_cache:
+        update_adsb_cache()
+        sys.exit(0)
 
     
     if args.ROI: 
@@ -647,20 +656,22 @@ if __name__ == "__main__":
         #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
         #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water
 
+        sys.exit(0)
+
     
+
+    icao_list = orchestrate_sync()
+
+
+    if args.AGL:
+        backfill_agl()
+        label_flight_phases()
     else:
-        icao_list = orchestrate_sync()
+        if len(icao_list) > 0:
 
-
-        if args.AGL:
+            backfill_telemetry(icao_list)
             backfill_agl()
             label_flight_phases()
-        else:
-            if len(icao_list) > 0:
-
-                backfill_telemetry(icao_list)
-                backfill_agl()
-                label_flight_phases()
-                sync_aircraft_metadata()
+            sync_aircraft_metadata()
 
         
