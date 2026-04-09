@@ -233,6 +233,7 @@ class AdsbV2Collector:
                     'on_ground':  baro_alt == 'ground',
                     'true_track': ac.get('track'),
                     'velocity':   ac.get('gs'),
+                    'source':     self.source,
                 }
 
             logger.info(f"{self.source} returned {len(results)} tracked aircraft")
