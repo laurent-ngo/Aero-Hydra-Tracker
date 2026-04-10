@@ -242,7 +242,130 @@ class AdsbV2Collector:
         except Exception as e:
             logger.error(f"{self.source} error: {e}")
             return {}
-        
+
+class FR24Collector:
+    def __init__(self):
+        self.api_key  = os.getenv('FR24_API_KEY')
+        self.base_url = 'https://fr24api.flightradar24.com/api'
+        self.headers  = {
+            'Accept':        'application/json',
+            'Authorization': f'Bearer {self.api_key}'
+        }
+
+    def get_by_icao24(self, icao_list):
+        """Fetch latest position for a list of ICAO24s using the light endpoint."""
+        clean_icao = {icao.lower() for icao in icao_list}
+
+        # FR24 uses hex field — build comma-separated list
+        hex_param = ','.join(clean_icao)
+        url = f"{self.base_url}/live/flight-positions/light"
+
+        try:
+            logger.info("Calling FR24 API/positions")
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params={'hex': hex_param},
+                timeout=15
+            )
+            response.raise_for_status()
+            data = response.json()
+            aircraft = data.get('data', [])
+
+            results = {}
+            for ac in aircraft:
+                icao24 = str(ac.get('hex', '')).lower().strip()
+                if icao24 not in clean_icao:
+                    continue
+                lat = ac.get('lat')
+                lon = ac.get('lon')
+                if lat is None or lon is None:
+                    continue
+
+                # FR24 timestamp is ISO8601 — convert to unix
+                ts_str = ac.get('timestamp')
+                try:
+                    from datetime import datetime, timezone
+                    ts = int(datetime.fromisoformat(ts_str.replace('Z', '+00:00')).timestamp())
+                except Exception:
+                    ts = int(time.time())
+
+                baro_alt = ac.get('alt')
+
+                results[icao24] = {
+                    'icao24':     icao24,
+                    'timestamp':  ts,
+                    'lat':        lat,
+                    'lon':        lon,
+                    'baro_alt':   round(baro_alt / 3.28084, 1) if baro_alt is not None else None,  # ft → metres
+                    'on_ground':  baro_alt == 0,
+                    'true_track': ac.get('track'),
+                    'velocity':   ac.get('gspeed'),
+                    'source':     'fr24',
+                }
+
+            logger.info(f"FR24 returned {len(results)} tracked aircraft")
+            return results
+
+        except Exception as e:
+            logger.error(f"FR24 error: {e}")
+            return {}
+
+    def get_track(self, icao24, fr24_id=None):
+        """
+        Fetch full 30-day track for a specific aircraft.
+        Requires fr24_id — use get_fr24_id() first if unknown.
+        """
+        if not fr24_id:
+            fr24_id = self.get_fr24_id(icao24)
+        if not fr24_id:
+            logger.warning(f"[{icao24}] No FR24 ID found, cannot fetch track.")
+            return []
+
+        url = f"{self.base_url}/historic/flight-tracks/{fr24_id}"
+
+        try:
+            logger.info(f"Calling FR24 API/track for {icao24} ({fr24_id})")
+            response = requests.get(url, headers=self.headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            tracks = data.get('tracks', [])
+
+            points = []
+            for p in tracks:
+                ts_str = p.get('timestamp')
+                try:
+                    from datetime import datetime, timezone
+                    ts = int(datetime.fromisoformat(ts_str.replace('Z', '+00:00')).timestamp())
+                except Exception:
+                    continue
+
+                alt_ft = p.get('alt')
+                alt_m  = round(alt_ft / 3.28084, 1) if alt_ft is not None else None
+
+                # Format matches bulk_insert_telemetry: [ts, lat, lon, alt_m, track, on_ground]
+                points.append([
+                    ts,
+                    p.get('lat'),
+                    p.get('lon'),
+                    alt_m,
+                    p.get('track'),
+                    alt_ft == 0,
+                ])
+
+            logger.info(f"FR24 track for {icao24}: {len(points)} points")
+            return points
+
+        except Exception as e:
+            logger.error(f"FR24 track error for {icao24}: {e}")
+            return []
+
+    def get_fr24_id(self, icao24):
+        """Resolve an ICAO24 hex to a FR24 flight ID via the light endpoint."""
+        results = self.get_by_icao24([icao24])
+        return results.get(icao24, {}).get('fr24_id')
+
+
 # --- Local Test ---
 if __name__ == "__main__":
     # In Github, we will use os.getenv('OPENSKY_CLIENT_TOKEN')
