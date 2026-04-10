@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 import math
 from datetime import datetime
-from sqlalchemy import create_engine, desc, func
+from sqlalchemy import create_engine, desc, func, or_, and_
 from sqlalchemy.orm import sessionmaker
 from math import radians, cos, sin, asin, sqrt
 from collections import Counter
@@ -145,10 +145,15 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 def get_unprocessed_points():
     points = db.query(migrate.FlightTelemetry).filter(
-        migrate.FlightTelemetry.altitude_agl_ft != None,
-        migrate.FlightTelemetry.baro_altitude_ft != None,
-        migrate.FlightTelemetry.altitude_agl_ft < 60000,
-        migrate.FlightTelemetry.is_processed == False 
+        migrate.FlightTelemetry.is_processed == False,
+        or_(
+            and_(  
+                migrate.FlightTelemetry.altitude_agl_ft != None,
+                migrate.FlightTelemetry.baro_altitude_ft != None,
+                migrate.FlightTelemetry.altitude_agl_ft < 60000
+            ),
+            migrate.FlightTelemetry.on_ground == True
+        ) 
     ).order_by(
         migrate.FlightTelemetry.timestamp,
         desc(migrate.FlightTelemetry.timestamp)
@@ -210,7 +215,7 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
     for af in airfields:
         dist = calculate_distance(point.lat, point.lon, af.lat, af.lon)
 
-        if dist <= radius_km and point.altitude_agl_ft <= alt_threshold_ft:
+        if dist <= radius_km and ( point.on_ground or point.altitude_agl_ft <= alt_threshold_ft ) :
             return af
     return None
 
@@ -280,11 +285,11 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
                 p.latest_airfield = None
         
             # 3. Label Phase (Only if NOT at an airfield)
-            if abs(p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
+            if p.baro_altitude_ft is not None and p.altitude_agl_ft is not None and abs(p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
                 p.is_over_water = True
                 count_over_water += 1
 
-            if p.altitude_agl_ft <= threshold_ft:
+            if p.altitude_agl_ft is not None and p.altitude_agl_ft <= threshold_ft:
                 p.is_low_pass = True
                 count_low_pass += 1
                 p.is_full = False
