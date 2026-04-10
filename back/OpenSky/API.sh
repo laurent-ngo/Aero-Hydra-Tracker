@@ -1,9 +1,10 @@
 #!/bin/bash
 
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Load the utilities
-source ./utils.sh
-
-
+source "$SCRIPT_DIR/utils.sh"
+LOCAL_ENVS="$SCRIPT_DIR/local.sh"
 
 # Configuration
 PROJECT_DIR="/home/lngo/projects/aero-hydra/back/OpenSky"
