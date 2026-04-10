@@ -7,13 +7,14 @@ from migrate import TrackedAircraft, Airfield, WaterLocation
 import logging
 logger = logging.getLogger(__name__)
 
+SSL_MODE = 'sslmode=disable'
 def load_aircrafts_from_csv(file_path):
 
     user = os.getenv('DB_USER', 'neondb_owner')
     password = os.getenv('DB_PASSWORD')
     db_host = os.getenv('DB_HOST')
     db_name = os.getenv('DB_NAME', 'neondb')
-    db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
+    db_opts = os.getenv('DB_OPTIONS', SSL_MODE)
 
     db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
     
@@ -62,7 +63,7 @@ def load_airfields_from_csv(file_path):
     password = os.getenv('DB_PASSWORD')
     db_host = os.getenv('DB_HOST')
     db_name = os.getenv('DB_NAME', 'neondb')
-    db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
+    db_opts = os.getenv('DB_OPTIONS', SSL_MODE)
 
     db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
     
@@ -110,7 +111,7 @@ def load_water_locations_from_csv(file_path):
     password = os.getenv('DB_PASSWORD')
     db_host  = os.getenv('DB_HOST')
     db_name  = os.getenv('DB_NAME', 'neondb')
-    db_opts  = os.getenv('DB_OPTIONS', 'sslmode=disable')
+    db_opts  = os.getenv('DB_OPTIONS', SSL_MODE)
 
     db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
 
