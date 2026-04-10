@@ -29,13 +29,7 @@ def update_adsb_cache():
         AdsbV2Collector('adsboneapi'),
     ]
 
-    # Load full ICAO list from cache
-    if not os.path.exists(CACHE_FILE):
-        logger.warning("No tracked ICAO cache found, skipping ADSB update.")
-        return
-
-    with open(CACHE_FILE, 'r') as f:
-        full_db_icao_list = json.load(f)
+    full_db_icao_list = get_cached_icao_list()
 
     # Fetch all sources in parallel, merge keeping freshest per icao24
     with ThreadPoolExecutor() as ex:
@@ -83,6 +77,17 @@ def update_adsb_cache():
 
     logger.info(f"ADSB cache updated: {new_count} new points cached.")
 
+def get_cached_icao_list():
+    full_db_icao_list = None
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                full_db_icao_list = json.load(f)
+            logger.info("Loaded tracked ICAOs from local cache.")
+        except Exception as e:
+            logger.error(f"Cache read failed: {e}")
+    return full_db_icao_list
+
 def orchestrate_sync():
     TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
     collector = FirefleetCollector(TOKEN)
@@ -92,14 +97,8 @@ def orchestrate_sync():
         session = SessionLocal()
 
         # Load tracked ICAO list
-        full_db_icao_list = None
-        if os.path.exists(CACHE_FILE):
-            try:
-                with open(CACHE_FILE, 'r') as f:
-                    full_db_icao_list = json.load(f)
-                logger.info("Loaded tracked ICAOs from local cache.")
-            except Exception as e:
-                logger.error(f"Cache read failed: {e}")
+        full_db_icao_list = get_cached_icao_list()
+
         if full_db_icao_list is None:
             full_db_icao_list = get_all_tracked_icao24(session, False)
             try:
