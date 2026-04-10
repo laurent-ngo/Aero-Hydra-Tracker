@@ -7,19 +7,25 @@ from migrate import TrackedAircraft, Airfield, WaterLocation
 import logging
 logger = logging.getLogger(__name__)
 
-def load_aircrafts_from_csv(file_path):
 
-    user = os.getenv('DB_USER', 'neondb_owner')
+def get_db_session():
+    user     = os.getenv('DB_USER', 'neondb_owner')
     password = os.getenv('DB_PASSWORD')
-    db_host = os.getenv('DB_HOST')
-    db_name = os.getenv('DB_NAME', 'neondb')
-    db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
+    db_host  = os.getenv('DB_HOST')
+    db_name  = os.getenv('DB_NAME', 'neondb')
+    db_opts  = os.getenv('DB_OPTIONS', 'sslmode=disable')
 
     db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
-    
-    engine = create_engine(db_url)
+
+    engine  = create_engine(db_url)
     Session = sessionmaker(bind=engine)
     session = Session()
+
+    return session
+
+def load_aircrafts_from_csv(file_path):
+
+    session = get_db_session()
 
     try:
         with open(file_path, mode='r', encoding='utf-8') as f:
@@ -58,17 +64,7 @@ def load_aircrafts_from_csv(file_path):
 
 def load_airfields_from_csv(file_path):
 
-    user = os.getenv('DB_USER', 'neondb_owner')
-    password = os.getenv('DB_PASSWORD')
-    db_host = os.getenv('DB_HOST')
-    db_name = os.getenv('DB_NAME', 'neondb')
-    db_opts = os.getenv('DB_OPTIONS', 'sslmode=disable')
-
-    db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
-    
-    engine = create_engine(db_url)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session = get_db_session()
 
     try:
         with open(file_path, mode='r', encoding='utf-8') as f:
@@ -106,17 +102,8 @@ def load_airfields_from_csv(file_path):
         session.close()
 
 def load_water_locations_from_csv(file_path):
-    user     = os.getenv('DB_USER', 'neondb_owner')
-    password = os.getenv('DB_PASSWORD')
-    db_host  = os.getenv('DB_HOST')
-    db_name  = os.getenv('DB_NAME', 'neondb')
-    db_opts  = os.getenv('DB_OPTIONS', 'sslmode=disable')
 
-    db_url = f"postgresql://{user}:{password}@{db_host}/{db_name}?{db_opts}"
-
-    engine  = create_engine(db_url)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    session = get_db_session()
 
     try:
         with open(file_path, mode='r', encoding='utf-8') as f:

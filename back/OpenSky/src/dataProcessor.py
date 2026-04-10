@@ -292,7 +292,6 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
             # Waterfield check — seaplane inside a linked water ROI below threshold
             p.latest_waterfield = waterfield_dict.get(p.icao24)  # inherit by default
 
-            ac = water_bombers_dict.get(p.icao24)
             is_seaplane = db.query(migrate.TrackedAircraft).filter_by(icao24=p.icao24).first()
             if is_seaplane and is_seaplane.sea_landing and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
                 pt = Point(p.lat, p.lon)  # [lat,lon] space
@@ -649,12 +648,8 @@ if __name__ == "__main__":
         detect_regions_of_interest_clustered(type='water')
 
         grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='fire')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='fire')
         
         grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=2, buffer_km=1.0, type='water')
-        #grow_and_level_up_rois(starting_level=3, buffer_km=1.0, type='water
 
         sys.exit(0)
 
