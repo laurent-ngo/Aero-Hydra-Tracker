@@ -4,13 +4,13 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Load the utilities
 source "$SCRIPT_DIR/utils.sh"
-LOCAL_ENVS="$SCRIPT_DIR/local.sh"
 
 # Configuration
-PROJECT_DIR="/home/lngo/projects/aero-hydra/back/OpenSky"
+PROJECT_DIR="${PROJECT_HOME:+$PROJECT_HOME/back/OpenSky}"
+PROJECT_DIR="${PROJECT_DIR:-$SCRIPT_DIR}"
+
 PID_FILE="$PROJECT_DIR/api.pid"
 LOG_FILE="$PROJECT_DIR/logs/api_logs$(date +\%Y-\%m-\%d).txt"
-
 LOCAL_ENVS="$PROJECT_DIR/local.sh"
 
 header "Aero-Hydra API Manager"
