@@ -109,27 +109,46 @@ def backfill_agl():
         return
 
     logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
-
-    elevation_south = ElevationProvider("../data/elevation_south.tif")
-    elevation_centre = ElevationProvider("../data/elevation_centre.tif")
-    elevation_north = ElevationProvider("../data/elevation_north.tif")
+   
+    elevation_providers = [
+        ElevationProvider("../data/azur.tif"),
+        ElevationProvider("../data/france.tif"),
+        ElevationProvider("../data/italy.tif"),
+        ElevationProvider("../data/sicilia.tif"),
+        ElevationProvider("../data/catalogna.tif"),
+        ElevationProvider("../data/spain.tif"),
+        ElevationProvider("../data/corsica.tif"),
+        ElevationProvider("../data/switzerland.tif"),
+        ElevationProvider("../data/portugal.tif"),
+        ElevationProvider("../data/brittany.tif"),
+        ElevationProvider("../data/belgium.tif"),
+        ElevationProvider("../data/germany.tif"),
+    ]
     
-    for p in points_to_fix:
-        # 2. Get the ground height from your new method
-        ground_m = elevation_south.get_elevation(p.lat, p.lon)
+    ELEVATION_BBOX = {
+        'lamin': 35.9,
+        'lamax': 54.9,
+        'lomin': -9.6,
+        'lomax': 19,
+    }
 
-        if ground_m is None:
-            ground_m = elevation_centre.get_elevation(p.lat, p.lon)
-            
-        if ground_m is None:
-            ground_m = elevation_north.get_elevation(p.lat, p.lon)
-        
-        if ground_m is not None:
-            # 3. Calculation: MSL - Ground = AGL
-            agl_m = max(0, p.baro_altitude - ground_m)
-            p.altitude_agl_ft = round(agl_m * 3.28084, 0)
-        else:
+    for p in points_to_fix:
+        if not (ELEVATION_BBOX['lamin'] <= p.lat <= ELEVATION_BBOX['lamax'] and
+            ELEVATION_BBOX['lomin'] <= p.lon <= ELEVATION_BBOX['lomax']):
             p.altitude_agl_ft = 60000
+        else:
+            ground_m = 0
+            for provider in elevation_providers:
+                ground_m = provider.get_elevation(p.lat, p.lon)
+                if ground_m is not None:
+                    break
+            
+            if ground_m is not None:
+                # 3. Calculation: MSL - Ground = AGL
+                agl_m = max(0, p.baro_altitude - ground_m)
+                p.altitude_agl_ft = round(agl_m * 3.28084, 0)
+            else:
+                p.altitude_agl_ft = 60000
 
     db.commit()
     logger.info("Batch AGL backfill complete.")
