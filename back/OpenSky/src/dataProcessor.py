@@ -136,7 +136,6 @@ def backfill_agl():
         if not (ELEVATION_BBOX['lamin'] <= p.lat <= ELEVATION_BBOX['lamax'] and
             ELEVATION_BBOX['lomin'] <= p.lon <= ELEVATION_BBOX['lomax']):
             p.altitude_agl_ft = 60000
-            continue
         else:
             ground_m = 0
             for provider in elevation_providers:
