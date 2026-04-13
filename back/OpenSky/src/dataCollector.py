@@ -175,7 +175,10 @@ def orchestrate_sync():
             logger.info("ADSB cache cleared after merge.")
 
         logger.info("[DONE] Fleet sync completed successfully.")
-        return list(opensky_active)  # return only active aircraft for downstream processing
+        # Return union of OpenSky active + any icao that had cached ADSB points inserted
+        adsb_inserted = {icao for icao in full_db_icao_list if icao in adsb_cache}
+        return list(set(opensky_active) | adsb_inserted)
+
 
     except Exception as e:
         logger.critical(f"Orchestrator failed: {e}")
@@ -185,127 +188,6 @@ def orchestrate_sync():
             session.close()
             logger.info("Database session closed.")
 
-def orchestrate_sync_with_FR24():
-    TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
-    collector = FirefleetCollector(TOKEN)
-    fr24      = FR24Collector()
-    supplementary = [
-        AdsbV2Collector('adsbfi'),
-        AdsbV2Collector('airplaneslive'),
-        AdsbV2Collector('adsbonelol'),
-        AdsbV2Collector('adsboneapi'),
-    ]
-    session = None
-
-    try:
-        session = SessionLocal()
-
-        # Load tracked ICAO list
-        full_db_icao_list = None
-        if os.path.exists(CACHE_FILE):
-            try:
-                with open(CACHE_FILE, 'r') as f:
-                    full_db_icao_list = json.load(f)
-                logger.info("Loaded tracked ICAOs from local cache.")
-            except Exception as e:
-                logger.error(f"Cache read failed: {e}")
-        if full_db_icao_list is None:
-            full_db_icao_list = get_all_tracked_icao24(session, False)
-            try:
-                with open(CACHE_FILE, 'w') as f:
-                    json.dump(full_db_icao_list, f)
-                logger.info("Saved tracked ICAOs to local cache.")
-            except Exception as e:
-                logger.warning(f"Could not write cache file: {e}")
-
-        # Get active aircraft from OpenSky
-        full_icao_list_dict = collector.get_by_icao24(full_db_icao_list)
-        icao_list = [ac['icao24'] for ac in full_icao_list_dict]
-
-        if len(icao_list) < 1:
-            logger.info("No active aircraft...")
-
-        # Load ADSB supplement cache
-        adsb_cache = {}
-        if os.path.exists(ADSB_CACHE_FILE):
-            try:
-                with open(ADSB_CACHE_FILE, 'r') as f:
-                    adsb_cache = json.load(f)
-                logger.info(f"Loaded ADSB cache with {sum(len(v) for v in adsb_cache.values())} points.")
-            except Exception as e:
-                logger.warning(f"Could not read ADSB cache: {e}")
-
-        logger.info(f"Syncing fleet of {len(icao_list)} aircrafts...")
-        for icao in icao_list:
-            last_ts = get_latest_timestamp(session, icao)
-            opensky_timestamps = set()
-
-            # 1. OpenSky track
-            track_data = collector.get_aircraft_track(icao)
-            if track_data and 'path' in track_data:
-                new_points = [p for p in track_data['path'] if p[0] > last_ts]
-                if new_points:
-                    bulk_insert_telemetry(session, icao, new_points)
-                    logger.info(f"[{icao}] Inserted {len(new_points)} OpenSky points.")
-                    last_ts = max(p[0] for p in new_points)
-                    opensky_timestamps = {p[0] for p in track_data['path']}
-                else:
-                    logger.debug(f"[{icao}] OpenSky up-to-date.")
-            else:
-                logger.debug(f"[{icao}] No OpenSky data available.")
-
-            # 2. FR24 track — same pattern as OpenSky, credit-constrained
-            fr24_points = fr24.get_track(icao)
-            if fr24_points:
-                new_fr24 = [
-                    p for p in fr24_points
-                    if p[0] > last_ts and p[0] not in opensky_timestamps
-                ]
-                if new_fr24:
-                    bulk_insert_telemetry(session, icao, new_fr24, source='fr24')
-                    logger.info(f"[{icao}] Inserted {len(new_fr24)} FR24 points.")
-                    last_ts = max(p[0] for p in new_fr24)
-                    opensky_timestamps.update(p[0] for p in fr24_points)
-                else:
-                    logger.debug(f"[{icao}] FR24 up-to-date.")
-
-            # 3. ADSB cache — free sources, fill remaining gaps
-            if icao in adsb_cache:
-                inserted = 0
-                for ts_str, point in sorted(adsb_cache[icao].items(), key=lambda x: int(x[0])):
-                    ts = int(ts_str)
-                    if ts in opensky_timestamps or ts <= last_ts:
-                        continue
-                    sup_alt_m = round(point['baro_alt'] / 3.28084, 1) if point['baro_alt'] not in (None, 'ground') else None
-                    bulk_insert_telemetry(session, icao, [[
-                        ts,
-                        point['lat'],
-                        point['lon'],
-                        sup_alt_m,
-                        point['true_track'],
-                        point['on_ground'],
-                    ]], source=point['source'])
-                    inserted += 1
-                if inserted:
-                    logger.info(f"[{icao}] Inserted {inserted} cached ADSB points.")
-
-            time.sleep(0.5)
-
-        # Clear ADSB cache after successful merge
-        if os.path.exists(ADSB_CACHE_FILE):
-            os.remove(ADSB_CACHE_FILE)
-            logger.info("ADSB cache cleared after merge.")
-
-        logger.info("[DONE] Fleet sync completed successfully.")
-        return icao_list
-
-    except Exception as e:
-        logger.critical(f"Orchestrator failed: {e}")
-        raise
-    finally:
-        if session:
-            session.close()
-            logger.info("Database session closed.")
 
 if __name__ == "__main__":
 
