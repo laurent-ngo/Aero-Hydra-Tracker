@@ -123,13 +123,14 @@ def backfill_agl():
         ElevationProvider("../data/brittany.tif"),
         ElevationProvider("../data/belgium.tif"),
         ElevationProvider("../data/germany.tif"),
+        ElevationProvider("../data/sweden.tif"),
     ]
     
     ELEVATION_BBOX = {
         'lamin': 35.9,
-        'lamax': 54.9,
+        'lamax': 60.6,
         'lomin': -9.6,
-        'lomax': 19,
+        'lomax': 20,
     }
 
     for p in points_to_fix:
