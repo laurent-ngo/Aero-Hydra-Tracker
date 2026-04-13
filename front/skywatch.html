@@ -4,20 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
-  <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"
-  integrity="PpyAaiUdY+s8ycCAmYsYkyq9cQgPWrtjtiv4/NzjY5FHo+7R5wdgdpqPAOl+No0Jl"
-  crossorigin="anonymous"/>
-<script
-  src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"
-  integrity="ginU7U5lJ0DtYjPE3de0rz6w4YtkmQDW3pbsZBFbOzhX+Hnd9kY4K2vrL2iiqXed"
-  crossorigin="anonymous"></script>
-<script
-  src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"
-  integrity="0cD1zEe4XGTK8UhKDApU/gCZiWTHgDHKDV7g6/7SDKxCi3hjeBxmI2G04f2871jf"
-  crossorigin="anonymous"></script>
-  
-  <!-- NOSONAR -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap" rel="stylesheet"/>
   <style>
     :root { --accent:#0099bb; --fire:#e03030; --water:#1a7fd4; --training:#8b2ab0; --sidebar-w:320px; --header-h:52px; }
@@ -112,23 +101,20 @@
     .modal-actions{display:flex;gap:8px;margin-top:20px;}
     .modal-actions .btn{margin-bottom:0;flex:1;justify-content:center;}
 
-    /* ── AIRFIELD POPUP ── */
-    #airfield-popup {
+    /* ── MARKER POPUPS (airfield + waterfield) ── */
+    .marker-popup {
       position: absolute;
       background: var(--panel);
-      border: 1px solid var(--accent);
       border-radius: 6px;
       padding: 10px 12px 14px;
       z-index: 300;
-      display: none;
       min-width: 140px;
       max-width: 280px;
       pointer-events: none;
       box-shadow: 0 6px 24px rgba(0,0,0,0.55);
     }
-    #airfield-popup * { pointer-events: auto; }
-    #airfield-popup.visible { display: block; }
-    #airfield-popup::after {
+    .marker-popup * { pointer-events: auto; }
+    .marker-popup::after {
       content: '';
       position: absolute;
       bottom: -8px;
@@ -136,82 +122,11 @@
       transform: translateX(-50%);
       border-left: 8px solid transparent;
       border-right: 8px solid transparent;
-      border-top: 8px solid var(--accent);
     }
-
-    /* ── WATERFIELD POPUP ── */
-    #waterfield-popup {
-      position: absolute;
-      background: var(--panel);
-      border: 1px solid #2196f3;
-      border-radius: 6px;
-      padding: 10px 12px 14px;
-      z-index: 300;
-      display: none;
-      min-width: 140px;
-      max-width: 280px;
-      pointer-events: none;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
-    }
-    #waterfield-popup * { pointer-events: auto; }
-    #waterfield-popup.visible { display: block; }
-    #waterfield-popup::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      left: 50%;
-      transform: translateX(-50%);
-      border-left: 8px solid transparent;
-      border-right: 8px solid transparent;
-      border-top: 8px solid #2196f3;
-    }
-    .wp-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      gap: 8px;
-    }
-    .wp-title {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      color: #2196f3;
-      letter-spacing: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .wp-close {
-      background: none; border: none; color: var(--text-dim);
-      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
-    }
-    .wp-close:hover { color: var(--text); }
-    .wp-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 5px;
-    }
-    .ap-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      gap: 8px;
-    }
-    .ap-title {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      color: var(--accent);
-      letter-spacing: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .ap-close {
-      background: none; border: none; color: var(--text-dim);
-      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
-    }
-    .ap-close:hover { color: var(--text); }
+    .marker-popup.type-airfield  { border: 1px solid var(--accent); }
+    .marker-popup.type-airfield::after  { border-top: 8px solid var(--accent); }
+    .marker-popup.type-waterfield { border: 1px solid #2196f3; }
+    .marker-popup.type-waterfield::after { border-top: 8px solid #2196f3; }
     .ap-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -232,7 +147,7 @@
     .ap-cell.selected { border-color: var(--accent); background: rgba(0,229,255,0.12); }
     .ap-label {
       font-family: 'Share Tech Mono', monospace;
-      font-size: 8px;
+      font-size: 10px;
       color: var(--text-dim);
       text-align: center;
       white-space: nowrap;
@@ -241,58 +156,6 @@
       width: 100%;
     }
 
-    /* ── WATERFIELD POPUP ── */
-    #waterfield-popup {
-      position: absolute;
-      background: var(--panel);
-      border: 1px solid #2196f3;
-      border-radius: 6px;
-      padding: 10px 12px 14px;
-      z-index: 300;
-      display: none;
-      min-width: 140px;
-      max-width: 280px;
-      pointer-events: none;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
-    }
-    #waterfield-popup * { pointer-events: auto; }
-    #waterfield-popup.visible { display: block; }
-    #waterfield-popup::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      left: 50%;
-      transform: translateX(-50%);
-      border-left: 8px solid transparent;
-      border-right: 8px solid transparent;
-      border-top: 8px solid #2196f3;
-    }
-    .wp-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      gap: 8px;
-    }
-    .wp-title {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      color: #2196f3;
-      letter-spacing: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .wp-close {
-      background: none; border: none; color: var(--text-dim);
-      cursor: pointer; font-size: 14px; padding: 0; line-height: 1; flex-shrink: 0;
-    }
-    .wp-close:hover { color: var(--text); }
-    .wp-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 5px;
-    }
   </style>
 </head>
 <body>
@@ -392,32 +255,7 @@
       </div>
       <div class="tooltip" id="tooltip"></div>
 
-      <!-- AIRFIELD POPUP -->
-      <div id="airfield-popup">
-        <div class="ap-header">
-          <div class="ap-title" id="ap-title">XXXX</div>
-          <button class="ap-close" onclick="closeAirfieldPopup()">&#x2715;</button>
-        </div>
-        <div class="ap-grid" id="ap-grid"></div>
-      </div>
-
-      <!-- WATERFIELD POPUP -->
-      <div id="waterfield-popup">
-        <div class="wp-header">
-          <div class="wp-title" id="wp-title">XXXX</div>
-          <button class="wp-close" onclick="closeWaterfieldPopup()">&#x2715;</button>
-        </div>
-        <div class="wp-grid" id="wp-grid"></div>
-      </div>
-
-      <!-- WATERFIELD POPUP -->
-      <div id="waterfield-popup">
-        <div class="wp-header">
-          <div class="wp-title" id="wp-title">XXXX</div>
-          <button class="wp-close" onclick="closeWaterfieldPopup()">&#x2715;</button>
-        </div>
-        <div class="wp-grid" id="wp-grid"></div>
-      </div>
+      <!-- Popups created dynamically by JS -->
     </div>
 
     <div id="replay-bar">
@@ -648,242 +486,115 @@ function renderAirfields(){
   });
 }
 
-// AIRFIELD POPUP
-let activeAirfieldIcao=null;
+// ── MULTI-POPUP SYSTEM ──────────────────────────────────────
+// Each open popup is a dynamically created DOM element stored by key
+const openPopups = {};  // key → DOM element
+
+function buildPopupGrid(aircraft){
+  const grid=document.createElement('div');
+  grid.className='ap-grid';
+  const byModel={};
+  aircraft.forEach(ac=>{
+    const key=ac.model||'Unknown';
+    if(!byModel[key])byModel[key]=[];
+    byModel[key].push(ac);
+  });
+  Object.entries(byModel).forEach(([model,acs])=>{
+    const header=document.createElement('div');
+    header.style.cssText="grid-column:1/-1;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;";
+    header.textContent=model;
+    grid.appendChild(header);
+    acs.forEach(ac=>{
+      const color=acColor(ac);
+      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
+      const canvas=buildTintedCanvas(ac.icon,color,size);
+      const cell=document.createElement('div');
+      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
+      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
+      cell.onclick=()=>selectAircraft(ac.icao24);
+      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
+      disp.getContext('2d').drawImage(canvas,0,0);
+      cell.appendChild(disp);
+      const lbl=document.createElement('div');lbl.className='ap-label';
+      lbl.textContent=ac.registration||ac.icao24;
+      cell.appendChild(lbl);
+      grid.appendChild(cell);
+    });
+  });
+  return grid;
+}
+
+function showMarkerPopup(key, type, title, aircraft, pixel){
+  // If already open, just update position and content
+  if(openPopups[key]){
+    positionPopup(openPopups[key], pixel);
+    return;
+  }
+
+  const mapEl=document.getElementById('map');
+  const popup=document.createElement('div');
+  popup.className='marker-popup type-'+type;
+
+  // Header
+  const header=document.createElement('div');
+  header.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;';
+  const titleEl=document.createElement('div');
+  titleEl.style.cssText="font-family:'Share Tech Mono',monospace;font-size:11px;color:"+(type==='airfield'?'var(--accent)':'#2196f3')+";letter-spacing:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+  titleEl.textContent=title;
+  const closeBtn=document.createElement('button');
+  closeBtn.style.cssText='background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0;pointer-events:auto;';
+  closeBtn.innerHTML='&#x2715;';
+  closeBtn.onclick=()=>closeMarkerPopup(key);
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+  popup.appendChild(header);
+  popup.appendChild(buildPopupGrid(aircraft));
+
+  mapEl.appendChild(popup);
+  openPopups[key]=popup;
+
+  positionPopup(popup, pixel);
+}
+
+function positionPopup(popup, pixel){
+  const mapEl=document.getElementById('map');
+  requestAnimationFrame(()=>{
+    const pw=popup.offsetWidth||180, ph=popup.offsetHeight||80;
+    let left=pixel[0]-pw/2, top=pixel[1]-ph-20;
+    left=Math.max(8,Math.min(left,mapEl.offsetWidth-pw-8));
+    top=Math.max(8,Math.min(top,mapEl.offsetHeight-ph-8));
+    popup.style.left=left+'px';
+    popup.style.top=top+'px';
+  });
+}
+
+function closeMarkerPopup(key){
+  if(openPopups[key]){
+    openPopups[key].remove();
+    delete openPopups[key];
+  }
+}
+
+function closeAllPopups(){
+  Object.keys(openPopups).forEach(k=>closeMarkerPopup(k));
+}
 
 function showAirfieldPopup(feat,pixel){
   const g=feat.get('airfieldGroup'),icao=feat.get('airfield');
-  activeAirfieldIcao=icao;
   const parked=g.aircraft.filter(a=>a.at_airfield).length;
-  const total=g.aircraft.length;
   const name=g.name&&g.name!==icao?g.name:icao;
-  document.getElementById('ap-title').textContent=`${name} (${parked}/${total})`;
-  renderAirfieldPopupGrid(g.aircraft);
-  const popup=document.getElementById('airfield-popup');
-  popup.classList.add('visible');
-  // position after visible so offsetWidth is correct
-  requestAnimationFrame(()=>{
-    const mapEl=document.getElementById('map');
-    const pw=popup.offsetWidth||180,ph=popup.offsetHeight||80;
-    let left=pixel[0]-pw/2,top=pixel[1]-ph-20;
-    left=Math.max(8,Math.min(left,mapEl.offsetWidth-pw-8));
-    top=Math.max(8,Math.min(top,mapEl.offsetHeight-ph-8));
-    popup.style.left=left+'px';popup.style.top=top+'px';
-  });
+  showMarkerPopup('af_'+icao,'airfield',`${name} (${parked}/${g.aircraft.length})`,g.aircraft,pixel);
 }
 
-function renderAirfieldPopupGrid(aircraft){
-  const grid=document.getElementById('ap-grid');grid.innerHTML='';
-
-  // Group by model
-  const byModel={};
-  aircraft.forEach(ac=>{
-    const key=ac.model||'Unknown';
-    if(!byModel[key])byModel[key]=[];
-    byModel[key].push(ac);
-  });
-
-  Object.entries(byModel).forEach(([model,acs])=>{
-    // Model header spanning all 5 columns
-    const header=document.createElement('div');
-    header.style.cssText='grid-column:1/-1;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;';
-    header.textContent=model;
-    grid.appendChild(header);
-
-    acs.forEach(ac=>{
-      const color=acColor(ac);
-      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
-      const canvas=buildTintedCanvas(ac.icon,color,size);
-      const cell=document.createElement('div');
-      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
-      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
-      cell.onclick=()=>selectAircraft(ac.icao24);
-      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
-      disp.getContext('2d').drawImage(canvas,0,0);
-      cell.appendChild(disp);
-      const lbl=document.createElement('div');lbl.className='ap-label';
-      lbl.textContent=ac.registration||ac.icao24;
-      cell.appendChild(lbl);
-      grid.appendChild(cell);
-    });
-  });
-}
-
-function closeAirfieldPopup(){
-  document.getElementById('airfield-popup').classList.remove('visible');
-  activeAirfieldIcao=null;
-}
-
-// WATERFIELD MARKERS + POPUP
-let activeWaterfieldRef=null;
-
-function buildWaterfieldMarkerCanvas(){
-  const size=28,canvas=document.createElement('canvas');
-  canvas.width=size;canvas.height=size;
-  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
-  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle='rgba(33,150,243,0.15)';ctx.fill();
-  ctx.strokeStyle='#2196f3';ctx.lineWidth=1.5;ctx.stroke();
-  ctx.fillStyle='#2196f3';
-  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('💧',cx,cy);
-  return canvas;
-}
-
-function renderWaterfields(){
-  const src=waterfieldLayer.getSource();src.clear();
-  if(!allAircraftFleet.length)return;
-
-  // Group fleet aircraft by latest_waterfield
-  const groups={};
-  allAircraftFleet.forEach(ac=>{
-    if(!ac.latest_waterfield)return;
-    const key=ac.latest_waterfield;
-    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:key};
-    groups[key].aircraft.push(ac);
-    // Use waterfield_lat/lon if available
-    if(ac.waterfield_lat!=null&&ac.waterfield_lon!=null){
-      groups[key].lat=ac.waterfield_lat;
-      groups[key].lon=ac.waterfield_lon;
-      if(ac.waterfield_name)groups[key].name=ac.waterfield_name;
-    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
-      groups[key].lat=ac.last_lat;
-      groups[key].lon=ac.last_lon;
-    }
-  });
-
-  const mc=buildWaterfieldMarkerCanvas();
-  Object.entries(groups).forEach(([ref,g])=>{
-    if(g.lat==null||g.lon==null)return;
-    const feat=new ol.Feature({
-      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
-      waterfield:ref,
-      waterfieldGroup:g
-    });
-    feat.setStyle(new ol.style.Style({
-      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
-      text:new ol.style.Text({
-        text:`${g.name}\n${g.aircraft.length}`,offsetY:-22,
-        font:"bold 11px 'Share Tech Mono',monospace",
-        fill:new ol.style.Fill({color:'#2196f3'}),
-        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
-        padding:[2,4,2,4]
-      })
-    }));
-    feat.setId('wf_'+ref);
-    src.addFeature(feat);
-  });
-}
+function closeAirfieldPopup(){ closeAllPopups(); }
 
 function showWaterfieldPopup(feat,pixel){
   const g=feat.get('waterfieldGroup'),ref=feat.get('waterfield');
-  activeWaterfieldRef=ref;
-  document.getElementById('wp-title').textContent=`${g.name} (${g.aircraft.length})`;
-  renderWaterfieldPopupGrid(g.aircraft);
-  const popup=document.getElementById('waterfield-popup');
-  popup.classList.add('visible');
-  requestAnimationFrame(()=>{
-    const mapEl=document.getElementById('map');
-    const pw=popup.offsetWidth||180,ph=popup.offsetHeight||80;
-    let left=pixel[0]-pw/2,top=pixel[1]-ph-20;
-    left=Math.max(8,Math.min(left,mapEl.offsetWidth-pw-8));
-    top=Math.max(8,Math.min(top,mapEl.offsetHeight-ph-8));
-    popup.style.left=left+'px';popup.style.top=top+'px';
-  });
+  showMarkerPopup('wf_'+ref,'waterfield',`${g.name} (${g.aircraft.length})`,g.aircraft,pixel);
 }
 
-function renderWaterfieldPopupGrid(aircraft){
-  const grid=document.getElementById('wp-grid');grid.innerHTML='';
-  const byModel={};
-  aircraft.forEach(ac=>{
-    const key=ac.model||'Unknown';
-    if(!byModel[key])byModel[key]=[];
-    byModel[key].push(ac);
-  });
-  Object.entries(byModel).forEach(([model,acs])=>{
-    const header=document.createElement('div');
-    header.style.cssText='grid-column:1/-1;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:4px 2px 2px;border-top:1px solid var(--panel-border);margin-top:2px;';
-    header.textContent=model;
-    grid.appendChild(header);
-    acs.forEach(ac=>{
-      const color=acColor(ac);
-      const size=Math.max(20,Math.min(Math.round(Math.round((ac.icon_size??100)*20)/100),36));
-      const canvas=buildTintedCanvas(ac.icon,color,size);
-      const cell=document.createElement('div');
-      cell.className='ap-cell'+(ac.icao24===selectedIcao?' selected':'');
-      cell.title=(ac.registration||ac.icao24)+(ac.model?' - '+ac.model:'');
-      cell.onclick=()=>selectAircraft(ac.icao24);
-      const disp=document.createElement('canvas');disp.width=size;disp.height=size;
-      disp.getContext('2d').drawImage(canvas,0,0);
-      cell.appendChild(disp);
-      const lbl=document.createElement('div');lbl.className='ap-label';
-      lbl.textContent=ac.registration||ac.icao24;
-      cell.appendChild(lbl);
-      grid.appendChild(cell);
-    });
-  });
-}
+function closeWaterfieldPopup(){ closeAllPopups(); }
 
-function closeWaterfieldPopup(){
-  document.getElementById('waterfield-popup').classList.remove('visible');
-  activeWaterfieldRef=null;
-}
-
-
-// WATERFIELD MARKERS
-function buildWaterfieldMarkerCanvas(){
-  const size=28,canvas=document.createElement('canvas');
-  canvas.width=size;canvas.height=size;
-  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
-  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle='rgba(33,150,243,0.15)';ctx.fill();
-  ctx.strokeStyle='#2196f3';ctx.lineWidth=1.5;ctx.stroke();
-  ctx.fillStyle='#2196f3';
-  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('\u{1F4A7}',cx,cy);
-  return canvas;
-}
-
-function renderWaterfields(){
-  const src=waterfieldLayer.getSource();src.clear();
-  if(!allAircraftFleet.length)return;
-  const groups={};
-  allAircraftFleet.forEach(ac=>{
-    if(!ac.last_waterfield)return;
-    const key=ac.last_waterfield;
-    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.waterfield_name||key};
-    groups[key].aircraft.push(ac);
-    if(ac.waterfield_lat!=null&&ac.waterfield_lon!=null){
-      groups[key].lat=ac.waterfield_lat;
-      groups[key].lon=ac.waterfield_lon;
-      if(ac.waterfield_name)groups[key].name=ac.waterfield_name;
-    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
-      groups[key].lat=ac.last_lat;
-      groups[key].lon=ac.last_lon;
-    }
-  });
-  const mc=buildWaterfieldMarkerCanvas();
-  Object.entries(groups).forEach(([ref,g])=>{
-    if(g.lat==null||g.lon==null)return;
-    const feat=new ol.Feature({
-      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
-      waterfield:ref,
-      waterfieldGroup:g
-    });
-    feat.setStyle(new ol.style.Style({
-      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
-      text:new ol.style.Text({
-        text:`${g.name}\n${g.aircraft.length}`,offsetY:-22,
-        font:"bold 11px 'Share Tech Mono',monospace",
-        fill:new ol.style.Fill({color:'#2196f3'}),
-        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
-        padding:[2,4,2,4]
-      })
-    }));
-    feat.setId('wf_'+ref);
-    src.addFeature(feat);
-  });
-}
 
 // MAP EVENTS
 const tooltip=document.getElementById('tooltip');
@@ -894,12 +605,17 @@ map.on('pointermove',evt=>{
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
+      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield?'✔ Yes':'✘ No'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true?'✔ Yes':ac.is_full===false?'✘ No':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(17,25)+' UTC':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
@@ -921,12 +637,12 @@ map.on('click',evt=>{
     if(Math.sqrt(dx*dx+dy*dy) > 5) return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
-  if(afF){closeWaterfieldPopup();showAirfieldPopup(afF,evt.pixel);return;}
+  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
   const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
-  if(wfF){closeAirfieldPopup();showWaterfieldPopup(wfF,evt.pixel);return;}
+  if(wfF){showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
-  if(acF){closeAirfieldPopup();closeWaterfieldPopup();selectAircraft(acF.get('aircraft').icao24);return;}
-  closeAirfieldPopup();closeWaterfieldPopup();
+  if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
+  closeAllPopups();
 });
 
 function altColor(agl){
@@ -968,14 +684,20 @@ function renderROIs(){
 const gridOptions={
   columnDefs:[
     {field:'registration',headerName:'REG',width:100,pinned:'left',cellStyle:{fontFamily:"'Share Tech Mono',monospace",color:'var(--accent)'}},
-    {field:'owner',headerName:'OWNER',width:130},
-    {field:'model',headerName:'MODEL',width:130},
+    {field:'icao24',headerName:'ICAO24',width:95},
+    {field:'type',headerName:'AC TYPE',width:95,cellRenderer:p=>`<span class="badge ${p.value||''}">${p.value||'--'}</span>`},
+    {field:'model',headerName:'MODEL',width:130},{field:'owner',headerName:'OWNER',width:130},
+    {field:'country',headerName:'COUNTRY',width:90},{field:'last_airfield',headerName:'AIRFIELD',width:90},
     {field:'airfield_name',headerName:'AIRFIELD NAME',width:160},
     {field:'last_baro_alt_ft',headerName:'BARO ALT ft',width:110,valueFormatter:p=>p.value?.toLocaleString()},
     {field:'last_agl_alt_ft',headerName:'AGL ALT ft',width:105,valueFormatter:p=>p.value?.toLocaleString()},
-    {field:'last_speed_kt',headerName:'SPEED kt',width:95},
-    {field:'last_speed_kph',headerName:'SPEED kph',width:100},
+    {field:'last_speed_kt',headerName:'SPEED kt',width:95},{field:'last_speed_kph',headerName:'SPEED kph',width:100},
     {field:'true_track',headerName:'TRACK',width:85},
+    {field:'last_lat',headerName:'LAT',width:90,valueFormatter:p=>p.value?.toFixed(4)},
+    {field:'last_lon',headerName:'LON',width:90,valueFormatter:p=>p.value?.toFixed(4)},
+    {field:'is_full',headerName:'FULL',width:75,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
+    {field:'at_airfield',headerName:'AT FIELD',width:85,cellRenderer:p=>p.value===true?'✔':p.value===false?'✘':'--'},
+    {field:'sea_landing',headerName:'SEA',width:65,cellRenderer:p=>p.value?'✔':'--'},
     {field:'payload_capacity_kg',headerName:'PAYLOAD kg',width:105},
     {field:'last_timestamp',headerName:'LAST SEEN',width:170,valueFormatter:p=>p.value?new Date(p.value*1000).toUTCString().slice(0,25):'--'}
   ],
@@ -1088,24 +810,6 @@ function applyFilters(){
   document.getElementById('stat-aircraft').textContent=filteredAircraft.length;
   document.getElementById('grid-row-count').textContent=`${filteredAircraft.length} rows`;
   renderAircraftList();
-  // Refresh open waterfield popup
-  if(activeWaterfieldRef){
-    const feat=waterfieldLayer.getSource().getFeatureById('wf_'+activeWaterfieldRef);
-    if(feat)renderWaterfieldPopupGrid(feat.get('waterfieldGroup').aircraft);
-    else closeWaterfieldPopup();
-  }
-  // Refresh open airfield popup
-  if(activeAirfieldIcao){
-    const feat=airfieldLayer.getSource().getFeatureById('af_'+activeAirfieldIcao);
-    if(feat)renderAirfieldPopupGrid(feat.get('airfieldGroup').aircraft);
-    else closeAirfieldPopup();
-  }
-  // Refresh open waterfield popup
-  if(activeWaterfieldRef){
-    const feat=waterfieldLayer.getSource().getFeatureById('wf_'+activeWaterfieldRef);
-    if(feat)renderWaterfieldPopupGrid(feat.get('waterfieldGroup').aircraft);
-    else closeWaterfieldPopup();
-  }
 }
 
 function selectAircraft(icao24){
