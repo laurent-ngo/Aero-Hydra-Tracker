@@ -593,6 +593,7 @@ def sync_aircraft_metadata():
     # This query finds the maximum ID for each ICAO24
     subquery = db.query(
         migrate.FlightTelemetry.icao24,
+        migrate.FlightTelemetry.is_processed == True,
         func.max(migrate.FlightTelemetry.timestamp).label("max_ts")
     ).group_by(migrate.FlightTelemetry.icao24).subquery()
 
