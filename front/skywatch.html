@@ -156,6 +156,77 @@
       width: 100%;
     }
 
+
+    /* ── SCALE BAR ── */
+    #scale-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      pointer-events: none;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--text);
+      background: rgba(0,0,0,0.35);
+      padding: 4px 8px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      min-width: 260px;
+    }
+    .scale-row {
+      display: flex;
+      align-items: flex-end;
+      width: 100%;
+    }
+    .scale-row.km  { flex-direction: row; justify-content: center; }
+    .scale-row.nm  { flex-direction: row-reverse; justify-content: center; }
+    .scale-tick {
+      width: 1px;
+      background: var(--text);
+      flex-shrink: 0;
+    }
+    .scale-tick.tall  { height: 8px; }
+    .scale-tick.short { height: 5px; }
+    .scale-arm {
+      height: 2px;
+      background: var(--text);
+      flex-shrink: 0;
+    }
+    .scale-lbl {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--text);
+      white-space: nowrap;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .scale-lbl.center { font-weight: bold; }
+    /* ── OWNER MULTISELECT ── */
+    #filter-owner-container {
+      max-height: 90px;
+      overflow-y: auto;
+      border: 1px solid var(--panel-border);
+      border-radius: 3px;
+      background: var(--input-bg);
+      padding: 2px;
+    }
+    #filter-owner-container::-webkit-scrollbar { width: 4px; }
+    #filter-owner-container::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
+    .owner-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 4px;
+      cursor: pointer;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .owner-option:hover { background: var(--row-hover); }
+    .owner-option input { cursor: pointer; accent-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -219,6 +290,10 @@
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="water">Water only</option><option value="training">Training only</option><option value="none">Hidden</option></select>
       </div>
 
+      <div class="section-label">Owner</div>
+      <div id="filter-owner-container"></div>
+
+
       <div class="section-label">Quick Filters</div>
       <div class="filter-row"><label>At airfield</label>
         <select id="filter-at-airfield" onchange="applyFilters()"><option value="">All</option><option value="yes">Yes</option><option value="no">No (airborne)</option></select>
@@ -254,6 +329,25 @@
         <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
       <div class="tooltip" id="tooltip"></div>
+
+      <!-- SCALE BAR: nm <-- 0 --> km -->
+      <div id="scale-bar">
+        <div style="display:flex;align-items:flex-end;gap:0;">
+          <!-- NM side (extends left) -->
+          <span class="scale-lbl" id="scale-label-nm">-- nm</span>
+          <div class="scale-tick tall"></div>
+          <div class="scale-arm" id="scale-arm-nm"></div>
+          <!-- Centre tick with 0 label above -->
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <span class="scale-lbl center">0</span>
+            <div class="scale-tick tall"></div>
+          </div>
+          <!-- KM side (extends right) -->
+          <div class="scale-arm" id="scale-arm-km"></div>
+          <div class="scale-tick tall"></div>
+          <span class="scale-lbl" id="scale-label-km">-- km</span>
+        </div>
+      </div>
 
       <!-- Popups created dynamically by JS -->
     </div>
@@ -366,7 +460,8 @@ mapReady=true;
 const SPRITE_CELL=72,SPRITE_COLS=8;
 const spriteImg=new Image();
 spriteImg.src='sprites.png';
-spriteImg.onload=()=>{clearIconCache();if(mapReady){renderAircraft();renderAirfields();renderWaterfields();}};
+spriteImg.onload=()=>{console.log('Sprites loaded OK');clearIconCache();if(mapReady){renderAircraft();renderAirfields();renderWaterfields();}};
+spriteImg.onerror=()=>{console.error('Sprites FAILED to load — check sprites.png is in same folder as skywatch.html');};
 const iconCache={};
 
 function buildTintedCanvas(iconId,color,size){
@@ -482,6 +577,61 @@ function renderAirfields(){
       })
     }));
     feat.setId('af_'+icao);
+    src.addFeature(feat);
+  });
+}
+
+// WATERFIELD MARKERS
+function buildWaterfieldMarkerCanvas(){
+  const size=28,canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=11;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='rgba(33,150,243,0.15)';ctx.fill();
+  ctx.strokeStyle='#2196f3';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='#2196f3';
+  ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('\u{1F4A7}',cx,cy);
+  return canvas;
+}
+
+function renderWaterfields(){
+  const src=waterfieldLayer.getSource();src.clear();
+  if(!allAircraftFleet.length)return;
+  const groups={};
+  allAircraftFleet.forEach(ac=>{
+    if(!ac.last_waterfield)return;
+    const key=ac.last_waterfield;
+    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.waterfield_name||key};
+    groups[key].aircraft.push(ac);
+    if(ac.waterfield_lat!=null&&ac.waterfield_lon!=null){
+      groups[key].lat=ac.waterfield_lat;
+      groups[key].lon=ac.waterfield_lon;
+      if(ac.waterfield_name)groups[key].name=ac.waterfield_name;
+    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
+      groups[key].lat=ac.last_lat;
+      groups[key].lon=ac.last_lon;
+    }
+  });
+  const mc=buildWaterfieldMarkerCanvas();
+  Object.entries(groups).forEach(([ref,g])=>{
+    if(g.lat==null||g.lon==null)return;
+    const feat=new ol.Feature({
+      geometry:new ol.geom.Point(ol.proj.fromLonLat([g.lon,g.lat])),
+      waterfield:ref,
+      waterfieldGroup:g
+    });
+    feat.setStyle(new ol.style.Style({
+      image:new ol.style.Icon({img:mc,imgSize:[28,28]}),
+      text:new ol.style.Text({
+        text:`${g.name}\n${g.aircraft.length}`,offsetY:-22,
+        font:"bold 11px 'Share Tech Mono',monospace",
+        fill:new ol.style.Fill({color:'#2196f3'}),
+        backgroundFill:new ol.style.Fill({color:isDark?'rgba(15,22,35,0.85)':'rgba(255,255,255,0.85)'}),
+        padding:[2,4,2,4]
+      })
+    }));
+    feat.setId('wf_'+ref);
     src.addFeature(feat);
   });
 }
@@ -623,6 +773,19 @@ map.on('pointermove',evt=>{
   if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
   const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
   if(wfF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
+  // ROI hover tooltip
+  const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
+  if(roiF){
+    const name=roiF.get('roiName');
+    const det=roiF.get('roiDetectedAt');
+    const detStr=det?new Date(det).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'--';
+    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    tooltip.innerHTML=`<div class="tooltip-callsign">${name}</div>
+      <div class="tooltip-row"><span class="tooltip-key">Detected</span><span class="tooltip-val">${detStr}</span></div>`;
+    map.getTargetElement().style.cursor='';return;
+  }
   tooltip.style.display='none';map.getTargetElement().style.cursor='';
 });
 
@@ -674,13 +837,91 @@ function renderROIs(){
     try{
       const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
       if(!coords||coords.length<3)return;
-      const feat=new ol.Feature({geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))])});
+      const feat=new ol.Feature({
+        geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),
+        roiName: roi.name||'—',
+        roiType: roi.type,
+        roiDetectedAt: roi.detected_at||null,
+      });
       feat.setStyle(roiStyle(roi.type,roi.level));src.addFeature(feat);
     }catch(e){}
   });
 }
 
-// AG GRID
+// SCALE BAR
+function updateScaleBar(){
+  const view=map.getView();
+  if(!view.getCenter())return;
+  const resolution=view.getResolution();
+  const targetPx=100;
+  const distM=resolution*targetPx;
+  const niceKm=niceNumber(distM/1000);
+  const niceNm=niceNumber(distM/1852);
+  const kmPx=(niceKm*1000)/resolution;
+  const nmPx=(niceNm*1852)/resolution;
+  // Set arm widths
+  document.getElementById('scale-arm-km').style.width=kmPx+'px';
+  document.getElementById('scale-arm-nm').style.width=nmPx+'px';
+  // Labels
+  const kmLbl=niceKm>=1?niceKm+' km':(niceKm*1000).toFixed(0)+' m';
+  const nmLbl=niceNm.toFixed(niceNm<1?1:0)+' nm';
+  document.getElementById('scale-label-km').textContent=kmLbl;
+  document.getElementById('scale-label-nm').textContent=nmLbl;
+}
+function niceNumber(n){
+  const exp = Math.floor(Math.log10(n));
+  const frac = n / Math.pow(10, exp);
+  let nice;
+  if(frac < 1.5) nice = 1;
+  else if(frac < 3.5) nice = 2;
+  else if(frac < 7.5) nice = 5;
+  else nice = 10;
+  return nice * Math.pow(10, exp);
+}
+map.getView().on('change:resolution', updateScaleBar);
+map.getView().on('change:center', updateScaleBar);
+
+// OWNER FILTER
+function buildOwnerFilter(){
+  // Save current selections before rebuilding
+  const existing = document.querySelectorAll('#filter-owner-container input[data-owner]');
+  const unchecked = new Set([...existing].filter(cb=>!cb.checked).map(cb=>cb.dataset.owner));
+
+  const owners = [...new Set(allAircraftFleet.map(a=>a.owner).filter(Boolean))].sort();
+  const container = document.getElementById('filter-owner-container');
+  container.innerHTML = '';
+  // "All" checkbox
+  const allDiv = document.createElement('div'); allDiv.className='owner-option';
+  const allCb = document.createElement('input'); allCb.type='checkbox'; allCb.id='owner-all';
+  allCb.checked = unchecked.size === 0;
+  allCb.onchange = ()=>{ container.querySelectorAll('input[data-owner]').forEach(cb=>cb.checked=allCb.checked); applyFilters(); };
+  const allLbl = document.createElement('label'); allLbl.htmlFor='owner-all'; allLbl.textContent='All'; allLbl.style.cursor='pointer';
+  allDiv.appendChild(allCb); allDiv.appendChild(allLbl); container.appendChild(allDiv);
+  owners.forEach(owner=>{
+    const div = document.createElement('div'); div.className='owner-option';
+    const cb = document.createElement('input'); cb.type='checkbox';
+    cb.checked = !unchecked.has(owner);  // restore previous selection
+    cb.dataset.owner=owner;
+    cb.onchange = ()=>{
+      const allChecked = [...container.querySelectorAll('input[data-owner]')].every(c=>c.checked);
+      document.getElementById('owner-all').checked = allChecked;
+      applyFilters();
+    };
+    const lbl = document.createElement('label'); lbl.textContent=owner; lbl.style.cursor='pointer';
+    lbl.onclick = ()=>{ cb.checked=!cb.checked; cb.onchange(); };
+    div.appendChild(cb); div.appendChild(lbl); container.appendChild(div);
+  });
+}
+
+function getSelectedOwners(){
+  const cbs = document.querySelectorAll('#filter-owner-container input[data-owner]');
+  if(!cbs.length) return null;  // not built yet — no filter
+  const checked = [...cbs].filter(cb=>cb.checked).map(cb=>cb.dataset.owner);
+  const all = [...cbs].every(cb=>cb.checked);
+  return all ? null : new Set(checked);
+}
+
+
 const gridOptions={
   columnDefs:[
     {field:'registration',headerName:'REG',width:100,pinned:'left',cellStyle:{fontFamily:"'Share Tech Mono',monospace",color:'var(--accent)'}},
@@ -749,6 +990,7 @@ async function fetchAircraft(){
     const res=await fetch(`${config.baseUrl}/aircraft/active?${params}`,{headers:apiHeaders()});
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const data=await res.json();allAircraft=Array.isArray(data)?data:(data.aircraft||[]);
+    console.log('[Aircraft] Loaded', allAircraft.length, 'active aircraft, first:', allAircraft[0]);
     tracksCache={};trackLayer.getSource().clear();
     applyFilters();
     if(se)se.textContent=`OK ${allAircraft.length} ac · ${new Date().toUTCString().slice(17,25)}`;
@@ -765,6 +1007,7 @@ async function fetchAllAircraftFleet(){
     allAircraftFleet=Array.isArray(data)?data:(data.aircraft||[]);
     console.log('[Fleet] Loaded', allAircraftFleet.length, 'aircraft, first:', allAircraftFleet[0]);
     console.log('[Fleet] Sample airfield coords:', allAircraftFleet.slice(0,3).map(a=>({reg:a.registration,last_airfield:a.last_airfield,airfield_lat:a.airfield_lat,airfield_lon:a.airfield_lon})));
+    buildOwnerFilter();
     renderAirfields();
     renderWaterfields();
   }catch(e){console.warn('[Fleet] fetch failed:',e.message);}
@@ -794,11 +1037,13 @@ function applyFilters(){
   const type=document.getElementById('filter-type').value;
   const altMin=parseFloat(document.getElementById('filter-alt-min').value)||0;
   const altMax=parseFloat(document.getElementById('filter-alt-max').value)||Infinity;
+  const selectedOwners=getSelectedOwners();
   filteredAircraft=allAircraft.filter(ac=>{
     if(reg&&!(ac.registration||'').toLowerCase().includes(reg)&&!(ac.icao24||'').toLowerCase().includes(reg)&&!(ac.owner||'').toLowerCase().includes(reg))return false;
     if(type&&ac.type!==type)return false;
     if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft<altMin)return false;
     if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft>altMax)return false;
+    if(selectedOwners&&!selectedOwners.has(ac.owner))return false;
     const af=document.getElementById('filter-at-airfield').value;
     if(af==='yes'&&!ac.at_airfield)return false;if(af==='no'&&ac.at_airfield)return false;
     const fl=document.getElementById('filter-is-full').value;
@@ -919,7 +1164,7 @@ function stopReplay(){
 }
 
 initTimeRange();
-setTimeout(()=>{map.updateSize();updateLegendSwatches();},50);
+setTimeout(()=>{map.updateSize();updateLegendSwatches();updateScaleBar();},50);
 window.addEventListener('resize',()=>map.updateSize());
 setMode('live');
 </script>

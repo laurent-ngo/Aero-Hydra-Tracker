@@ -17,10 +17,10 @@ class FirefleetCollector:
 
 
          # ~1400 km2
-        self.default_bbox['lamin'] = 41.3
+        self.default_bbox['lamin'] = 35.5
         self.default_bbox['lomin'] = -4.8
         self.default_bbox['lamax'] = 52.09
-        self.default_bbox['lomax'] = 9.6
+        self.default_bbox['lomax'] = 19
 
         self.token = token
 
