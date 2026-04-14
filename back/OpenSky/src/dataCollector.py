@@ -152,18 +152,17 @@ def orchestrate_sync():
                 inserted = 0
                 for ts_str, point in sorted(cached_points.items(), key=lambda x: int(x[0])):
                     ts = int(ts_str)
-                    if ts in opensky_timestamps or ts <= last_ts:
-                        continue
-                    sup_alt_m = round(point['baro_alt'] / 3.28084, 1) if point['baro_alt'] not in (None, 'ground') else None
-                    bulk_insert_telemetry(session, icao, [[
-                        ts,
-                        point['lat'],
-                        point['lon'],
-                        sup_alt_m,
-                        point['true_track'],
-                        point['on_ground'],
-                    ]], source=point['source'])
-                    inserted += 1
+                    if ts not in opensky_timestamps:
+                        sup_alt_m = round(point['baro_alt'] / 3.28084, 1) if point['baro_alt'] not in (None, 'ground') else None
+                        bulk_insert_telemetry(session, icao, [[
+                            ts,
+                            point['lat'],
+                            point['lon'],
+                            sup_alt_m,
+                            point['true_track'],
+                            point['on_ground'],
+                        ]], source=point['source'])
+                        inserted += 1
                 if inserted:
                     logger.info(f"[{icao}] Inserted {inserted} cached ADSB points.")
 
