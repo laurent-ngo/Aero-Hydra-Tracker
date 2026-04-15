@@ -194,10 +194,10 @@ class AdsbV2Collector:
     """Generic collector for any ADSBexchange v2 compatible API."""
     
     SOURCES = {
-        'adsbfi':       'https://opendata.adsb.fi/api/v2/icao',
-        'airplaneslive':'https://api.airplanes.live/v2/icao',
-        'adsbonelol':   'https://api.adsb.lol/v2/icao',
-        'adsboneapi':   'https://api.adsb.one/v2/icao',
+        'adsbfi':       'https://opendata.adsb.fi/api',
+        'airplaneslive':'https://api.airplanes.live/v2',
+        'adsbonelol':   'https://api.adsb.lol/v2',
+        'adsboneapi':   'https://api.adsb.one/v2',
     }
 
     def __init__(self, source='adsbfi'):
@@ -208,7 +208,11 @@ class AdsbV2Collector:
 
     def get_by_icao24(self, icao_list):
         clean_icao = {icao.lower() for icao in icao_list}
-        url = f"{self.base_url}/{','.join(clean_icao)}"
+        if self.source == 'adsbfi':
+            url = f"https://opendata.adsb.fi/api/v2/icao/{','.join(clean_icao)}"
+        else:
+            url = f"{self.base_url}/icao/{','.join(clean_icao)}"
+
         try:
             logger.info(f"Calling {self.source} API")
             response = requests.get(url, timeout=15)
@@ -242,6 +246,61 @@ class AdsbV2Collector:
         except Exception as e:
             logger.error(f"{self.source} error: {e}")
             return {}
+
+    def scan_by_area(self, lat, lon, radius_nm=500, model_keywords=None, type_codes=None, blacklist=None):
+
+        if self.source == 'adsbfi':
+            url = f"https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{min(radius_nm, 250)}"
+        elif self.source == 'adsboneapi':
+            url = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius_nm}"
+        else:
+            url = f"{self.base_url}/lat/{lat}/lon/{lon}/dist/{radius_nm}"
+    
+        blacklist_set = {icao.lower() for icao in (blacklist or [])}
+        try:
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            aircraft = response.json().get('ac', [])
+
+            results = []
+            for ac in aircraft:
+                icao24     = ac.get('hex', '').lower()
+                if icao24 in blacklist_set:
+                    continue
+                icao_type  = ac.get('t', '') or ''
+                desc       = ac.get('desc', '') or ''
+                reg        = ac.get('r', '') or ''
+                searchable = f"{icao_type} {desc}".lower()
+
+                match = False
+                if model_keywords:
+                    match = any(kw.lower() in searchable for kw in model_keywords)
+                if type_codes and not match:
+                    match = any(icao_type.upper().startswith(tc.upper()) for tc in type_codes)
+
+                if not model_keywords and not type_codes:
+                    match = True
+
+                if match:
+                    results.append({
+                        'icao24':    icao24,
+                        'reg':       reg,
+                        'model':     desc or icao_type,
+                        'icao_type': icao_type,
+                        'flight': (ac.get('flight', '') or '').strip(),
+                        'lat':       ac.get('lat'),
+                        'lon':       ac.get('lon'),
+                        'alt_ft':    ac.get('alt_baro'),
+                        'track':     ac.get('track'),
+                        'source':    self.source,
+                    })
+
+            logger.info(f"[{self.source}] Area scan: {len(results)} new matching aircraft out of {len(aircraft)} total ({len(blacklist_set)} blacklisted)")
+            return results
+
+        except Exception as e:
+            logger.error(f"[{self.source}] Area scan error: {e}")
+            return []
 
 class FR24Collector:
     def __init__(self):

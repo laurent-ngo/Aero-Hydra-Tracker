@@ -22,7 +22,7 @@ from shapely.ops import unary_union
 from elevation import ElevationProvider
 
 import migrate
-from dataCollector import orchestrate_sync, update_adsb_cache
+from dataCollector import orchestrate_sync, update_adsb_cache, discover_new_aircraft
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -664,6 +664,12 @@ if __name__ == "__main__":
         help="Only update ADSB supplement cache (fast, no OpenSky call)"
     )
 
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Scan for new firefighting aircraft not yet in the DB"
+    )
+
     args = parser.parse_args()
 
     if args.adsb_cache:
@@ -682,7 +688,18 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
-    
+    # In the main block:
+    if args.discover:
+        findings = discover_new_aircraft()
+        if findings:
+            print(f"\n{'ICAO24':8} | {'REG':10} | {'MODEL':40} | {'FLIGHT':10} | POSITION")
+            print('-' * 90)
+            for ac in findings:
+                print(f"{ac['icao24']:8} | {ac['reg']:10} | {ac['model']:40} | {ac['flight']:10} | {ac['lat']},{ac['lon']}")
+            print(f"\n{len(findings)} new aircraft found.")
+        else:
+            print("No new aircraft found.")
+        sys.exit(0)
 
     icao_list = orchestrate_sync()
 
