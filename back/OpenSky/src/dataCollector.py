@@ -188,6 +188,58 @@ def orchestrate_sync():
             logger.info("Database session closed.")
 
 
+def discover_new_aircraft():
+    """
+    Scan for firefighting aircraft not yet in the DB using free ADSB sources.
+    Returns list of newly discovered aircraft dicts.
+    """
+    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T' ]
+    SCAN_KEYWORDS = [
+        'canadair', 'bombardier 415', 'superscooper', 'air tractor',
+        'dhc-515', 'cl-215', 'cl-415'
+    ]
+    SCAN_RADIUS_NM  = 250
+
+    SCAN_POINTS = [
+        (44.6993552, 3.8424499),  # south France
+        (43.5,       12.0),       # Italy
+        (40.0,       -4.0),       # Spain
+    ]
+
+    blacklist = get_cached_icao_list() or []
+    logger.info(f"Blacklist loaded: {len(blacklist)} known aircraft")
+
+    sources = [
+        AdsbV2Collector('adsbfi'),
+        AdsbV2Collector('adsbonelol'),
+        AdsbV2Collector('adsboneapi'),
+    ]
+
+    seen = set()
+    findings = []
+
+    for lat, lon in SCAN_POINTS:
+        with ThreadPoolExecutor() as ex:
+            all_results = list(ex.map(
+                lambda s: s.scan_by_area(
+                    lat=lat, lon=lon,
+                    radius_nm=SCAN_RADIUS_NM,
+                    model_keywords=SCAN_KEYWORDS,
+                    type_codes=SCAN_TYPE_CODES,
+                    blacklist=blacklist
+                ),
+                sources
+            ))
+        for source_results in all_results:
+            for ac in source_results:
+                if ac['icao24'] and ac['icao24'] not in seen:
+                    seen.add(ac['icao24'])
+                    findings.append(ac)
+        time.sleep(1)  # respect 1 req/sec rate limit between scan points
+
+    logger.info(f"Discovery complete: {len(findings)} new aircraft found across {len(sources)} sources and {len(SCAN_POINTS)} scan points.")
+    return findings
+
 if __name__ == "__main__":
 
     log_level_name = os.getenv('LOG_LEVEL', 'INFO').upper()
