@@ -71,6 +71,10 @@ case "$1" in
             error "${AIRFIELDS_CSV} not found!"
         fi
         ;;
+    heatmap)
+            python3 "$SCRIPT_DIR/src/speed_profile.py"
+            python3 "$SCRIPT_DIR/src/speed_heatmap.py" --padding 400
+            ;;
     token)
         info "Generating OpenSky Token..."
         # Check if env vars are provided

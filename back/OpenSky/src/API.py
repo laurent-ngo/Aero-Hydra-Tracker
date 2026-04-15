@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
+from fastapi.responses import FileResponse
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
@@ -215,3 +217,10 @@ def get_rois(
             "geometry": r.geometry
         } for r in rois
     ]
+
+@app.get("/heatmap", dependencies=[Security(get_api_key)])
+def get_heatmap():
+    path = os.getenv("HEATMAP_PATH", "heatmap.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Heatmap not yet generated — run heatmap_engine.py first")
+    return FileResponse(path, media_type="application/json")
