@@ -861,17 +861,13 @@ map.on('pointermove',evt=>{
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
-      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield?'✔ Yes':'✘ No'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true?'✔ Yes':ac.is_full===false?'✘ No':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(17,25)+' UTC':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
