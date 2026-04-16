@@ -396,6 +396,8 @@ if __name__ == "__main__":
                         help='Predetermined fleet: MODEL:AIRFIELD:COUNT,... e.g. CL2T:LFTW:3,AT8T:LFML:2')
     parser.add_argument('--supplement', action='store_true',
                         help='Add predetermined fleet on top of real fleet (default: replace)')
+    parser.add_argument('--name', type=str, default=None,
+                    help='Name for this heatmap scenario (default: auto-generated)')
     args = parser.parse_args()
 
     # 1. Load speed profiles
@@ -466,9 +468,20 @@ if __name__ == "__main__":
 
     # 7. Export
     grid = to_compact_grid(results, step_lat, step_lon, lat_min, lon_min)
-    with open(args.output.replace('.geojson', '.json'), 'w') as f:
+
+    if args.name:
+        scenario_name = args.name.replace(' ', '_')
+    else:
+        scenario_name = 'realfleet' if not args.fleet else 'scenario_' + args.fleet.replace(',', '_').replace(':', '-')
+
+    output_path = os.path.join(
+        os.getenv("HEATMAP_DIR", "."),
+        f"heatmap_{scenario_name}.json"
+    )
+
+    with open(output_path, 'w') as f:
         json.dump(grid, f, separators=(',', ':'))
-    logger.info(f"Heatmap saved — {grid['metadata']['rows']} rows x "
-                f"{grid['metadata']['cols']} cols = "
-                f"{grid['metadata']['total_cells']} cells")
-    logger.info(f"Heatmap saved to {args.output}")
+        logger.info(f"Heatmap saved — {grid['metadata']['rows']} rows x "
+                    f"{grid['metadata']['cols']} cols = "
+                    f"{grid['metadata']['total_cells']} cells")
+    logger.info(f"Heatmap saved to {output_path}")
