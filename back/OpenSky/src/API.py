@@ -9,7 +9,12 @@ from typing import List, Optional
 from typing_extensions import Annotated
 
 import migrate # Importing your existing models and SessionLocal
+
 import time, os
+import glob
+import re
+import logging
+logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("AERO_API_KEY")
 API_KEY_NAME = "X-API-Key"
@@ -28,10 +33,12 @@ def get_api_key(api_key_header: str = Security(api_key_header)):
 # Allow your local frontend to talk to the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For production, replace with your specific domain
+    allow_origins=["*"],  # tighten to your domain in production
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # Dependency to get the DB session per request
 def get_db():
     db = migrate.SessionLocal()
@@ -218,9 +225,25 @@ def get_rois(
         } for r in rois
     ]
 
-@app.get("/heatmap", dependencies=[Security(get_api_key)])
-def get_heatmap():
-    path = os.getenv("HEATMAP_PATH", "heatmap.json")
+
+HEATMAP_DIR = os.getenv("HEATMAP_DIR", ".")
+
+@app.get("/heatmaps", dependencies=[Security(get_api_key)])
+def list_heatmaps():
+    """Return list of available heatmap names."""
+    files = glob.glob(os.path.join(HEATMAP_DIR, "heatmap_*.json"))
+    names = [
+        os.path.basename(f).replace("heatmap_", "").replace(".json", "")
+        for f in sorted(files)
+    ]
+    return {"heatmaps": names}
+
+
+@app.get("/heatmap/{name}", dependencies=[Security(get_api_key)])
+def get_heatmap(name: str):
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '', name)
+    path = os.path.join(HEATMAP_DIR, f"heatmap_{safe_name}.json")
+    logger.info(f"Heatmap request: name={safe_name}, path={path}, exists={os.path.exists(path)}")
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Heatmap not yet generated — run heatmap_engine.py first")
+        raise HTTPException(status_code=404, detail=f"Heatmap '{safe_name}' not found")
     return FileResponse(path, media_type="application/json")
