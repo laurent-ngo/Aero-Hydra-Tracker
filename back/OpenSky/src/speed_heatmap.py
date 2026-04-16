@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import argparse
+import re
 import numpy as np
 from math import radians, cos, sin, asin, sqrt, ceil
 from datetime import datetime, timedelta
@@ -197,6 +198,7 @@ def compute_heatmap(cells, mobilisable, speed_profiles):
         best_time     = None
         best_airfield = None
         best_dist     = None
+        best_model    = None
 
         for aircraft in mobilisable:
             model = aircraft['model']
@@ -216,8 +218,9 @@ def compute_heatmap(cells, mobilisable, speed_profiles):
                 best_time     = t
                 best_airfield = aircraft['base_name'] 
                 best_dist     = round(dist, 1)
+                best_model    = aircraft['model']
 
-        results.append((cell_lat, cell_lon, best_time, best_airfield, best_dist))
+        results.append((cell_lat, cell_lon, best_time, best_airfield, best_dist, best_model))
 
     covered = sum(1 for r in results if r[2] is not None)
     logger.info(f"Coverage: {covered}/{total} cells reachable ({100*covered//total}%)")
@@ -276,9 +279,14 @@ def to_compact_grid(results, step_lat, step_lon, lat_min, lon_min):
     values    = []
     airfields = []
     distances = []
+    models    = []
 
     for lat in sorted(lats, reverse=True):
         for lon in sorted(lons):
+
+            entry = cell_lookup.get((lat, lon))
+            models.append(entry[5] if entry else None)
+
             r = cell_lookup.get((lat, lon))
             if r and r[2] is not None:
                 values.append(round(r[2], 1))
@@ -308,8 +316,65 @@ def to_compact_grid(results, step_lat, step_lon, lat_min, lon_min):
         },
         "values":    values,
         "airfields": airfields,
-        "distances": distances
+        "distances": distances,
+        "models": models 
     }
+
+def parse_fleet_arg(fleet_str):
+    """
+    Parse fleet string: "CL2T:LFTW:3,AT8T:LFML:2"
+    Returns list of dicts: [{model, airfield_icao, count}]
+    """
+    if not fleet_str:
+        return []
+    
+    fleet = []
+    for entry in fleet_str.split(','):
+        parts = entry.strip().split(':')
+        if len(parts) != 3:
+            raise ValueError(f"Invalid fleet entry '{entry}' — expected MODEL:AIRFIELD:COUNT")
+        model, airfield, count = parts
+        fleet.append({
+            'model':         model.strip().upper(),
+            'airfield_icao': airfield.strip().upper(),
+            'count':         int(count.strip())
+        })
+    return fleet
+
+
+def load_predetermined_fleet(fleet_entries, airfields_dict, speed_profiles):
+    """
+    Build aircraft list from CLI fleet spec.
+    airfields_dict: {icao: (lat, lon, name)}
+    speed_profiles: {model: [...]}
+    Returns list in same format as load_mobilisable_aircraft()
+    """
+    aircraft = []
+    for entry in fleet_entries:
+        model         = entry['model']
+        airfield_icao = entry['airfield_icao']
+        count         = entry['count']
+
+        if airfield_icao not in airfields_dict:
+            logger.warning(f"Airfield {airfield_icao} not found in DB — skipping")
+            continue
+
+        if model not in speed_profiles:
+            logger.warning(f"No speed profile for model {model} — skipping")
+            continue
+
+        lat, lon, name = airfields_dict[airfield_icao]
+
+        for i in range(count):
+            aircraft.append((
+                f"scenario_{model}_{airfield_icao}_{i}",  # fake icao24
+                lat, lon,
+                name,
+                model
+            ))
+
+    logger.info(f"Predetermined fleet: {len(aircraft)} aircraft from {len(fleet_entries)} entries")
+    return aircraft
 
 
 if __name__ == "__main__":
@@ -321,12 +386,16 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser(description="Generate response time heatmap")
-    parser.add_argument('--profiles',  default='speed_profiles.json')
-    parser.add_argument('--output',    default='heatmap.geojson')
-    parser.add_argument('--padding',   type=int, default=50,
+    parser.add_argument('--profiles',   default='speed_profiles.json')
+    parser.add_argument('--output',     default='heatmap.geojson')
+    parser.add_argument('--padding',    type=int, default=50,
                         help='Padding beyond airfields in km (default: 50)')
-    parser.add_argument('--cutoff',    type=int, default=LAST_SEEN_CUTOFF,
+    parser.add_argument('--cutoff',     type=int, default=LAST_SEEN_CUTOFF,
                         help='Days since last seen to consider aircraft active')
+    parser.add_argument('--fleet',      type=str, default=None,
+                        help='Predetermined fleet: MODEL:AIRFIELD:COUNT,... e.g. CL2T:LFTW:3,AT8T:LFML:2')
+    parser.add_argument('--supplement', action='store_true',
+                        help='Add predetermined fleet on top of real fleet (default: replace)')
     args = parser.parse_args()
 
     # 1. Load speed profiles
@@ -336,17 +405,52 @@ if __name__ == "__main__":
     airfields_all = db.query(migrate.Airfield).all()
     airfields = {af.icao: (af.lat, af.lon, af.name) for af in airfields_all}
 
-    # 3. Get mobilisable aircraft
-    mobilisable = get_mobilisable_aircraft(airfields, cutoff_days=args.cutoff)
+    # 3. Build mobilisable aircraft list
+    if args.fleet:
+        # Parse fleet string
+        predetermined = []
+        for entry in args.fleet.split(','):
+            parts = entry.strip().split(':')
+            if len(parts) != 3:
+                logger.error(f"Invalid fleet entry '{entry}' — expected MODEL:AIRFIELD:COUNT")
+                sys.exit(1)
+            model, airfield_icao, count = parts[0].strip(), parts[1].strip().upper(), int(parts[2].strip())
+
+            if airfield_icao not in airfields:
+                logger.error(f"Airfield {airfield_icao} not found in DB")
+                sys.exit(1)
+            if model not in speed_profiles:
+                logger.warning(f"No speed profile for model '{model}' — skipping")
+                continue
+
+            lat, lon, name = airfields[airfield_icao]
+            for i in range(count):
+                predetermined.append({
+                    'icao24':   f"scenario_{model}_{airfield_icao}_{i}",
+                    'model':    model,
+                    'base_lat': lat,
+                    'base_lon': lon,
+                    'base_name': name,
+                })
+        logger.info(f"Predetermined fleet: {len(predetermined)} aircraft")
+
+        if args.supplement:
+            real_fleet  = get_mobilisable_aircraft(airfields, cutoff_days=args.cutoff)
+            mobilisable = real_fleet + predetermined
+            logger.info(f"Supplemented: {len(real_fleet)} real + {len(predetermined)} scenario = {len(mobilisable)} total")
+        else:
+            mobilisable = predetermined
+    else:
+        mobilisable = get_mobilisable_aircraft(airfields, cutoff_days=args.cutoff)
+
     if not mobilisable:
-        logger.error("No mobilisable aircraft found — check last_seen cutoff")
+        logger.error("No mobilisable aircraft found — check fleet or last_seen cutoff")
         sys.exit(1)
 
     # 4. Bounding box from active airfields only
     active_airfield_coords = list({
-        (lat, lon)
+        (a['base_lat'], a['base_lon'])
         for a in mobilisable
-        for lat, lon in [(a['base_lat'], a['base_lon'])]
     })
     lat_min, lat_max, lon_min, lon_max = compute_bounding_box(
         active_airfield_coords, padding_km=args.padding
@@ -360,10 +464,10 @@ if __name__ == "__main__":
     # 6. Compute heatmap
     results = compute_heatmap(cells, mobilisable, speed_profiles)
 
-    # 7. Export GeoJSON
+    # 7. Export
     grid = to_compact_grid(results, step_lat, step_lon, lat_min, lon_min)
     with open(args.output.replace('.geojson', '.json'), 'w') as f:
-        json.dump(grid, f, separators=(',', ':'))  # no whitespace = smaller file
+        json.dump(grid, f, separators=(',', ':'))
     logger.info(f"Heatmap saved — {grid['metadata']['rows']} rows x "
                 f"{grid['metadata']['cols']} cols = "
                 f"{grid['metadata']['total_cells']} cells")

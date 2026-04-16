@@ -29,9 +29,9 @@ db = Session()
 
 # --- Config ---
 BIN_SIZE_KM    = 5
-MAX_DIST_KM    = 150
+MAX_DIST_KM    = 400
 MIN_SPEED_KPH  = 30   # below this = taxiing / noise
-MIN_BIN_SAMPLES = 3   # minimum points to trust a bin median
+MIN_BIN_SAMPLES = 5   # minimum points to trust a bin median
 
 
 def haversine(lon1, lat1, lon2, lat2):

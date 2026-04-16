@@ -138,7 +138,7 @@
     /* ── HEATMAP LEGEND ── */
     #heatmap-legend{position:absolute;bottom:16px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;display:none;}
     #heatmap-legend.visible{display:block;}
-    .hm-grad{width:120px;height:10px;border-radius:2px;margin:4px 0 2px;background:linear-gradient(to right,#00e5ff,#00bb44,#ffcc00,#ff6600,#cc0000);}
+    .hm-grad{width:120px;height:10px;border-radius:2px;margin:4px 0 2px;background:linear-gradient(to right, #00ff00, #ffff00, #ff0000);}
     .hm-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);}
   </style>
 </head>
@@ -248,7 +248,7 @@
       <div id="heatmap-legend">
         <div style="margin-bottom:4px;letter-spacing:1px;">RESPONSE TIME</div>
         <div class="hm-grad"></div>
-        <div class="hm-labels"><span>0 min</span><span>30 min</span><span>60+ min</span></div>
+        <div class="hm-labels"><span>0 min</span><span>15</span><span>30+ min</span></div>
         <div id="hm-stats" style="margin-top:6px;font-size:9px;color:var(--text-dim);"></div>
       </div>
 
@@ -560,21 +560,13 @@ function renderWaterfields(){
 let heatmapVisible = false;
 let heatmapData    = null;
 
-// Response time → colour: cyan(0min) → green(15) → yellow(30) → orange(45) → red(60+)
+// Response time → colour:green(0) → red(60+)
 function responseTimeColor(minutes) {
   if (minutes === null) return null;
-  const t = Math.min(minutes / 60, 1);
-  let r, g, b;
-  if (t < 0.25) {
-    r = 0; g = Math.round(180 + 75*(t/0.25)); b = Math.round(255*(1-t/0.25));
-  } else if (t < 0.5) {
-    const s=(t-0.25)/0.25; r=Math.round(255*s); g=200; b=0;
-  } else if (t < 0.75) {
-    const s=(t-0.5)/0.25; r=255; g=Math.round(200*(1-s*0.5)); b=0;
-  } else {
-    const s=(t-0.75)/0.25; r=255; g=Math.round(100*(1-s)); b=0;
-  }
-  return `rgba(${r},${g},${b},0.7)`;
+  const t = Math.min(minutes / 30, 1);
+  const r = Math.round(255 * t);
+  const g = Math.round(255 * (1 - t));
+  return `rgba(${r},${g},0,0.7)`;
 }
 
 function renderHeatmap(data) {
@@ -607,7 +599,8 @@ function renderHeatmap(data) {
         ]]),
         responseTime: minutes,
         airfield:     airfield,
-        distanceKm:   distance
+        distanceKm:   distance,
+        model:        data.models[idx]
       });
       feat.setStyle(new ol.style.Style({
         fill: new ol.style.Fill({ color })
@@ -776,7 +769,8 @@ map.on('pointermove',evt=>{
       tooltip.innerHTML=`<div class="tooltip-callsign">RESPONSE TIME</div>
         <div class="tooltip-row"><span class="tooltip-key">First water drop</span><span class="tooltip-val">${t!==null?Math.round(t)+' min':'unreachable'}</span></div>
         <div class="tooltip-row"><span class="tooltip-key">Nearest base</span><span class="tooltip-val">${af||'--'}</span></div>
-        <div class="tooltip-row"><span class="tooltip-key">Distance</span><span class="tooltip-val">${d!==null?d+' km':'--'}</span></div>`;
+        <div class="tooltip-row"><span class="tooltip-key">Distance</span><span class="tooltip-val">${d!==null?d+' km':'--'}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Best model</span><span class="tooltip-val">${hmF.get('model')||'--'}</span></div>`;
       map.getTargetElement().style.cursor='';return;
     }
   }
