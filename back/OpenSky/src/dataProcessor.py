@@ -124,6 +124,7 @@ def backfill_agl():
         ElevationProvider("../data/belgium.tif"),
         ElevationProvider("../data/germany.tif"),
         ElevationProvider("../data/sweden.tif"),
+        ElevationProvider("../data/albania.tif"),
     ]
     
     ELEVATION_BBOX = {
