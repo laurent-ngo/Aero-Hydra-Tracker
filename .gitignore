@@ -49,3 +49,4 @@ back/OpenSky/src/migrate.py
 back/OpenSky/src/tracked_icao_cache.json
 aero-hydra-ui/src/theme.js
 ~$*
+front/config.js
