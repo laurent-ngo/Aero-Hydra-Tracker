@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
+  
+  <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap" rel="stylesheet"/>
@@ -438,16 +440,18 @@ let mapReady = false;
 
 // THEME
 let isDark = localStorage.getItem('sw-theme') !== 'light';
+
 const TILES = {
-  dark: 'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light:'https://{a-c}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+  dark:()=>`https://tile.jawg.io/jawg-dark/{z}/{x}/{y}.png?access-token=${window.SW_CONFIG?.jawgToken||''}`,
+  light:()=>`https://tile.jawg.io/jawg-terrain/{z}/{x}/{y}.png?access-token=${window.SW_CONFIG?.jawgToken||''}`,
 };
-const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark:TILES.light,attributions:'© OSM © CARTO'})});
+
+const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark():TILES.light(),attributions:'© Jawg / © OSM'})});
 function applyTheme(dark){
   isDark=dark;
   document.documentElement.setAttribute('data-theme',dark?'dark':'light');
   document.getElementById('btn-theme').textContent=dark?'☀':'☾';
-  tileLayer.getSource().setUrl(dark?TILES.dark:TILES.light);
+  tileLayer.getSource().setUrl(dark?TILES.dark():TILES.light());
   localStorage.setItem('sw-theme',dark?'dark':'light');
   updateLegendSwatches();
   if(mapReady){clearIconCache();renderTracks();renderAircraft();renderAirfields();renderWaterfields();}
