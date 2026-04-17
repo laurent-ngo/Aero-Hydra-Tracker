@@ -149,7 +149,7 @@ def backfill_agl():
                 agl_m = max(0, p.baro_altitude - ground_m)
                 p.altitude_agl_ft = round(agl_m * 3.28084, 0)
             else:
-                p.altitude_agl_ft = 60000
+                p.altitude_agl_ft = round(p.baro_altitude * 3.28084, 0)
 
     db.commit()
     logger.info("Batch AGL backfill complete.")
