@@ -71,6 +71,12 @@ case "$1" in
             error "${AIRFIELDS_CSV} not found!"
         fi
         ;;
+    heatmap)
+            python3 "$SCRIPT_DIR/src/speed_profile.py"
+
+            python3 "$SCRIPT_DIR/src/speed_heatmap.py" --name "Current" --padding 400
+            python3 "$SCRIPT_DIR/src/speed_heatmap.py" --name "Summer 26" --fleet "De Havilland Canada Dash 8-400:LFTW:2,Canadair CL415:LFTW:2,Air Tractor AT-802:LFBS:2,Canadair CL415:LFBD:2,Air Tractor AT-802:LFMT:2, Canadair CL415:LFKJ:2"  --padding 400
+            ;;
     token)
         info "Generating OpenSky Token..."
         # Check if env vars are provided

@@ -47,7 +47,9 @@ def load_aircrafts_from_csv(file_path):
                         owner=row['owner'].strip(),
                         payload_capacity_kg=int(row['payload_capacity_kg']),
                         aircraft_type=row['aircraft_type'].strip(),
-                        aircraft_model=row['aircraft_model'].strip()
+                        aircraft_model=row['aircraft_model'].strip(),
+                        icon_id=int(row['icon_id']) if row.get('icon_id', '').strip() else None,
+                        icon_size=int(row['icon_size']) if row.get('icon_size', '').strip() else None,
                     )
                     session.add(aircraft)
                     new_records += 1

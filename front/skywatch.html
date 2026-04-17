@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
+  
+  <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap" rel="stylesheet"/>
@@ -238,6 +240,11 @@
   <button class="header-btn" id="btn-replay" onclick="setMode('replay')">&#x25B6; REPLAY</button>
   <button class="header-btn" onclick="openModal()">&#x2699; API CONFIG</button>
   <button class="header-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle light/dark mode">&#x2600;</button>
+
+  <select id="heatmap-select" onchange="fetchHeatmap(this.value)" style="display:none;background:var(--input-bg);border:1px solid var(--panel-border);color:var(--text);padding:5px 8px;border-radius:3px;font-size:12px;font-family:'Barlow',sans-serif;outline:none;">
+    <option value="">-- select --</option>
+  </select>
+  <button class="header-btn" id="btn-heatmap" onclick="toggleHeatmap()">&#x1F525; HEATMAP</button>
   <div class="header-stats">
     <div class="stat"><span class="stat-val" id="stat-aircraft">0</span><span class="stat-lbl">AIRCRAFT</span></div>
     <div class="stat"><span class="stat-val" id="stat-rois">0</span><span class="stat-lbl">ROI ZONES</span></div>
@@ -328,7 +335,14 @@
         <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft - Cruise</div>
         <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
-      <div class="tooltip" id="tooltip"></div>
+      <div id="heatmap-legend" style="display:none;position:absolute;bottom:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+        <div style="margin-bottom:4px;letter-spacing:1px;">RESPONSE TIME</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+          <div style="width:80px;height:8px;background:linear-gradient(to right,rgba(0,255,0,0.7),rgba(255,255,0,0.7),rgba(255,0,0,0.7));border-radius:2px;"></div>
+          <span>0 → 30+ min</span>
+        </div>
+        <div id="hm-stats" style="color:var(--text);">--</div>
+      </div>
 
       <!-- SCALE BAR: nm <-- 0 --> km -->
       <div id="scale-bar">
@@ -348,6 +362,9 @@
           <span class="scale-lbl" id="scale-label-km">-- km</span>
         </div>
       </div>
+
+      <!-- TOOLTIP -->
+      <div class="tooltip" id="tooltip" style="position:absolute;background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:10px 14px;font-size:12px;pointer-events:none;z-index:200;display:none;min-width:180px;"></div>
 
       <!-- Popups created dynamically by JS -->
     </div>
@@ -423,16 +440,18 @@ let mapReady = false;
 
 // THEME
 let isDark = localStorage.getItem('sw-theme') !== 'light';
+
 const TILES = {
-  dark: 'https://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light:'https://{a-c}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+  dark:()=>`https://tile.jawg.io/jawg-dark/{z}/{x}/{y}.png?access-token=${window.SW_CONFIG?.jawgToken||''}`,
+  light:()=>`https://tile.jawg.io/jawg-terrain/{z}/{x}/{y}.png?access-token=${window.SW_CONFIG?.jawgToken||''}`,
 };
-const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark:TILES.light,attributions:'© OSM © CARTO'})});
+
+const tileLayer = new ol.layer.Tile({source:new ol.source.XYZ({url:isDark?TILES.dark():TILES.light(),attributions:'© Jawg / © OSM'})});
 function applyTheme(dark){
   isDark=dark;
   document.documentElement.setAttribute('data-theme',dark?'dark':'light');
   document.getElementById('btn-theme').textContent=dark?'☀':'☾';
-  tileLayer.getSource().setUrl(dark?TILES.dark:TILES.light);
+  tileLayer.getSource().setUrl(dark?TILES.dark():TILES.light());
   localStorage.setItem('sw-theme',dark?'dark':'light');
   updateLegendSwatches();
   if(mapReady){clearIconCache();renderTracks();renderAircraft();renderAirfields();renderWaterfields();}
@@ -444,16 +463,17 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
+const heatmapLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:0});
 const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
 const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
 const airfieldLayer  =new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
-map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);
+map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);
 mapReady=true;
 
 // SPRITES
@@ -746,7 +766,97 @@ function showWaterfieldPopup(feat,pixel){
 function closeWaterfieldPopup(){ closeAllPopups(); }
 
 
-// MAP EVENTS
+// HEATMAP
+function responseTimeColor(minutes){
+  if(minutes===null)return null;
+  const t=Math.min(minutes/30,1);
+  const r=Math.round(255*t);
+  const g=Math.round(255*(1-t));
+  return `rgba(${r},${g},0,0.7)`;
+}
+
+function renderHeatmap(data){
+  if(!data)return;
+  const src=heatmapLayer.getSource();src.clear();
+  const {lat_min,step_lat,step_lon,rows,cols}=data.metadata;
+  const values=data.values;
+  const lat_max=lat_min+rows*step_lat;
+  const half_lat=step_lat/2;
+  const half_lon=step_lon/2;
+  let covered=0;
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<cols;col++){
+      const idx=row*cols+col;
+      const minutes=values[idx];
+      if(minutes===null)continue;
+      const lat=lat_max-row*step_lat;
+      const lon=data.metadata.lon_min+col*step_lon;
+      const color=responseTimeColor(minutes);
+      if(!color)continue;
+      const feat=new ol.Feature({
+        geometry:new ol.geom.Polygon([[
+          ol.proj.fromLonLat([lon-half_lon,lat-half_lat]),
+          ol.proj.fromLonLat([lon+half_lon,lat-half_lat]),
+          ol.proj.fromLonLat([lon+half_lon,lat+half_lat]),
+          ol.proj.fromLonLat([lon-half_lon,lat+half_lat]),
+          ol.proj.fromLonLat([lon-half_lon,lat-half_lat]),
+        ]]),
+        responseTime: minutes,
+        airfield:     data.airfields[idx],
+        distanceKm:   data.distances[idx],
+        model:        data.models[idx]
+      });
+      feat.setStyle(new ol.style.Style({fill:new ol.style.Fill({color})}));
+      src.addFeature(feat);
+      covered++;
+    }
+  }
+  const nonNull=values.filter(v=>v!==null);
+  const minT=nonNull.length?Math.round(Math.min(...nonNull)):'--';
+  const maxT=nonNull.length?Math.round(Math.max(...nonNull)):'--';
+  const avgT=nonNull.length?Math.round(nonNull.reduce((a,b)=>a+b,0)/nonNull.length):'--';
+  document.getElementById('hm-stats').textContent=`min ${minT}′  avg ${avgT}′  max ${maxT}′`;
+  console.log(`[Heatmap] Rendered ${covered} cells`);
+}
+
+async function fetchHeatmapList(){
+  try{
+    const res=await fetch(`${config.baseUrl}/heatmaps`,{headers:apiHeaders()});
+    if(!res.ok)return;
+    const data=await res.json();
+    const select=document.getElementById('heatmap-select');
+    select.innerHTML='<option value="">-- select --</option>'+
+      data.heatmaps.map(n=>`<option value="${n}">${n}</option>`).join('');
+  }catch(e){console.warn('Heatmap list fetch failed:',e.message);}
+}
+
+async function fetchHeatmap(name){
+  if(!name)return;
+  try{
+    const res=await fetch(`${config.baseUrl}/heatmap/${name}`,{headers:apiHeaders()});
+    if(!res.ok){console.warn('Heatmap HTTP error:',res.status);return;}
+    heatmapData=await res.json();
+    console.log('[Heatmap] Loaded:',heatmapData?.metadata);
+    renderHeatmap(heatmapData);
+  }catch(e){console.warn('Heatmap fetch failed:',e.message);}
+}
+
+function toggleHeatmap(){
+  const btn=document.getElementById('btn-heatmap');
+  const select=document.getElementById('heatmap-select');
+  const legend=document.getElementById('heatmap-legend');
+  const active=btn.classList.toggle('active');
+  select.style.display=active?'inline-block':'none';
+  legend.style.display=active?'block':'none';
+  if(active){
+    fetchHeatmapList();
+    if(heatmapData)renderHeatmap(heatmapData);
+  } else {
+    heatmapLayer.getSource().clear();
+  }
+}
+
+
 const tooltip=document.getElementById('tooltip');
 map.on('pointermove',evt=>{
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
@@ -755,17 +865,13 @@ map.on('pointermove',evt=>{
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
-      <div class="tooltip-row"><span class="tooltip-key">ICAO24</span><span class="tooltip-val">${ac.icao24||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${ac.type||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">At Field</span><span class="tooltip-val">${ac.at_airfield?'✔ Yes':'✘ No'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Full</span><span class="tooltip-val">${ac.is_full===true?'✔ Yes':ac.is_full===false?'✘ No':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(17,25)+' UTC':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
@@ -773,7 +879,22 @@ map.on('pointermove',evt=>{
   if(afF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
   const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
   if(wfF){map.getTargetElement().style.cursor='pointer';tooltip.style.display='none';return;}
-  // ROI hover tooltip
+  // Heatmap cell hover
+  const hmF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===heatmapLayer});
+  if(hmF){
+    const mins=hmF.get('responseTime');
+    const af=hmF.get('airfield');
+    const dist=hmF.get('distanceKm');
+    const model=hmF.get('model');
+    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#22c55e;">${Math.round(mins)} min</div>
+      <div class="tooltip-row"><span class="tooltip-key">Base</span><span class="tooltip-val">${af||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Distance</span><span class="tooltip-val">${dist!=null?Math.round(dist)+' km':'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${model||'--'}</span></div>`;
+    map.getTargetElement().style.cursor='';return;
+  }
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF){
     const name=roiF.get('roiName');
