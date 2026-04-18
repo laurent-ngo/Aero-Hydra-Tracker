@@ -217,7 +217,7 @@ def discover_new_aircraft():
 
     seen = set()
     findings = []
-    # 1. Scan ADSB free sources
+
     for lat, lon in SCAN_POINTS:
         with ThreadPoolExecutor() as ex:
             all_results = list(ex.map(
@@ -237,19 +237,7 @@ def discover_new_aircraft():
                     findings.append(ac)
         time.sleep(1)  # respect 1 req/sec rate limit between scan points
 
-    # 2. Scan OpenSky using bounding box — one call covers all scan points
-    try:
-        TOKEN = os.getenv('OPENSKY_CLIENT_TOKEN')
-        collector = FirefleetCollector(TOKEN)
-        opensky_states = collector.get_by_icao24(
-            [icao for icao in collector.get_all_states() 
-             if icao not in blacklist]
-        ) if hasattr(collector, 'get_all_states') else []
-    except Exception as e:
-        logger.warning(f"OpenSky scan failed: {e}")
-        opensky_states = []
-
-    logger.info(f"Discovery complete: {len(findings)} new aircraft found.")
+    logger.info(f"Discovery complete: {len(findings)} new aircraft found across {len(sources)} sources and {len(SCAN_POINTS)} scan points.")
     return findings
 
 if __name__ == "__main__":
