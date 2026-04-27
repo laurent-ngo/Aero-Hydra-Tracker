@@ -61,6 +61,8 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
         migrate.Airfield,
         migrate.FlightTelemetry,
         migrate.WaterLocation
+    ).filter(
+        migrate.TrackedAircraft.visible == True
     ).outerjoin(
         migrate.FlightTelemetry,
         and_(
