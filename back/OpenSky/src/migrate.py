@@ -38,6 +38,7 @@ class TrackedAircraft(Base):
     icon_size = Column(Integer)
 
     last_seen = Column(Integer)
+    visible = Column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
         CheckConstraint(aircraft_type.in_(['airplane', 'helicopter']), name='type_check'),

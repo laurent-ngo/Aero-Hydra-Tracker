@@ -429,7 +429,12 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
             except Exception:
                 continue
 
-        hull_coords = list(new_poly.exterior.coords)
+        if new_poly.geom_type == 'Polygon':
+            hull_coords = list(new_poly.exterior.coords)
+        elif new_poly.geom_type == 'LineString':
+            hull_coords = list(new_poly.coords)
+        else:
+            hull_coords = []
 
         if matched_roi:
             # ✅ Reuse — overwrite with freshly computed geometry (idempotent)
