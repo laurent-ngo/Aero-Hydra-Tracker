@@ -234,10 +234,23 @@ class FireLocationIn(BaseModel):
     lat: float
     lon: float
 
+class FireLocationUpdate(BaseModel):
+    name: str
+
 @app.get("/fire-locations", dependencies=[Security(get_api_key)])
 def list_fire_locations(db: DbSession):
     locs = db.query(migrate.FireLocation).all()
     return [{"id": l.id, "ref": l.ref, "name": l.name, "lat": l.lat, "lon": l.lon} for l in locs]
+
+@app.put("/fire-location/{loc_id}", dependencies=[Security(get_api_key)])
+def update_fire_location(loc_id: int, body: FireLocationUpdate, db: DbSession):
+    loc = db.query(migrate.FireLocation).filter_by(id=loc_id).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail="Fire location not found")
+    loc.name = body.name
+    db.commit()
+    db.refresh(loc)
+    return {"id": loc.id, "ref": loc.ref, "name": loc.name, "lat": loc.lat, "lon": loc.lon}
 
 @app.post("/fire-location", dependencies=[Security(get_api_key)])
 def create_fire_location(body: FireLocationIn, db: DbSession):

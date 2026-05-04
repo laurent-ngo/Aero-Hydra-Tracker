@@ -444,10 +444,14 @@ async function saveFireLocation(){
   if(!pendingFireRoi)return;
   const name=document.getElementById('fire-name-input').value.trim();
   if(!name)return;
+  const existingId=pendingFireRoi.get('fireLocationId');
   try{
-    const res=await fetch(`${config.baseUrl}/fire-location`,{method:'POST',headers:apiHeaders(),body:JSON.stringify({name,lat:pendingFireRoi.get('roiLat'),lon:pendingFireRoi.get('roiLon')})});
+    const res=existingId
+      ?await fetch(`${config.baseUrl}/fire-location/${existingId}`,{method:'PUT',headers:apiHeaders(),body:JSON.stringify({name})})
+      :await fetch(`${config.baseUrl}/fire-location`,{method:'POST',headers:apiHeaders(),body:JSON.stringify({name,lat:pendingFireRoi.get('roiLat'),lon:pendingFireRoi.get('roiLon')})});
     if(!res.ok)throw new Error(await res.text());
     closeFireNameModal();
+    fetchFireLocations();
   }catch(e){alert('Failed to save: '+e.message);}
 }
 function openModal(){document.getElementById('cfg-base-url').value=config.baseUrl;document.getElementById('cfg-interval').value=config.interval;document.getElementById('cfg-api-key').value=config.apiKey;document.getElementById('modal').classList.add('open');}
@@ -487,7 +491,7 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -986,14 +990,16 @@ function renderROIs(){
     try{
       const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
       if(!coords||coords.length<3)return;
+      const matchedFl=roi.type==='fire'?fireLocations.find(fl=>Math.abs(fl.lat-roi.lat)<0.001&&Math.abs(fl.lon-roi.lon)<0.001):null;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),
-        roiName: roi.name||'—',
+        roiName: matchedFl?.name||roi.name||'—',
         roiType: roi.type,
         roiDetectedAt: roi.detected_at||null,
         roiId: roi.id,
         roiLat: roi.lat,
         roiLon: roi.lon,
+        fireLocationId: matchedFl?.id||null,
       });
       feat.setStyle(roiStyle(roi.type,roi.level));src.addFeature(feat);
     }catch(e){}
@@ -1132,7 +1138,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1179,6 +1185,13 @@ async function fetchROIs(){
     const res=await fetch(`${config.baseUrl}/regions-of-interest?level=2`,{headers:apiHeaders()});
     roiData=res.ok?await res.json():[];
     document.getElementById('stat-rois').textContent=roiData.length;renderROIs();
+  }catch(e){}
+}
+async function fetchFireLocations(){
+  try{
+    const res=await fetch(`${config.baseUrl}/fire-locations`,{headers:apiHeaders()});
+    fireLocations=res.ok?await res.json():[];
+    renderROIs();
   }catch(e){}
 }
 
