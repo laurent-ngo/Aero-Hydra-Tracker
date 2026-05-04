@@ -114,6 +114,15 @@ class WaterLocation(Base):
     lat = Column(Float)
     lon = Column(Float)
 
+class FireLocation(Base):
+    __tablename__ = 'fire_locations'
+
+    id  = Column(Integer, primary_key=True)
+    ref = Column(String(4), unique=True)
+    name = Column(String)
+    lat = Column(Float)
+    lon = Column(Float)
+
 
 # --- Migration Logic ---
 def run_migration():
