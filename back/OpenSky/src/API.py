@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.responses import FileResponse
@@ -227,6 +228,30 @@ def get_rois(
         } for r in rois
     ]
 
+
+class FireLocationIn(BaseModel):
+    name: str
+    lat: float
+    lon: float
+
+@app.get("/fire-locations", dependencies=[Security(get_api_key)])
+def list_fire_locations(db: DbSession):
+    locs = db.query(migrate.FireLocation).all()
+    return [{"id": l.id, "ref": l.ref, "name": l.name, "lat": l.lat, "lon": l.lon} for l in locs]
+
+@app.post("/fire-location", dependencies=[Security(get_api_key)])
+def create_fire_location(body: FireLocationIn, db: DbSession):
+    raw = re.sub(r'[^A-Za-z0-9]', '', body.name).upper()[:4]
+    ref = raw or "FIRE"
+    suffix = 1
+    while db.query(migrate.FireLocation).filter_by(ref=ref).first():
+        ref = (raw[:3] or "FIR") + str(suffix)
+        suffix += 1
+    loc = migrate.FireLocation(ref=ref, name=body.name, lat=body.lat, lon=body.lon)
+    db.add(loc)
+    db.commit()
+    db.refresh(loc)
+    return {"id": loc.id, "ref": loc.ref, "name": loc.name, "lat": loc.lat, "lon": loc.lon}
 
 HEATMAP_DIR = os.getenv("HEATMAP_DIR", ".")
 
