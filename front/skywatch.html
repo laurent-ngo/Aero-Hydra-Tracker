@@ -418,6 +418,17 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="fire-name-modal">
+  <div class="modal">
+    <h2>&#x1F525; NAME FIRE LOCATION</h2>
+    <div class="modal-row"><label>NAME</label><input type="text" id="fire-name-input" placeholder="e.g. Var Fire 2025"/></div>
+    <div class="modal-actions">
+      <button class="btn primary" onclick="saveFireLocation()">SAVE</button>
+      <button class="btn" onclick="closeFireNameModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
 <script>
 console.log('SkyWatch script loaded');
 // CONFIG
@@ -426,6 +437,23 @@ let config = {
   interval: parseInt(localStorage.getItem('sw-interval') || '30'),
   apiKey:   localStorage.getItem('sw-apiKey')   || ''
 };
+let pendingFireRoi=null;
+function openFireNameModal(feat){pendingFireRoi=feat;document.getElementById('fire-name-input').value=feat.get('roiName')||'';document.getElementById('fire-name-modal').classList.add('open');}
+function closeFireNameModal(){pendingFireRoi=null;document.getElementById('fire-name-modal').classList.remove('open');}
+async function saveFireLocation(){
+  if(!pendingFireRoi)return;
+  const name=document.getElementById('fire-name-input').value.trim();
+  if(!name)return;
+  const existingId=pendingFireRoi.get('fireLocationId');
+  try{
+    const res=existingId
+      ?await fetch(`${config.baseUrl}/fire-location/${existingId}`,{method:'PUT',headers:apiHeaders(),body:JSON.stringify({name})})
+      :await fetch(`${config.baseUrl}/fire-location`,{method:'POST',headers:apiHeaders(),body:JSON.stringify({name,lat:pendingFireRoi.get('roiLat'),lon:pendingFireRoi.get('roiLon')})});
+    if(!res.ok)throw new Error(await res.text());
+    closeFireNameModal();
+    fetchFireLocations();
+  }catch(e){alert('Failed to save: '+e.message);}
+}
 function openModal(){document.getElementById('cfg-base-url').value=config.baseUrl;document.getElementById('cfg-interval').value=config.interval;document.getElementById('cfg-api-key').value=config.apiKey;document.getElementById('modal').classList.add('open');}
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 function saveConfig(){config.baseUrl=document.getElementById('cfg-base-url').value.trim();config.interval=parseInt(document.getElementById('cfg-interval').value);config.apiKey=document.getElementById('cfg-api-key').value.trim();localStorage.setItem('sw-baseUrl',config.baseUrl);localStorage.setItem('sw-interval',config.interval);localStorage.setItem('sw-apiKey',config.apiKey);closeModal();fetchAll();}
@@ -463,7 +491,7 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -899,13 +927,15 @@ map.on('pointermove',evt=>{
   if(roiF){
     const name=roiF.get('roiName');
     const det=roiF.get('roiDetectedAt');
+    const isFire=roiF.get('roiType')==='fire';
     const detStr=det?new Date(det).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'--';
     tooltip.style.display='block';
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
     tooltip.innerHTML=`<div class="tooltip-callsign">${name}</div>
-      <div class="tooltip-row"><span class="tooltip-key">Detected</span><span class="tooltip-val">${detStr}</span></div>`;
-    map.getTargetElement().style.cursor='';return;
+      <div class="tooltip-row"><span class="tooltip-key">Detected</span><span class="tooltip-val">${detStr}</span></div>
+      ${isFire?'<div class="tooltip-row" style="color:#ff6644;font-size:10px;margin-top:4px;">Click to name this fire</div>':''}`;
+    map.getTargetElement().style.cursor=isFire?'pointer':'';return;
   }
   tooltip.style.display='none';map.getTargetElement().style.cursor='';
 });
@@ -926,6 +956,8 @@ map.on('click',evt=>{
   if(wfF){showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
+  const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
+  if(roiF&&roiF.get('roiType')==='fire'){openFireNameModal(roiF);return;}
   closeAllPopups();
 });
 
@@ -958,11 +990,16 @@ function renderROIs(){
     try{
       const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
       if(!coords||coords.length<3)return;
+      const matchedFl=roi.type==='fire'?fireLocations.find(fl=>Math.abs(fl.lat-roi.lat)<0.001&&Math.abs(fl.lon-roi.lon)<0.001):null;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),
-        roiName: roi.name||'—',
+        roiName: matchedFl?.name||roi.name||'—',
         roiType: roi.type,
         roiDetectedAt: roi.detected_at||null,
+        roiId: roi.id,
+        roiLat: roi.lat,
+        roiLon: roi.lon,
+        fireLocationId: matchedFl?.id||null,
       });
       feat.setStyle(roiStyle(roi.type,roi.level));src.addFeature(feat);
     }catch(e){}
@@ -1101,7 +1138,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1111,7 +1148,6 @@ async function fetchAircraft(){
     const res=await fetch(`${config.baseUrl}/aircraft/active?${params}`,{headers:apiHeaders()});
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const data=await res.json();allAircraft=Array.isArray(data)?data:(data.aircraft||[]);
-    console.log('[Aircraft] Loaded', allAircraft.length, 'active aircraft, first:', allAircraft[0]);
     tracksCache={};trackLayer.getSource().clear();
     applyFilters();
     if(se)se.textContent=`OK ${allAircraft.length} ac · ${new Date().toUTCString().slice(17,25)}`;
@@ -1149,6 +1185,13 @@ async function fetchROIs(){
     const res=await fetch(`${config.baseUrl}/regions-of-interest?level=2`,{headers:apiHeaders()});
     roiData=res.ok?await res.json():[];
     document.getElementById('stat-rois').textContent=roiData.length;renderROIs();
+  }catch(e){}
+}
+async function fetchFireLocations(){
+  try{
+    const res=await fetch(`${config.baseUrl}/fire-locations`,{headers:apiHeaders()});
+    fireLocations=res.ok?await res.json():[];
+    renderROIs();
   }catch(e){}
 }
 
@@ -1240,22 +1283,43 @@ setInterval(()=>{document.getElementById('stat-time').textContent=new Date().toU
 // REPLAY
 let replayTimer=null,replayCursor=0,replayPlaying=false;
 function replayRenderAt(ts){
-  const src=aircraftLayer.getSource();src.clear();const trk=trackLayer.getSource();trk.clear();
-  filteredAircraft.forEach(ac=>{
-    const pts=tracksCache[ac.icao24];if(!pts||!pts.length)return;
-    let idx=-1;for(let i=0;i<pts.length;i++){if(pts[i].timestamp<=ts)idx=i;else break;}
-    if(idx<0)return;const p=pts[idx];if(p.lon==null||p.lat==null)return;
+  const src=aircraftLayer.getSource();src.clear();
+  const trk=trackLayer.getSource();trk.clear();
+
+  // Use full fleet — anyone with cached tracks in this time range
+  const replayAircraft = allAircraftFleet.filter(ac => tracksCache[ac.icao24]?.length > 0);
+
+  replayAircraft.forEach(ac=>{
+    const pts=tracksCache[ac.icao24];
+    if(!pts||!pts.length)return;
+    let idx=-1;
+    for(let i=0;i<pts.length;i++){if(pts[i].timestamp<=ts)idx=i;else break;}
+    if(idx<0)return;
+    const p=pts[idx];if(p.lon==null||p.lat==null)return;
     const color=acColor({...ac,at_airfield:p.at_airfield,is_full:p.is_full});
-    const feat=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([p.lon,p.lat])),aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full}});
-    feat.setStyle(aircraftStyle(ac.icon,p.true_track,color,ac.icon_size,ac.icao24===selectedIcao));feat.setId(ac.icao24);src.addFeature(feat);
+    const feat=new ol.Feature({
+      geometry:new ol.geom.Point(ol.proj.fromLonLat([p.lon,p.lat])),
+      aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full}
+    });
+    feat.setStyle(aircraftStyle(ac.icon,p.true_track,color,ac.icon_size,ac.icao24===selectedIcao));
+    feat.setId(ac.icao24);
+    src.addFeature(feat);
     const tail=pts.slice(0,idx+1);
     for(let i=0;i<tail.length-1;i++){
       const p0=tail[i],p1=tail[i+1];if(p0.lon==null||p1.lon==null)continue;
-      const sf=new ol.Feature({geometry:new ol.geom.LineString([ol.proj.fromLonLat([p0.lon,p0.lat]),ol.proj.fromLonLat([p1.lon,p1.lat])])});
-      sf.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({color:altColor(p0.altitude_agl_ft??null),width:ac.icao24===selectedIcao?3:1.5,lineCap:'round'})}));
+      const sf=new ol.Feature({geometry:new ol.geom.LineString([
+        ol.proj.fromLonLat([p0.lon,p0.lat]),
+        ol.proj.fromLonLat([p1.lon,p1.lat])
+      ])});
+      sf.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({
+        color:altColor(p0.altitude_agl_ft??null),
+        width:ac.icao24===selectedIcao?3:1.5,
+        lineCap:'round'
+      })}));
       trk.addFeature(sf);
     }
   });
+
   document.getElementById('replay-time').textContent=new Date(ts*1000).toUTCString().slice(0,25);
   const pct=timeStart&&timeStop&&timeStop>timeStart?((ts-timeStart)/(timeStop-timeStart))*1000:0;
   document.getElementById('replay-slider').value=Math.round(pct);
@@ -1276,8 +1340,18 @@ function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart)
 function replayStepBack(){replayCursor=Math.max(timeStart,replayCursor-60);replayRenderAt(replayCursor);}
 function replayStepFwd(){replayCursor=Math.min(timeStop,replayCursor+60);replayRenderAt(replayCursor);}
 function startReplay(){
-  stopPolling();document.getElementById('replay-bar').classList.add('visible');
-  fetchAll().then(()=>{replayCursor=timeStart;replayPlaying=false;document.getElementById('replay-playpause').textContent='▶';document.getElementById('replay-playpause').classList.remove('active');document.getElementById('replay-slider').value=0;replayRenderAt(replayCursor);});
+  stopPolling();
+  document.getElementById('replay-bar').classList.add('visible');
+  fetchAll().then(async ()=>{
+    // Fetch tracks for all fleet aircraft in the time range
+    await Promise.all(allAircraftFleet.map(ac => fetchTrack(ac.icao24)));
+    replayCursor=timeStart;
+    replayPlaying=false;
+    document.getElementById('replay-playpause').textContent='▶';
+    document.getElementById('replay-playpause').classList.remove('active');
+    document.getElementById('replay-slider').value=0;
+    replayRenderAt(replayCursor);
+  });
 }
 function stopReplay(){
   replayPlaying=false;if(replayTimer){clearTimeout(replayTimer);replayTimer=null;}

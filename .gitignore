@@ -3,6 +3,7 @@ coverage.xml
 .coverage
 *.pyc
 local.sh
+back/OpenSky/api.env
 .vscode/settings.json
 back/OpenSky/data/aircrafts.csv
 cron.txt

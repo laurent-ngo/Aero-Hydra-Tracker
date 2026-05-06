@@ -1,0 +1,42 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/utils.sh"
+
+SERVICE_NAME="aero-hydra-api"
+SERVICE_FILE="$SCRIPT_DIR/aero-hydra-api.service"
+SERVICE_DEST="/etc/systemd/system/$SERVICE_NAME.service"
+PROJECT_HOME="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+header "Aero-Hydra API — Deploy"
+
+# ── 1. Pull latest code ────────────────────────────────────────
+info "Pulling latest code..."
+git -C "$PROJECT_HOME" pull || { error "git pull failed"; exit 1; }
+
+# ── 2. Install/update systemd service file ────────────────────
+info "Installing service file to $SERVICE_DEST..."
+sudo cp "$SERVICE_FILE" "$SERVICE_DEST" || { error "Failed to copy service file"; exit 1; }
+sudo systemctl daemon-reload || { error "daemon-reload failed"; exit 1; }
+
+# ── 3. Enable service (idempotent) ────────────────────────────
+sudo systemctl enable "$SERVICE_NAME" 2>/dev/null
+info "Service enabled."
+
+# ── 4. Restart (or start if not running) ──────────────────────
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+    info "Restarting $SERVICE_NAME..."
+    sudo systemctl restart "$SERVICE_NAME" || { error "Restart failed"; exit 1; }
+else
+    info "Starting $SERVICE_NAME..."
+    sudo systemctl start "$SERVICE_NAME" || { error "Start failed"; exit 1; }
+fi
+
+# ── 5. Status ─────────────────────────────────────────────────
+sleep 2
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+    info "$SERVICE_NAME is running on port 8010."
+else
+    error "$SERVICE_NAME failed to start. Check: sudo journalctl -u $SERVICE_NAME -n 50"
+    exit 1
+fi
