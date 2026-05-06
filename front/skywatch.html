@@ -982,6 +982,15 @@ function renderTracks(){
     }
   });
 }
+function pointInPolygon(plat,plon,coords){
+  // Ray-casting: coords are [lat,lon] pairs
+  let inside=false;
+  for(let i=0,j=coords.length-1;i<coords.length;j=i++){
+    const [ilat,ilon]=coords[i],[jlat,jlon]=coords[j];
+    if(((ilon>plon)!==(jlon>plon))&&(plat<(jlat-ilat)*(plon-ilon)/(jlon-ilon)+ilat))inside=!inside;
+  }
+  return inside;
+}
 function renderROIs(){
   const src=roiLayer.getSource();src.clear();
   const rm=document.getElementById('toggle-rois').value;if(rm==='none')return;
@@ -990,7 +999,7 @@ function renderROIs(){
     try{
       const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
       if(!coords||coords.length<3)return;
-      const matchedFl=roi.type==='fire'?fireLocations.find(fl=>Math.abs(fl.lat-roi.lat)<0.001&&Math.abs(fl.lon-roi.lon)<0.001):null;
+      const matchedFl=roi.type==='fire'?fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords)):null;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),
         roiName: matchedFl?.name||roi.name||'—',
