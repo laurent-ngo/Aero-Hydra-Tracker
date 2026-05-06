@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+typing_extensions
+requests
+numpy
+scikit-learn
+scipy
+shapely
+rasterio
