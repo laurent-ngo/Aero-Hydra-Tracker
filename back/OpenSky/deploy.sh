@@ -21,7 +21,17 @@ fi
 info "Pulling latest code..."
 git -C "$PROJECT_HOME" pull || { error "git pull failed"; exit 1; }
 
-# ── 2. Install/update systemd service file ────────────────────
+# ── 2. Python venv + dependencies ────────────────────────────
+VENV="$PROJECT_HOME/.venv"
+REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
+if [[ ! -f "$VENV/bin/uvicorn" ]]; then
+    info "Creating virtual environment..."
+    python3 -m venv "$VENV" || { error "python3 -m venv failed"; exit 1; }
+fi
+info "Installing/updating Python dependencies..."
+"$VENV/bin/pip" install -q -r "$REQUIREMENTS" || { error "pip install failed"; exit 1; }
+
+# ── 3. Install/update systemd service file ────────────────────
 info "Installing service file to $SERVICE_DEST (user=$(whoami), project=$PROJECT_HOME)..."
 sed \
     -e "s|User=.*|User=$(whoami)|" \
