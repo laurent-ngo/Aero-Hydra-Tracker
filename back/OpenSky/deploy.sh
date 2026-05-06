@@ -10,13 +10,24 @@ PROJECT_HOME="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 header "Aero-Hydra API — Deploy"
 
+# ── 0. Check api.env exists ───────────────────────────────────
+ENV_FILE="$SCRIPT_DIR/api.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+    error "api.env not found at $ENV_FILE — create it before deploying (see api.env on dev machine)"
+    exit 1
+fi
+
 # ── 1. Pull latest code ────────────────────────────────────────
 info "Pulling latest code..."
 git -C "$PROJECT_HOME" pull || { error "git pull failed"; exit 1; }
 
 # ── 2. Install/update systemd service file ────────────────────
-info "Installing service file to $SERVICE_DEST..."
-sudo cp "$SERVICE_FILE" "$SERVICE_DEST" || { error "Failed to copy service file"; exit 1; }
+info "Installing service file to $SERVICE_DEST (user=$(whoami), project=$PROJECT_HOME)..."
+sed \
+    -e "s|User=.*|User=$(whoami)|" \
+    -e "s|/home/lngo/projects/aero-hydra|$PROJECT_HOME|g" \
+    "$SERVICE_FILE" | sudo tee "$SERVICE_DEST" > /dev/null \
+    || { error "Failed to install service file"; exit 1; }
 sudo systemctl daemon-reload || { error "daemon-reload failed"; exit 1; }
 
 # ── 3. Enable service (idempotent) ────────────────────────────
