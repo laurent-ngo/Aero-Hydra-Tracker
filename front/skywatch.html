@@ -335,12 +335,12 @@
         <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft - Cruise</div>
         <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
-      <div id="heatmap-legend" style="display:none;position:absolute;bottom:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
-        <div style="margin-bottom:4px;letter-spacing:1px;">RESPONSE TIME</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-          <div style="width:80px;height:8px;background:linear-gradient(to right,rgba(0,255,0,0.7),rgba(255,255,0,0.7),rgba(255,0,0,0.7));border-radius:2px;"></div>
-          <span>0 → 30+ min</span>
-        </div>
+      <div id="heatmap-legend" style="display:none;position:absolute;top:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+        <div style="margin-bottom:6px;letter-spacing:1px;">RESPONSE TIME</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,0.7);flex-shrink:0;"></div><span>&lt; 15 min</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(234,179,8,0.7);flex-shrink:0;"></div><span>15 – 30 min</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.7);flex-shrink:0;"></div><span>30 – 45 min</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.7);flex-shrink:0;"></div><span>&gt; 45 min</span></div>
         <div id="hm-stats" style="color:var(--text);">--</div>
       </div>
 
@@ -797,10 +797,10 @@ function closeWaterfieldPopup(){ closeAllPopups(); }
 // HEATMAP
 function responseTimeColor(minutes){
   if(minutes===null)return null;
-  const t=Math.min(minutes/30,1);
-  const r=Math.round(255*t);
-  const g=Math.round(255*(1-t));
-  return `rgba(${r},${g},0,0.7)`;
+  if(minutes<=15)return'rgba(34,197,94,0.7)';   // green
+  if(minutes<=30)return'rgba(234,179,8,0.7)';    // yellow
+  if(minutes<=45)return'rgba(249,115,22,0.7)';   // orange
+  return'rgba(239,68,68,0.7)';                   // red
 }
 
 function renderHeatmap(data){
@@ -861,7 +861,7 @@ async function fetchHeatmapList(){
 async function fetchHeatmap(name){
   if(!name)return;
   try{
-    const res=await fetch(`${config.baseUrl}/heatmap/${name}`,{headers:apiHeaders()});
+    const res=await fetch(`${config.baseUrl}/heatmap/${name}?_=${Date.now()}`,{headers:apiHeaders()});
     if(!res.ok){console.warn('Heatmap HTTP error:',res.status);return;}
     heatmapData=await res.json();
     console.log('[Heatmap] Loaded:',heatmapData?.metadata);

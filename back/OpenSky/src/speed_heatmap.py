@@ -28,7 +28,7 @@ db = Session()
 
 GRID_SIZE_KM      = 5.0
 KM_PER_DEG_LAT    = 111.0
-LAST_SEEN_CUTOFF  = 7  # days — ignore aircraft not seen recently
+LAST_SEEN_CUTOFF  = 30  # days — ignore aircraft not seen recently
 
 
 def haversine(lon1, lat1, lon2, lat2):
@@ -92,11 +92,14 @@ def get_mobilisable_aircraft(airfields, cutoff_days=LAST_SEEN_CUTOFF):
     """
     cutoff_ts = int((datetime.now() - timedelta(days=cutoff_days)).timestamp())
 
-    # Get latest telemetry per aircraft
+    # Get latest *processed* telemetry per aircraft
+    # (unprocessed rows default to at_airfield=False and would mask current state)
     from sqlalchemy import func
     subq = db.query(
         migrate.FlightTelemetry.icao24,
         func.max(migrate.FlightTelemetry.timestamp).label('max_ts')
+    ).filter(
+        migrate.FlightTelemetry.is_processed == True
     ).group_by(
         migrate.FlightTelemetry.icao24
     ).subquery()
@@ -124,8 +127,10 @@ def get_mobilisable_aircraft(airfields, cutoff_days=LAST_SEEN_CUTOFF):
     mobilisable = []
     for rec in latest:
         if rec.icao24 not in water_bomber_map:
+            logger.debug(f"  SKIP {rec.icao24} — not a water bomber (no payload_capacity_kg or aircraft_model)")
             continue
         if rec.latest_airfield not in airfields:
+            logger.warning(f"  SKIP {rec.icao24} @ {rec.latest_airfield} — airfield not in DB")
             continue
         model = water_bomber_map[rec.icao24]
         base_lat, base_lon, base_name  = airfields[rec.latest_airfield]
@@ -203,6 +208,8 @@ def compute_heatmap(cells, mobilisable, speed_profiles):
         for aircraft in mobilisable:
             model = aircraft['model']
             if model not in speed_profiles:
+                if idx == 0:  # log once per aircraft, not once per cell
+                    logger.warning(f"  SKIP {aircraft['icao24']} ({model}) — no speed profile")
                 continue
 
             dist = haversine(
