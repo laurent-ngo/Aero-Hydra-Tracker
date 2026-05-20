@@ -74,7 +74,7 @@ case "$1" in
     heatmap)
             python3 "$SCRIPT_DIR/src/speed_profile.py" --output data/heatmap/speed_profiles.json
 
-            python3 "$SCRIPT_DIR/src/speed_heatmap.py" --profiles data/heatmap/speed_profiles.json --name "Current" --padding 400
+            python3 "$SCRIPT_DIR/src/speed_heatmap.py" --profiles data/heatmap/speed_profiles.json --name "Current" --padding 400 --cutoff 30
             #python3 "$SCRIPT_DIR/src/speed_heatmap.py" --name "Summer 26" --fleet "De Havilland Canada Dash 8-400:LFTW:2,Canadair CL415:LFTW:2,Air Tractor AT-802:LFBS:2,Canadair CL415:LFBD:2,Air Tractor AT-802:LFMT:2, Canadair CL415:LFKJ:2"  --padding 400
             ;;
     token)
