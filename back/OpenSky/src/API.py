@@ -15,6 +15,9 @@ import time, os
 import glob
 import re
 import logging
+from datetime import datetime, timedelta
+import numpy as np
+from sklearn.cluster import DBSCAN
 logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("AERO_API_KEY")
@@ -227,6 +230,69 @@ def get_rois(
             "geometry": r.geometry
         } for r in rois
     ]
+
+
+@app.get("/active-events", dependencies=[Security(get_api_key)])
+def get_active_events(
+    db: DbSession,
+    window_minutes: int = Query(60,  ge=5,   le=480,  description="Look-back window in minutes"),
+    min_passes:     int = Query(5,   ge=2,            description="Minimum passes to form a cluster"),
+    radius_km:    float = Query(2.0, ge=0.5, le=50.0, description="Cluster radius in km"),
+):
+    cutoff = int((datetime.now() - timedelta(minutes=window_minutes)).timestamp())
+
+    points = db.query(migrate.FlightTelemetry).filter(
+        migrate.FlightTelemetry.timestamp   >= cutoff,
+        migrate.FlightTelemetry.on_ground   == False,
+        migrate.FlightTelemetry.is_processed == True,
+        migrate.FlightTelemetry.lat.isnot(None),
+        migrate.FlightTelemetry.lon.isnot(None),
+    ).all()
+
+    if len(points) < min_passes:
+        return []
+
+    coords  = np.array([[p.lat, p.lon] for p in points])
+    epsilon = radius_km / 6371.0
+
+    labels = DBSCAN(
+        eps=epsilon, min_samples=min_passes,
+        algorithm='ball_tree', metric='haversine'
+    ).fit(np.radians(coords)).labels_
+
+    fire_locations = db.query(migrate.FireLocation).all()
+    events = []
+
+    for label in set(labels) - {-1}:
+        mask        = labels == label
+        cluster_pts = [p for p, m in zip(points, mask) if m]
+        cluster_c   = coords[mask]
+
+        centroid_lat = float(np.mean(cluster_c[:, 0]))
+        centroid_lon = float(np.mean(cluster_c[:, 1]))
+        aircraft     = list({p.icao24 for p in cluster_pts})
+
+        # Nearest named fire location within 10 km
+        fire_name = None
+        for fl in fire_locations:
+            if fl.lat and fl.lon:
+                dist_km = ((fl.lat - centroid_lat)**2 + (fl.lon - centroid_lon)**2) ** 0.5 * 111
+                if dist_km < 10:
+                    fire_name = fl.name
+                    break
+
+        events.append({
+            "lat":            round(centroid_lat, 5),
+            "lon":            round(centroid_lon, 5),
+            "pass_count":     len(cluster_pts),
+            "aircraft_count": len(aircraft),
+            "aircraft":       aircraft,
+            "fire_location":  fire_name,
+            "first_pass":     min(p.timestamp for p in cluster_pts),
+            "last_pass":      max(p.timestamp for p in cluster_pts),
+        })
+
+    return sorted(events, key=lambda e: e["last_pass"], reverse=True)
 
 
 class FireLocationIn(BaseModel):
