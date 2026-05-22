@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
   
   <script src="config.js"></script>
@@ -248,6 +249,7 @@
   <div class="header-stats">
     <div class="stat"><span class="stat-val" id="stat-aircraft">0</span><span class="stat-lbl">AIRCRAFT</span></div>
     <div class="stat"><span class="stat-val" id="stat-rois">0</span><span class="stat-lbl">ROI ZONES</span></div>
+    <div class="stat"><span class="stat-val" id="stat-events" style="color:#ff8040;">0</span><span class="stat-lbl">ACTIVE</span></div>
     <div class="stat"><span class="stat-val" id="stat-time">--:--:--</span><span class="stat-lbl">UTC</span></div>
   </div>
 </header>
@@ -295,6 +297,9 @@
       </div>
       <div class="filter-row"><label>ROIs</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="water">Water only</option><option value="training">Training only</option><option value="none">Hidden</option></select>
+      </div>
+      <div class="filter-row"><label>Events</label>
+        <select id="toggle-active-events" onchange="renderActiveEvents()"><option value="show">Visible</option><option value="none">Hidden</option></select>
       </div>
 
       <div class="section-label">Owner</div>
@@ -433,7 +438,7 @@
 console.log('SkyWatch script loaded');
 // CONFIG
 let config = {
-  baseUrl:  localStorage.getItem('sw-baseUrl')  || 'http://localhost:8000',
+  baseUrl:  localStorage.getItem('sw-baseUrl')  || window.SW_CONFIG?.baseApiUrl || 'http://localhost:8000',
   interval: parseInt(localStorage.getItem('sw-interval') || '30'),
   apiKey:   localStorage.getItem('sw-apiKey')   || ''
 };
@@ -491,7 +496,7 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -501,7 +506,8 @@ const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
 const airfieldLayer  =new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
-map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);
+const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
+map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
 mapReady=true;
 
 // SPRITES
@@ -923,6 +929,23 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${model||'--'}</span></div>`;
     map.getTargetElement().style.cursor='';return;
   }
+  const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
+  if(evF&&evF.get('eventData')){
+    const ev=evF.get('eventData');
+    const lastPass=new Date(ev.last_pass*1000).toUTCString().slice(17,25);
+    const firstPass=new Date(ev.first_pass*1000).toUTCString().slice(17,25);
+    const age=Math.round((Date.now()/1000-ev.last_pass)/60);
+    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff8040;">${ev.fire_location||'Active Activity'}</div>
+      <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${ev.aircraft.join(', ')}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Passes</span><span class="tooltip-val">${ev.pass_count} passes by ${ev.aircraft_count} ac</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">First Pass</span><span class="tooltip-val">${firstPass} UTC</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Last Pass</span><span class="tooltip-val">${lastPass} UTC (${age} min ago)</span></div>
+      <div class="tooltip-row" style="color:#ff8040;font-size:10px;margin-top:4px;">Click to zoom in</div>`;
+    map.getTargetElement().style.cursor='pointer';return;
+  }
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF){
     const name=roiF.get('roiName');
@@ -956,6 +979,8 @@ map.on('click',evt=>{
   if(wfF){showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
+  const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
+  if(evF&&evF.get('eventData')){const ev=evF.get('eventData');map.getView().animate({center:ol.proj.fromLonLat([ev.lon,ev.lat]),zoom:13,duration:800});return;}
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF&&roiF.get('roiType')==='fire'){openFireNameModal(roiF);return;}
   closeAllPopups();
@@ -1147,7 +1172,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchActiveEvents()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1165,14 +1190,10 @@ async function fetchAircraft(){
 }
 async function fetchAllAircraftFleet(){
   try{
-    console.log('[Fleet] Fetching from', `${config.baseUrl}/aircraft`);
     const res=await fetch(`${config.baseUrl}/aircraft`,{headers:apiHeaders()});
-    console.log('[Fleet] Response status:', res.status);
     if(!res.ok)return;
     const data=await res.json();
     allAircraftFleet=Array.isArray(data)?data:(data.aircraft||[]);
-    console.log('[Fleet] Loaded', allAircraftFleet.length, 'aircraft, first:', allAircraftFleet[0]);
-    console.log('[Fleet] Sample airfield coords:', allAircraftFleet.slice(0,3).map(a=>({reg:a.registration,last_airfield:a.last_airfield,airfield_lat:a.airfield_lat,airfield_lon:a.airfield_lon})));
     buildOwnerFilter();
     renderAirfields();
     renderWaterfields();
@@ -1202,6 +1223,49 @@ async function fetchFireLocations(){
     fireLocations=res.ok?await res.json():[];
     renderROIs();
   }catch(e){}
+}
+async function fetchActiveEvents(){
+  try{
+    const params=new URLSearchParams({window_minutes:60,min_passes:5,radius_km:2.0});
+    const res=await fetch(`${config.baseUrl}/active-events?${params}`,{headers:apiHeaders()});
+    activeEvents=res.ok?await res.json():[];
+    document.getElementById('stat-events').textContent=activeEvents.length;
+    renderActiveEvents();
+  }catch(e){activeEvents=[];document.getElementById('stat-events').textContent=0;}
+}
+function renderActiveEvents(){
+  const src=activeEventLayer.getSource();src.clear();
+  if(document.getElementById('toggle-active-events').value==='none')return;
+  activeEvents.forEach(ev=>{
+    const center=ol.proj.fromLonLat([ev.lon,ev.lat]);
+    // Area ring — 2 km geographic radius (EPSG:3857 units ≈ metres)
+    const ringFeat=new ol.Feature({geometry:new ol.geom.Circle(center,2000),eventData:ev});
+    ringFeat.setStyle(new ol.style.Style({
+      fill:new ol.style.Fill({color:'rgba(255,80,0,0.10)'}),
+      stroke:new ol.style.Stroke({color:'rgba(255,120,0,0.65)',width:1.5,lineDash:[5,4]})
+    }));
+    src.addFeature(ringFeat);
+    // Centre dot + label
+    const age=Math.round((Date.now()/1000-ev.last_pass)/60); // minutes since last pass
+    const dotColor=age<=5?'rgba(255,80,0,0.95)':age<=15?'rgba(255,140,0,0.85)':'rgba(180,80,0,0.75)';
+    const ptFeat=new ol.Feature({geometry:new ol.geom.Point(center),eventData:ev});
+    ptFeat.setStyle(new ol.style.Style({
+      image:new ol.style.Circle({
+        radius:8,
+        fill:new ol.style.Fill({color:dotColor}),
+        stroke:new ol.style.Stroke({color:'#fff',width:1.5})
+      }),
+      text:new ol.style.Text({
+        text:`${ev.aircraft_count}✈ ×${ev.pass_count}`,
+        font:'bold 10px "Share Tech Mono",monospace',
+        fill:new ol.style.Fill({color:'#fff'}),
+        stroke:new ol.style.Stroke({color:'rgba(0,0,0,0.75)',width:3}),
+        offsetY:-20,
+        textAlign:'center'
+      })
+    }));
+    src.addFeature(ptFeat);
+  });
 }
 
 // FILTERS & SELECTION
