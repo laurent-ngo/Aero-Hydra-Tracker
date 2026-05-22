@@ -246,9 +246,11 @@ def get_active_events(
     cutoff = int((datetime.now() - timedelta(minutes=window_minutes)).timestamp())
 
     points = db.query(migrate.FlightTelemetry).filter(
-        migrate.FlightTelemetry.timestamp   >= cutoff,
-        migrate.FlightTelemetry.on_ground   == False,
+        migrate.FlightTelemetry.timestamp    >= cutoff,
+        migrate.FlightTelemetry.on_ground    == False,
         migrate.FlightTelemetry.is_processed == True,
+        migrate.FlightTelemetry.is_over_water == False,
+        migrate.FlightTelemetry.at_airfield   == False,
         migrate.FlightTelemetry.lat.isnot(None),
         migrate.FlightTelemetry.lon.isnot(None),
     ).all()
