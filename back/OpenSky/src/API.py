@@ -2,7 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+import pathlib
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
@@ -53,9 +55,11 @@ def get_db():
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Aero-Hydra Flight API"}
+FRONT_DIR = (pathlib.Path(__file__).parent / ".." / ".." / ".." / "front").resolve()
+
+@app.get("/", include_in_schema=False)
+def serve_root():
+    return RedirectResponse(url="/skywatch.html", status_code=302)
 
 
 def _get_aircraft_with_details(db: Session, icao_filter=None):
@@ -353,3 +357,7 @@ def get_heatmap(name: str):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Heatmap '{safe_name}' not found")
     return FileResponse(path, media_type="application/json")
+
+# ── Frontend static files (mount last so API routes take priority) ──
+if FRONT_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONT_DIR)), name="frontend")

@@ -1367,8 +1367,16 @@ function stopReplay(){
   document.getElementById('replay-bar').classList.remove('visible');document.getElementById('replay-playpause').textContent='▶';
 }
 
+function navigateToHash(){
+  const p=Object.fromEntries(new URLSearchParams(window.location.hash.slice(1)));
+  const lat=parseFloat(p.lat),lon=parseFloat(p.lon),zoom=parseInt(p.zoom)||13;
+  if(isNaN(lat)||isNaN(lon))return;
+  map.getView().animate({center:ol.proj.fromLonLat([lon,lat]),zoom,duration:800});
+}
+window.addEventListener('hashchange',navigateToHash);
+
 initTimeRange();
-setTimeout(()=>{map.updateSize();updateLegendSwatches();updateScaleBar();},50);
+setTimeout(()=>{map.updateSize();updateLegendSwatches();updateScaleBar();navigateToHash();},100);
 window.addEventListener('resize',()=>map.updateSize());
 setMode('live');
 </script>
