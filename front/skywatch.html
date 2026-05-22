@@ -1583,7 +1583,62 @@ function navigateToHash(){
 }
 window.addEventListener('hashchange',navigateToHash);
 
+// ── UI STATE PERSISTENCE ──────────────────────────────────────
+const UI_PERSIST=[
+  'filter-time-preset','filter-start','filter-stop',
+  'filter-callsign','filter-type','filter-alt-min','filter-alt-max',
+  'toggle-tracks','toggle-rois','toggle-active-events',
+  'filter-at-airfield','filter-is-full',
+  'ev-window','ev-passes','ev-radius',
+  'heatmap-select'
+];
+function saveUIState(){
+  const state={};
+  UI_PERSIST.forEach(id=>{const el=document.getElementById(id);if(el)state[id]=el.value;});
+  state['heatmap-active']=document.getElementById('btn-heatmap')?.classList.contains('active')||false;
+  localStorage.setItem('sw-ui',JSON.stringify(state));
+}
+function restoreUIState(){
+  try{
+    const raw=localStorage.getItem('sw-ui');if(!raw)return;
+    const s=JSON.parse(raw);
+    // Restore all element values silently (no events fired)
+    UI_PERSIST.forEach(id=>{
+      if(s[id]==null)return;
+      const el=document.getElementById(id);if(el)el.value=s[id];
+    });
+    // Update slider value labels
+    ['ev-window','ev-passes','ev-radius'].forEach(id=>{
+      if(s[id]!=null){const lbl=document.getElementById(id+'-val');if(lbl)lbl.textContent=s[id];}
+    });
+    // Time range — apply silently without fetching
+    const preset=s['filter-time-preset'];
+    if(preset==='custom'){
+      document.getElementById('custom-time-range').style.display='block';
+      const st=document.getElementById('filter-start').value,en=document.getElementById('filter-stop').value;
+      if(st&&en){timeStart=Math.floor(new Date(st).getTime()/1000);timeStop=Math.floor(new Date(en).getTime()/1000);updateTimeDisplay();}
+    } else if(preset){
+      document.getElementById('custom-time-range').style.display='none';
+      timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-parseInt(preset)*60;updateTimeDisplay();
+    }
+    // Heatmap — restore toggle state, then fetch list and re-select saved profile
+    if(s['heatmap-active']){
+      document.getElementById('btn-heatmap').classList.add('active');
+      document.getElementById('heatmap-select').style.display='inline-block';
+      document.getElementById('heatmap-legend').style.display='block';
+      const saved=s['heatmap-select'];
+      fetchHeatmapList().then(()=>{
+        if(saved){document.getElementById('heatmap-select').value=saved;fetchHeatmap(saved);}
+      });
+    }
+  }catch(e){}
+}
+// Auto-save on any user interaction with a form element
+document.addEventListener('change',saveUIState);
+document.addEventListener('input',saveUIState);
+
 initTimeRange();
+restoreUIState();   // before setMode so first fetch uses restored time range
 setTimeout(()=>{map.updateSize();updateLegendSwatches();updateScaleBar();navigateToHash();},100);
 window.addEventListener('resize',()=>map.updateSize());
 setMode('live');
