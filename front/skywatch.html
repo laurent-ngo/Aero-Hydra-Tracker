@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SkyWatch — Aircraft Tracking</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"/>
   
   <script src="config.js"></script>
@@ -245,6 +246,7 @@
     <option value="">-- select --</option>
   </select>
   <button class="header-btn" id="btn-heatmap" onclick="toggleHeatmap()">&#x1F525; HEATMAP</button>
+  <button class="header-btn" id="btn-events" onclick="toggleEventsPanel()">&#x26A1; EVENTS</button>
   <div class="header-stats">
     <div class="stat"><span class="stat-val" id="stat-aircraft">0</span><span class="stat-lbl">AIRCRAFT</span></div>
     <div class="stat"><span class="stat-val" id="stat-rois">0</span><span class="stat-lbl">ROI ZONES</span></div>
@@ -295,6 +297,9 @@
       </div>
       <div class="filter-row"><label>ROIs</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="water">Water only</option><option value="training">Training only</option><option value="none">Hidden</option></select>
+      </div>
+      <div class="filter-row"><label>Events</label>
+        <select id="toggle-active-events" onchange="renderActiveEvents()"><option value="show">Visible</option><option value="none">Hidden</option></select>
       </div>
 
       <div class="section-label">Owner</div>
@@ -418,6 +423,41 @@
   </div>
 </div>
 
+<!-- EVENTS PANEL -->
+<div id="events-panel" style="display:none;position:fixed;top:var(--header-h);right:0;width:300px;background:var(--panel);border-left:1px solid var(--panel-border);border-bottom:1px solid var(--panel-border);z-index:500;flex-direction:column;max-height:calc(100vh - var(--header-h));">
+  <div style="padding:10px 14px;border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <span style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">ACTIVE EVENTS</span>
+    <button onclick="toggleEventsPanel()" style="margin-left:auto;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;">&#x2715;</button>
+  </div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--panel-border);flex-shrink:0;">
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11px;color:var(--text-dim);">Window</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);"><span id="ev-window-val">60</span> min</span>
+      </div>
+      <input type="range" id="ev-window" min="5" max="240" step="5" value="60" style="width:100%;accent-color:var(--accent);cursor:pointer;" oninput="document.getElementById('ev-window-val').textContent=this.value"/>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11px;color:var(--text-dim);">Min passes</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);"><span id="ev-passes-val">5</span></span>
+      </div>
+      <input type="range" id="ev-passes" min="2" max="50" step="1" value="5" style="width:100%;accent-color:var(--accent);cursor:pointer;" oninput="document.getElementById('ev-passes-val').textContent=this.value"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11px;color:var(--text-dim);">Radius</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);"><span id="ev-radius-val">2</span> km</span>
+      </div>
+      <input type="range" id="ev-radius" min="0.5" max="20" step="0.5" value="2" style="width:100%;accent-color:var(--accent);cursor:pointer;" oninput="document.getElementById('ev-radius-val').textContent=this.value"/>
+    </div>
+    <button class="btn primary" onclick="fetchActiveEvents()" style="margin-bottom:0;">&#x21BB; Refresh</button>
+  </div>
+  <div id="events-list" style="flex:1;overflow-y:auto;padding:8px;">
+    <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px 0;">No data — hit Refresh</div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="fire-name-modal">
   <div class="modal">
     <h2>&#x1F525; NAME FIRE LOCATION</h2>
@@ -433,7 +473,7 @@
 console.log('SkyWatch script loaded');
 // CONFIG
 let config = {
-  baseUrl:  localStorage.getItem('sw-baseUrl')  || 'http://localhost:8000',
+  baseUrl:  localStorage.getItem('sw-baseUrl')  || window.SW_CONFIG?.baseApiUrl || 'http://localhost:8000',
   interval: parseInt(localStorage.getItem('sw-interval') || '30'),
   apiKey:   localStorage.getItem('sw-apiKey')   || ''
 };
@@ -491,7 +531,7 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -501,7 +541,8 @@ const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
 const airfieldLayer  =new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
-map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);
+const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
+map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
 mapReady=true;
 
 // SPRITES
@@ -923,6 +964,23 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${model||'--'}</span></div>`;
     map.getTargetElement().style.cursor='';return;
   }
+  const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
+  if(evF&&evF.get('eventData')){
+    const ev=evF.get('eventData');
+    const lastPass=new Date(ev.last_pass*1000).toUTCString().slice(17,25);
+    const firstPass=new Date(ev.first_pass*1000).toUTCString().slice(17,25);
+    const age=Math.round((Date.now()/1000-ev.last_pass)/60);
+    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff8040;">${ev.fire_location||'Active Activity'}</div>
+      <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${ev.aircraft.join(', ')}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Passes</span><span class="tooltip-val">${ev.pass_count} passes by ${ev.aircraft_count} ac</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">First Pass</span><span class="tooltip-val">${firstPass} UTC</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Last Pass</span><span class="tooltip-val">${lastPass} UTC (${age} min ago)</span></div>
+      <div class="tooltip-row" style="color:#ff8040;font-size:10px;margin-top:4px;">Click to zoom in</div>`;
+    map.getTargetElement().style.cursor='pointer';return;
+  }
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF){
     const name=roiF.get('roiName');
@@ -956,6 +1014,8 @@ map.on('click',evt=>{
   if(wfF){showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
+  const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
+  if(evF&&evF.get('eventData')){const ev=evF.get('eventData');map.getView().animate({center:ol.proj.fromLonLat([ev.lon,ev.lat]),zoom:13,duration:800});return;}
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF&&roiF.get('roiType')==='fire'){openFireNameModal(roiF);return;}
   closeAllPopups();
@@ -1147,7 +1207,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchActiveEvents()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1165,14 +1225,10 @@ async function fetchAircraft(){
 }
 async function fetchAllAircraftFleet(){
   try{
-    console.log('[Fleet] Fetching from', `${config.baseUrl}/aircraft`);
     const res=await fetch(`${config.baseUrl}/aircraft`,{headers:apiHeaders()});
-    console.log('[Fleet] Response status:', res.status);
     if(!res.ok)return;
     const data=await res.json();
     allAircraftFleet=Array.isArray(data)?data:(data.aircraft||[]);
-    console.log('[Fleet] Loaded', allAircraftFleet.length, 'aircraft, first:', allAircraftFleet[0]);
-    console.log('[Fleet] Sample airfield coords:', allAircraftFleet.slice(0,3).map(a=>({reg:a.registration,last_airfield:a.last_airfield,airfield_lat:a.airfield_lat,airfield_lon:a.airfield_lon})));
     buildOwnerFilter();
     renderAirfields();
     renderWaterfields();
@@ -1202,6 +1258,86 @@ async function fetchFireLocations(){
     fireLocations=res.ok?await res.json():[];
     renderROIs();
   }catch(e){}
+}
+function toggleEventsPanel(){
+  const panel=document.getElementById('events-panel');
+  const btn=document.getElementById('btn-events');
+  const opening=panel.style.display==='none'||panel.style.display==='';
+  panel.style.display=opening?'flex':'none';
+  btn.classList.toggle('active',opening);
+  if(opening)fetchActiveEvents();
+}
+async function fetchActiveEvents(){
+  const listEl=document.getElementById('events-list');
+  if(listEl)listEl.innerHTML='<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px 0;">Fetching…</div>';
+  try{
+    const wm=parseInt(document.getElementById('ev-window')?.value)||60;
+    const mp=parseInt(document.getElementById('ev-passes')?.value)||5;
+    const rk=parseFloat(document.getElementById('ev-radius')?.value)||2.0;
+    const params=new URLSearchParams({window_minutes:wm,min_passes:mp,radius_km:rk});
+    const res=await fetch(`${config.baseUrl}/active-events?${params}`,{headers:apiHeaders()});
+    activeEvents=res.ok?await res.json():[];
+    renderActiveEvents();
+    renderEventsList();
+  }catch(e){activeEvents=[];renderActiveEvents();renderEventsList();}
+}
+function renderEventsList(){
+  const el=document.getElementById('events-list');
+  if(!el)return;
+  if(!activeEvents.length){
+    el.innerHTML='<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px 0;">No active events</div>';
+    return;
+  }
+  el.innerHTML=activeEvents.map((ev,i)=>{
+    const age=Math.round((Date.now()/1000-ev.last_pass)/60);
+    const name=ev.fire_location||`${ev.lat.toFixed(3)}, ${ev.lon.toFixed(3)}`;
+    const lastPass=new Date(ev.last_pass*1000).toUTCString().slice(17,25);
+    return `<div class="aircraft-item" onclick="zoomToEvent(${i})" style="cursor:pointer;">
+      <div class="aircraft-callsign" style="color:#ff8040;">${name}</div>
+      <div class="aircraft-meta">${ev.pass_count} passes &nbsp;·&nbsp; ${ev.aircraft_count} aircraft</div>
+      <div class="aircraft-meta">${ev.aircraft.join(', ')}</div>
+      <div class="aircraft-meta" style="margin-top:2px;">Last pass ${lastPass} UTC (${age} min ago)</div>
+    </div>`;
+  }).join('');
+}
+function zoomToEvent(i){
+  const ev=activeEvents[i];if(!ev)return;
+  map.getView().animate({center:ol.proj.fromLonLat([ev.lon,ev.lat]),zoom:13,duration:800});
+}
+function renderActiveEvents(){
+  const src=activeEventLayer.getSource();src.clear();
+  if(document.getElementById('toggle-active-events').value==='none')return;
+  activeEvents.forEach(ev=>{
+    const center=ol.proj.fromLonLat([ev.lon,ev.lat]);
+    // Area ring — radius from slider (EPSG:3857 units ≈ metres)
+    const radiusM=(parseFloat(document.getElementById('ev-radius')?.value)||2)*1000;
+    const ringFeat=new ol.Feature({geometry:new ol.geom.Circle(center,radiusM),eventData:ev});
+    ringFeat.setStyle(new ol.style.Style({
+      fill:new ol.style.Fill({color:'rgba(255,80,0,0.10)'}),
+      stroke:new ol.style.Stroke({color:'rgba(255,120,0,0.65)',width:1.5,lineDash:[5,4]})
+    }));
+    src.addFeature(ringFeat);
+    // Centre dot + label
+    const age=Math.round((Date.now()/1000-ev.last_pass)/60); // minutes since last pass
+    const dotColor=age<=5?'rgba(255,80,0,0.95)':age<=15?'rgba(255,140,0,0.85)':'rgba(180,80,0,0.75)';
+    const ptFeat=new ol.Feature({geometry:new ol.geom.Point(center),eventData:ev});
+    ptFeat.setStyle(new ol.style.Style({
+      image:new ol.style.Circle({
+        radius:8,
+        fill:new ol.style.Fill({color:dotColor}),
+        stroke:new ol.style.Stroke({color:'#fff',width:1.5})
+      }),
+      text:new ol.style.Text({
+        text:`${ev.aircraft_count}✈ ×${ev.pass_count}`,
+        font:'bold 10px "Share Tech Mono",monospace',
+        fill:new ol.style.Fill({color:'#fff'}),
+        stroke:new ol.style.Stroke({color:'rgba(0,0,0,0.75)',width:3}),
+        offsetY:-20,
+        textAlign:'center'
+      })
+    }));
+    src.addFeature(ptFeat);
+  });
 }
 
 // FILTERS & SELECTION
