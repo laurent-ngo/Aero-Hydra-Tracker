@@ -130,6 +130,8 @@
     .marker-popup.type-airfield::after  { border-top: 8px solid var(--accent); }
     .marker-popup.type-waterfield { border: 1px solid #2196f3; }
     .marker-popup.type-waterfield::after { border-top: 8px solid #2196f3; }
+    .marker-popup.type-event  { border: 1px solid #ff8040; }
+    .marker-popup.type-event::after  { border-top: 8px solid #ff8040; }
     .ap-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -1015,7 +1017,7 @@ map.on('click',evt=>{
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
   const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
-  if(evF&&evF.get('eventData')){const ev=evF.get('eventData');map.getView().animate({center:ol.proj.fromLonLat([ev.lon,ev.lat]),zoom:13,duration:800});return;}
+  if(evF&&evF.get('eventData')){showActiveEventPopup(evF.get('eventData'),evt.pixel);return;}
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF&&roiF.get('roiType')==='fire'){openFireNameModal(roiF);return;}
   closeAllPopups();
@@ -1290,9 +1292,9 @@ function renderEventsList(){
   }
   el.innerHTML=activeEvents.map((ev,i)=>{
     const age=Math.round((Date.now()/1000-ev.last_pass)/60);
-    const name=ev.fire_location||`${ev.lat.toFixed(3)}, ${ev.lon.toFixed(3)}`;
+    const name=ev.fire_location||'Active Event';
     const lastPass=new Date(ev.last_pass*1000).toUTCString().slice(17,25);
-    return `<div class="aircraft-item" onclick="zoomToEvent(${i})" style="cursor:pointer;">
+    return `<div class="aircraft-item" onclick="zoomToEvent(${i})" style="cursor:pointer;" title="Click to zoom">
       <div class="aircraft-callsign" style="color:#ff8040;">${name}</div>
       <div class="aircraft-meta">${ev.pass_count} passes &nbsp;·&nbsp; ${ev.aircraft_count} aircraft</div>
       <div class="aircraft-meta">${ev.aircraft.join(', ')}</div>
@@ -1303,6 +1305,16 @@ function renderEventsList(){
 function zoomToEvent(i){
   const ev=activeEvents[i];if(!ev)return;
   map.getView().animate({center:ol.proj.fromLonLat([ev.lon,ev.lat]),zoom:13,duration:800});
+}
+function showActiveEventPopup(ev,pixel){
+  const age=Math.round((Date.now()/1000-ev.last_pass)/60);
+  const name=ev.fire_location||'Active Event';
+  const title=`${name} — ${ev.pass_count} passes (${age} min ago)`;
+  // Resolve full aircraft objects from fleet; fall back to stub if not found
+  const aircraft=ev.aircraft.map(icao=>{
+    return allAircraftFleet.find(a=>a.icao24===icao)||{icao24:icao,registration:icao,model:'Unknown'};
+  });
+  showMarkerPopup('ev_'+ev.lat.toFixed(4)+'_'+ev.lon.toFixed(4),'event',title,aircraft,pixel);
 }
 function renderActiveEvents(){
   const src=activeEventLayer.getSource();src.clear();
