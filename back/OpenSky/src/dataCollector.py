@@ -204,6 +204,8 @@ def discover_new_aircraft():
         (44.6993552, 3.8424499),  # south France
         (43.5,       12.0),       # Italy
         (40.0,       -4.0),       # Spain
+        (39.3,       22.7),       # Greece
+        (38.3,       29.8),       # Turkey
     ]
 
     blacklist = get_cached_icao_list() or []
