@@ -134,7 +134,7 @@ def backfill_agl():
     ]
     
     ELEVATION_BBOX = {
-        'lamin': 35.9,
+        'lamin': 34,
         'lamax': 60.6,
         'lomin': -9.6,
         'lomax': 36,
