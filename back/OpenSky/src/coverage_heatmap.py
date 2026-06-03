@@ -103,12 +103,63 @@ def snap_to_grid(value, origin, step):
     return round(origin + round((value - origin) / step) * step, 5)
 
 
+def fill_neighbors(values, rows, cols, max_passes=1):
+    """
+    Fill null cells by estimating from non-null 8-neighbours with distance decay.
+    Each neighbour contributes its value + distance_in_pixels (1 s per orthogonal
+    step, √2 s per diagonal step).  The filled cell takes the mean of all
+    available decayed estimates, so quality degrades the further from real data.
+    Multiple passes compound: a cell 3 hops from the nearest observation gets
+    roughly +3 s added to the source value.
+    Cells with no reachable neighbours within max_passes steps remain null.
+    """
+    SQRT2 = np.sqrt(2)
+    # (row_offset, col_offset, distance_penalty_seconds)
+    OFFSETS = [
+        (-1, -1, 3.0 * SQRT2), (-1, 0, 3.0), (-1, 1, 3.0 * SQRT2),
+        ( 0, -1, 3.0),                         ( 0, 1, 3.0),
+        ( 1, -1, 3.0 * SQRT2), ( 1, 0, 3.0), ( 1, 1, 3.0 * SQRT2),
+    ]
+
+    grid = np.array([v if v is not None else np.nan for v in values],
+                    dtype=float).reshape(rows, cols)
+
+    for _ in range(max_passes):
+        nan_mask = np.isnan(grid)
+        if not nan_mask.any():
+            break
+
+        nbr_sum   = np.zeros((rows, cols))
+        nbr_count = np.zeros((rows, cols))
+
+        for dr, dc, dist in OFFSETS:
+            shifted = np.roll(np.roll(grid, dr, axis=0), dc, axis=1)
+            # Mask wrapped edges
+            if dr == -1: shifted[-1, :] = np.nan
+            elif dr ==  1: shifted[ 0, :] = np.nan
+            if dc == -1: shifted[:, -1]  = np.nan
+            elif dc ==  1: shifted[:,  0]  = np.nan
+
+            valid = ~np.isnan(shifted)
+            nbr_sum   += np.where(valid, shifted + dist, 0.0)  # apply decay
+            nbr_count += valid.astype(float)
+
+        fill_mask = nan_mask & (nbr_count > 0)
+        grid = np.where(fill_mask, nbr_sum / np.maximum(nbr_count, 1), grid)
+
+    flat = grid.flatten().tolist()
+    return [round(v, 1) if not np.isnan(v) else None for v in flat]
+
+
 def to_compact_grid(gap_grid, lats, lons, step_lat, step_lon, band_bottom, band_top, band_label):
     values = []
     for lat in sorted(lats, reverse=True):
         for lon in sorted(lons):
             gaps = gap_grid.get((lat, lon), [])
             values.append(round(float(np.median(gaps)), 1) if gaps else None)
+
+    rows, cols = len(lats), len(lons)
+    values = fill_neighbors(values, rows, cols)
 
     covered = sum(1 for v in values if v is not None)
     return {
