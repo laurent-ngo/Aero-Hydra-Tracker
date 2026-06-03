@@ -403,12 +403,14 @@
         <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
       <div id="heatmap-legend" style="display:none;position:absolute;top:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
-        <div style="margin-bottom:6px;letter-spacing:1px;">RESPONSE TIME</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,0.7);flex-shrink:0;"></div><span>&lt; 15 min</span></div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(234,179,8,0.7);flex-shrink:0;"></div><span>15 – 30 min</span></div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.7);flex-shrink:0;"></div><span>30 – 45 min</span></div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.7);flex-shrink:0;"></div><span>&gt; 45 min</span></div>
-        <div id="hm-stats" style="color:var(--text);">--</div>
+        <div id="hm-legend-inner">
+          <div style="margin-bottom:6px;letter-spacing:1px;">RESPONSE TIME</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,0.7);flex-shrink:0;"></div><span>&lt; 15 min</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(234,179,8,0.7);flex-shrink:0;"></div><span>15 – 30 min</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.7);flex-shrink:0;"></div><span>30 – 45 min</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.7);flex-shrink:0;"></div><span>&gt; 45 min</span></div>
+        </div>
+        <div id="hm-stats" style="color:var(--text);margin-top:4px;border-top:1px solid var(--panel-border);padding-top:4px;">--</div>
       </div>
 
       <!-- SCALE BAR: nm <-- 0 --> km -->
@@ -906,23 +908,60 @@ function responseTimeColor(minutes){
   return'rgba(239,68,68,0.7)';                   // red
 }
 
+function coverageColor(seconds){
+  if(seconds===null)return null;
+  if(seconds<=15) return'rgba(34,197,94,0.75)';   // green  – excellent
+  if(seconds<=30) return'rgba(132,204,22,0.75)';  // lime   – good
+  if(seconds<=45) return'rgba(234,179,8,0.75)';   // yellow – moderate
+  if(seconds<=60) return'rgba(249,115,22,0.75)';  // orange – poor
+  return'rgba(239,68,68,0.75)';                   // red    – very poor
+}
+
+function _updateHeatmapLegend(isCoverage){
+  const legend=document.getElementById('heatmap-legend');
+  const inner=document.getElementById('hm-legend-inner');
+  if(!inner)return;
+  if(isCoverage){
+    inner.innerHTML=`
+      <div style="margin-bottom:6px;letter-spacing:1px;">RADAR COVERAGE</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,0.75);flex-shrink:0;"></div><span>&lt; 15 s — excellent</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(132,204,22,0.75);flex-shrink:0;"></div><span>15 – 30 s — good</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(234,179,8,0.75);flex-shrink:0;"></div><span>30 – 45 s — moderate</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.75);flex-shrink:0;"></div><span>45 – 60 s — poor</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.75);flex-shrink:0;"></div><span>&gt; 60 s — very poor</span></div>`;
+  } else {
+    inner.innerHTML=`
+      <div style="margin-bottom:6px;letter-spacing:1px;">RESPONSE TIME</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,0.7);flex-shrink:0;"></div><span>&lt; 15 min</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(234,179,8,0.7);flex-shrink:0;"></div><span>15 – 30 min</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.7);flex-shrink:0;"></div><span>30 – 45 min</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.7);flex-shrink:0;"></div><span>&gt; 45 min</span></div>`;
+  }
+}
+
 function renderHeatmap(data){
   if(!data)return;
   const src=heatmapLayer.getSource();src.clear();
+  const isCoverage=data.metadata.type==='radar_coverage';
+  const colorFn=isCoverage?coverageColor:responseTimeColor;
   const {lat_min,step_lat,step_lon,rows,cols}=data.metadata;
   const values=data.values;
+  const airfields =data.airfields ||[];
+  const distances =data.distances ||[];
+  const models    =data.models    ||[];
   const lat_max=lat_min+rows*step_lat;
   const half_lat=step_lat/2;
   const half_lon=step_lon/2;
+  const altBandLabel=isCoverage?`${data.metadata.alt_band_ft}–${data.metadata.alt_band_top_ft} ft`:null;
   let covered=0;
   for(let row=0;row<rows;row++){
     for(let col=0;col<cols;col++){
       const idx=row*cols+col;
-      const minutes=values[idx];
-      if(minutes===null)continue;
+      const val=values[idx];
+      if(val===null)continue;
       const lat=lat_max-row*step_lat;
       const lon=data.metadata.lon_min+col*step_lon;
-      const color=responseTimeColor(minutes);
+      const color=colorFn(val);
       if(!color)continue;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([[
@@ -932,10 +971,12 @@ function renderHeatmap(data){
           ol.proj.fromLonLat([lon-half_lon,lat+half_lat]),
           ol.proj.fromLonLat([lon-half_lon,lat-half_lat]),
         ]]),
-        responseTime: minutes,
-        airfield:     data.airfields[idx],
-        distanceKm:   data.distances[idx],
-        model:        data.models[idx]
+        hmValue:    val,
+        hmType:     isCoverage?'coverage':'response_time',
+        airfield:   airfields[idx]||null,
+        distanceKm: distances[idx]||null,
+        model:      models[idx]   ||null,
+        altBand:    altBandLabel,
       });
       feat.setStyle(new ol.style.Style({fill:new ol.style.Fill({color})}));
       src.addFeature(feat);
@@ -943,11 +984,12 @@ function renderHeatmap(data){
     }
   }
   const nonNull=values.filter(v=>v!==null);
-  const minT=nonNull.length?Math.round(Math.min(...nonNull)):'--';
-  const maxT=nonNull.length?Math.round(Math.max(...nonNull)):'--';
-  const avgT=nonNull.length?Math.round(nonNull.reduce((a,b)=>a+b,0)/nonNull.length):'--';
-  document.getElementById('hm-stats').textContent=`min ${minT}′  avg ${avgT}′  max ${maxT}′`;
-  console.log(`[Heatmap] Rendered ${covered} cells`);
+  const minV=nonNull.length?Math.round(Math.min(...nonNull)):'--';
+  const maxV=nonNull.length?Math.round(Math.max(...nonNull)):'--';
+  const avgV=nonNull.length?Math.round(nonNull.reduce((a,b)=>a+b,0)/nonNull.length):'--';
+  const unit=isCoverage?'s':'′';
+  document.getElementById('hm-stats').textContent=`min ${minV}${unit}  avg ${avgV}${unit}  max ${maxV}${unit}`;
+  _updateHeatmapLegend(isCoverage);
 }
 
 async function fetchHeatmapList(){
@@ -1013,17 +1055,27 @@ map.on('pointermove',evt=>{
   // Heatmap cell hover
   const hmF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===heatmapLayer});
   if(hmF){
-    const mins=hmF.get('responseTime');
-    const af=hmF.get('airfield');
-    const dist=hmF.get('distanceKm');
-    const model=hmF.get('model');
+    const val=hmF.get('hmValue');
+    const hmType=hmF.get('hmType');
     tooltip.style.display='block';
     tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
     tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
-    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#22c55e;">${Math.round(mins)} min</div>
-      <div class="tooltip-row"><span class="tooltip-key">Base</span><span class="tooltip-val">${af||'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Distance</span><span class="tooltip-val">${dist!=null?Math.round(dist)+' km':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${model||'--'}</span></div>`;
+    if(hmType==='coverage'){
+      const band=hmF.get('altBand');
+      let qual='excellent';
+      if(val>60)qual='very poor';else if(val>45)qual='poor';else if(val>30)qual='moderate';else if(val>15)qual='good';
+      tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#22c55e;">${Math.round(val)} s gap</div>
+        <div class="tooltip-row"><span class="tooltip-key">Coverage</span><span class="tooltip-val">${qual}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Alt band</span><span class="tooltip-val">${band||'--'}</span></div>`;
+    } else {
+      const af=hmF.get('airfield');
+      const dist=hmF.get('distanceKm');
+      const model=hmF.get('model');
+      tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#22c55e;">${Math.round(val)} min</div>
+        <div class="tooltip-row"><span class="tooltip-key">Base</span><span class="tooltip-val">${af||'--'}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Distance</span><span class="tooltip-val">${dist!=null?Math.round(dist)+' km':'--'}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${model||'--'}</span></div>`;
+    }
     map.getTargetElement().style.cursor='';return;
   }
   const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
