@@ -6,6 +6,10 @@ source "$SCRIPT_DIR/utils.sh"
 SERVICE_NAME="aero-hydra-api"
 SERVICE_FILE="$SCRIPT_DIR/aero-hydra-api.service"
 SERVICE_DEST="/etc/systemd/system/$SERVICE_NAME.service"
+
+ELEV_SERVICE_NAME="aero-hydra-elevation"
+ELEV_SERVICE_FILE="$SCRIPT_DIR/aero-hydra-elevation.service"
+ELEV_SERVICE_DEST="/etc/systemd/system/$ELEV_SERVICE_NAME.service"
 PROJECT_HOME="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 header "Aero-Hydra API — Deploy"
@@ -53,11 +57,32 @@ else
     sudo systemctl start "$SERVICE_NAME" || { error "Start failed"; exit 1; }
 fi
 
-# ── 5. Status ─────────────────────────────────────────────────
+# ── 5. Elevation service ──────────────────────────────────────
+info "Installing elevation service..."
+sed \
+    -e "s|User=.*|User=$(whoami)|" \
+    -e "s|/home/lngo/projects/aero-hydra|$PROJECT_HOME|g" \
+    "$ELEV_SERVICE_FILE" | sudo tee "$ELEV_SERVICE_DEST" > /dev/null \
+    || { error "Failed to install elevation service file"; exit 1; }
+sudo systemctl daemon-reload
+sudo systemctl enable "$ELEV_SERVICE_NAME" 2>/dev/null
+if systemctl is-active --quiet "$ELEV_SERVICE_NAME"; then
+    sudo systemctl restart "$ELEV_SERVICE_NAME"
+else
+    sudo systemctl start "$ELEV_SERVICE_NAME"
+fi
+
+# ── 6. Status ─────────────────────────────────────────────────
 sleep 2
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     info "$SERVICE_NAME is running on port 8010."
 else
     error "$SERVICE_NAME failed to start. Check: sudo journalctl -u $SERVICE_NAME -n 50"
+    exit 1
+fi
+if systemctl is-active --quiet "$ELEV_SERVICE_NAME"; then
+    info "$ELEV_SERVICE_NAME is running on port 8011."
+else
+    error "$ELEV_SERVICE_NAME failed to start. Check: sudo journalctl -u $ELEV_SERVICE_NAME -n 50"
     exit 1
 fi
