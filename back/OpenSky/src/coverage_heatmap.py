@@ -6,9 +6,9 @@ Analyses gaps between consecutive telemetry points to infer radar coverage quali
 Logic
 -----
 For each pair of consecutive *airborne* points from the same aircraft:
-  - gap_s  = p2.timestamp - p1.timestamp
+  - gap_s   = p2.timestamp - p1.timestamp
   - midpoint lat/lon is attributed that gap
-  - avg AGL altitude → altitude band (every ALT_STEP_FT feet)
+  - avg AGL altitude → one of three fixed altitude bands
 
 Metric stored per grid cell: median gap in seconds.
   Low  value → aircraft seen frequently → good coverage
@@ -17,16 +17,18 @@ Metric stored per grid cell: median gap in seconds.
 Gaps below MIN_GAP_S are excluded (normal ADS-B poll rate, not informative).
 Gaps above MAX_GAP_S are excluded (aircraft likely powered off, not a coverage gap).
 
-Output
-------
-One compact-grid JSON per altitude band, compatible with speed_heatmap.py format:
-  heatmap_coverage_0_1000ft.json
-  heatmap_coverage_1000_2000ft.json
-  ...
+If a cell has no data in a higher band it inherits from the nearest lower band
+(radar coverage changes slowly with altitude).
+
+Altitude bands
+--------------
+  coverage_1500ft.json   →  0 – 1500 ft AGL
+  coverage_4000ft.json   →  1500 – 4000 ft AGL
+  coverage_above4000ft.json →  above 4000 ft AGL
 
 Run
 ---
-  python coverage_heatmap.py --days 90 --alt-step 1000 --alt-max 10000
+  python coverage_heatmap.py --days 90
 
 All env vars (DB_USER, DB_PASSWORD, DB_HOST, DB_NAME, HEATMAP_DIR) are read from
 the environment — same as the other scripts.
@@ -61,6 +63,22 @@ db      = Session()
 
 KM_PER_DEG_LAT = 111.0
 
+# ── Altitude bands ────────────────────────────────────────────────────────────
+# (bottom_ft_inclusive, top_ft_exclusive_or_None, file_suffix, display_label)
+BANDS = [
+    (    0, 1500, "1500ft",       "0 – 1500 ft"),
+    ( 1500, 4000, "4000ft",       "1500 – 4000 ft"),
+    ( 4000, None, "above4000ft",  "above 4000 ft"),
+]
+
+def assign_band(agl_ft):
+    """Return the BANDS entry for the given AGL altitude, or None if below lowest band."""
+    for entry in BANDS:
+        bot, top, suffix, label = entry
+        if agl_ft >= bot and (top is None or agl_ft < top):
+            return entry
+    return None
+
 
 # ── Grid helpers ──────────────────────────────────────────────────────────────
 
@@ -85,7 +103,7 @@ def snap_to_grid(value, origin, step):
     return round(origin + round((value - origin) / step) * step, 5)
 
 
-def to_compact_grid(gap_grid, lats, lons, step_lat, step_lon, alt_band, alt_step):
+def to_compact_grid(gap_grid, lats, lons, step_lat, step_lon, band_bottom, band_top, band_label):
     values = []
     for lat in sorted(lats, reverse=True):
         for lon in sorted(lons):
@@ -97,8 +115,9 @@ def to_compact_grid(gap_grid, lats, lons, step_lat, step_lon, alt_band, alt_step
         "metadata": {
             "generated_at":    datetime.now().isoformat(),
             "type":            "radar_coverage",
-            "alt_band_ft":     alt_band,
-            "alt_band_top_ft": alt_band + alt_step,
+            "alt_band_ft":     band_bottom,
+            "alt_band_top_ft": band_top,          # None means unlimited
+            "alt_band_label":  band_label,
             "lat_min":         round(min(lats), 5),
             "lat_max":         round(max(lats), 5),
             "lon_min":         round(min(lons), 5),
@@ -126,13 +145,11 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser(description="Radar coverage heatmap by altitude band")
-    parser.add_argument("--days",       type=int,   default=90,    help="Days of telemetry to analyse (default: 90)")
-    parser.add_argument("--alt-step",   type=int,   default=1000,  help="Altitude band size in ft (default: 1000)")
-    parser.add_argument("--alt-max",    type=int,   default=10000, help="Maximum altitude in ft (default: 10000)")
-    parser.add_argument("--min-gap",    type=int,   default=15,    help="Minimum gap to record in seconds (default: 15)")
-    parser.add_argument("--max-gap",    type=int,   default=300,   help="Maximum gap cap in seconds (default: 300)")
-    parser.add_argument("--grid-km",    type=float, default=5.0,   help="Grid cell size in km (default: 5.0)")
-    parser.add_argument("--output-dir", default=None,              help="Output directory (default: $HEATMAP_DIR or .)")
+    parser.add_argument("--days",       type=int,   default=90,   help="Days of telemetry to analyse (default: 90)")
+    parser.add_argument("--min-gap",    type=int,   default=15,   help="Minimum gap to record in seconds (default: 15)")
+    parser.add_argument("--max-gap",    type=int,   default=300,  help="Maximum gap cap in seconds (default: 300)")
+    parser.add_argument("--grid-km",    type=float, default=5.0,  help="Grid cell size in km (default: 5.0)")
+    parser.add_argument("--output-dir", default=None,             help="Output directory (default: $HEATMAP_DIR or .)")
     args = parser.parse_args()
 
     output_dir = args.output_dir or os.getenv("HEATMAP_DIR", ".")
@@ -183,8 +200,8 @@ if __name__ == "__main__":
     logger.info(f"Grid: {len(lats)} rows × {len(lons)} cols = "
                 f"{len(lats) * len(lons):,} cells  (cell={args.grid_km} km)")
 
-    # ── 4. Accumulate gaps per (band, cell) ──────────────────────────────────
-    # gap_data[alt_band][(snap_lat, snap_lon)] = [gap_s, ...]
+    # ── 4. Accumulate gaps per (band_suffix, cell) ───────────────────────────
+    # gap_data[band_suffix][(snap_lat, snap_lon)] = [gap_s, ...]
     gap_data = defaultdict(lambda: defaultdict(list))
 
     by_aircraft = defaultdict(list)
@@ -202,57 +219,54 @@ if __name__ == "__main__":
                 skipped += 1
                 continue
 
-            avg_agl = (p1.altitude_agl_ft + p2.altitude_agl_ft) / 2.0
-            if avg_agl >= args.alt_max:
+            avg_agl  = (p1.altitude_agl_ft + p2.altitude_agl_ft) / 2.0
+            band_info = assign_band(avg_agl)
+            if band_info is None:
                 skipped += 1
                 continue
 
-            band     = int((avg_agl // args.alt_step) * args.alt_step)
-            mid_lat  = snap_to_grid((p1.lat + p2.lat) / 2.0, lat_min, step_lat)
-            mid_lon  = snap_to_grid((p1.lon + p2.lon) / 2.0, lon_min, step_lon)
+            _, _, suffix, _ = band_info
+            mid_lat = snap_to_grid((p1.lat + p2.lat) / 2.0, lat_min, step_lat)
+            mid_lon = snap_to_grid((p1.lon + p2.lon) / 2.0, lon_min, step_lon)
 
-            gap_data[band][(mid_lat, mid_lon)].append(dt)
+            gap_data[suffix][(mid_lat, mid_lon)].append(dt)
             recorded += 1
 
     logger.info(f"Gaps: {total_gaps:,} total / {recorded:,} recorded / {skipped:,} skipped")
-    logger.info(f"Altitude bands with data: {sorted(gap_data.keys())}")
+    logger.info(f"Altitude bands with data: {[s for _,_,s,_ in BANDS if s in gap_data]}")
 
     # ── 4b. Propagate coverage upward ────────────────────────────────────────
-    # If a cell has no data in band N but has data in a lower band, the lower
-    # band's coverage is a valid proxy for band N (radar coverage changes slowly
-    # with altitude — a gap on the ground stays a gap higher up).
+    # If a cell has no data in a higher band, inherit from the nearest lower band.
     all_cells = set()
     for band_cells in gap_data.values():
         all_cells.update(band_cells.keys())
 
-    all_bands_sorted = sorted(gap_data.keys())   # includes any negative bands
     propagated = 0
     for cell in all_cells:
         last_data = None
-        for band in all_bands_sorted:
-            cell_data = gap_data[band].get(cell)
+        for _, _, suffix, _ in BANDS:   # iterate low → high
+            cell_data = gap_data[suffix].get(cell)
             if cell_data:
                 last_data = cell_data
             elif last_data is not None:
-                gap_data[band][cell] = last_data
+                gap_data[suffix][cell] = last_data
                 propagated += 1
 
     logger.info(f"Propagated {propagated:,} cells upward from lower altitude bands")
 
     # ── 5. Write one JSON per altitude band ──────────────────────────────────
     written = 0
-    for band in range(0, args.alt_max, args.alt_step):
-        grid    = to_compact_grid(gap_data[band], lats, lons, step_lat, step_lon, band, args.alt_step)
+    for bot, top, suffix, label in BANDS:
+        grid    = to_compact_grid(gap_data[suffix], lats, lons, step_lat, step_lon, bot, top, label)
         covered = grid["metadata"]["covered_cells"]
         if covered == 0:
-            logger.info(f"  {band:>5}–{band+args.alt_step} ft  →  no data, skipped")
+            logger.info(f"  {label:<20}  →  no data, skipped")
             continue
 
-        name = f"coverage_{band}_{band + args.alt_step}ft"
-        path = os.path.join(output_dir, f"heatmap_{name}.json")
+        path = os.path.join(output_dir, f"heatmap_coverage_{suffix}.json")
         with open(path, "w") as fh:
             json.dump(grid, fh, separators=(",", ":"))
-        logger.info(f"  {band:>5}–{band+args.alt_step} ft  →  {covered:>4} cells  →  {path}")
+        logger.info(f"  {label:<20}  →  {covered:>5} cells  →  {path}")
         written += 1
 
     logger.info(f"Done — {written} file(s) written to {output_dir}")
