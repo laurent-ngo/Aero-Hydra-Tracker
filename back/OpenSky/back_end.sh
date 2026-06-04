@@ -81,7 +81,7 @@ case "$1" in
             ;;
     coverage)
             info "Generating radar coverage heatmap..."
-            python3 "$SCRIPT_DIR/src/coverage_heatmap.py" --days 180 --output-dir "$HEATMAP_DIR"
+            python3 "$SCRIPT_DIR/src/coverage_heatmap.py" --days 180 --grid-km 1.0 --output-dir "$HEATMAP_DIR"
             ;;
     token)
         info "Generating OpenSky Token..."

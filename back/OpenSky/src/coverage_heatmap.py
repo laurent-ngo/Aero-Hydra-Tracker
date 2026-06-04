@@ -209,7 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--days",       type=int,   default=90,   help="Days of telemetry to analyse (default: 90)")
     parser.add_argument("--min-gap",    type=int,   default=15,   help="Minimum gap to record in seconds (default: 15)")
     parser.add_argument("--max-gap",    type=int,   default=300,  help="Maximum gap cap in seconds (default: 300)")
-    parser.add_argument("--grid-km",    type=float, default=2.0,  help="Grid cell size in km (default: 2.0)")
+    parser.add_argument("--grid-km",    type=float, default=1.0,  help="Grid cell size in km (default: 1.0)")
     parser.add_argument("--output-dir", default=None,             help="Output directory (default: $HEATMAP_DIR or .)")
     args = parser.parse_args()
 
