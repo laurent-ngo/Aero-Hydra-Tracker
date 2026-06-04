@@ -22,9 +22,14 @@ If a cell has no data in a higher band it inherits from the nearest lower band
 
 Altitude bands
 --------------
-  coverage_1500ft.json   →  0 – 1500 ft AGL
-  coverage_4000ft.json   →  1500 – 4000 ft AGL
-  coverage_above4000ft.json →  above 4000 ft AGL
+  coverage_1000ft.json       →  0 – 1000 ft AGL
+  coverage_2000ft.json       →  1000 – 2000 ft AGL
+  coverage_3000ft.json       →  2000 – 3000 ft AGL
+  coverage_4000ft.json       →  3000 – 4000 ft AGL
+  coverage_5000ft.json       →  4000 – 5000 ft AGL
+  coverage_6000ft.json       →  5000 – 6000 ft AGL
+  coverage_7000ft.json       →  6000 – 7000 ft AGL
+  coverage_above7000ft.json  →  above 7000 ft AGL
 
 Run
 ---
@@ -66,9 +71,14 @@ KM_PER_DEG_LAT = 111.0
 # ── Altitude bands ────────────────────────────────────────────────────────────
 # (bottom_ft_inclusive, top_ft_exclusive_or_None, file_suffix, display_label)
 BANDS = [
-    (    0, 1500, "1500ft",       "0 – 1500 ft"),
-    ( 1500, 4000, "4000ft",       "1500 – 4000 ft"),
-    ( 4000, None, "above4000ft",  "above 4000 ft"),
+    (    0, 1000, "1000ft",       "0 – 1000 ft"),
+    ( 1000, 2000, "2000ft",       "1000 – 2000 ft"),
+    ( 2000, 3000, "3000ft",       "2000 – 3000 ft"),
+    ( 3000, 4000, "4000ft",       "3000 – 4000 ft"),
+    ( 4000, 5000, "5000ft",       "4000 – 5000 ft"),
+    ( 5000, 6000, "6000ft",       "5000 – 6000 ft"),
+    ( 6000, 7000, "7000ft",       "6000 – 7000 ft"),
+    ( 7000, None, "above7000ft",  "above 7000 ft"),
 ]
 
 def assign_band(agl_ft):
