@@ -267,6 +267,10 @@ def get_active_events(
     ).fit(np.radians(coords)).labels_
 
     fire_locations = db.query(migrate.FireLocation).all()
+    airfields      = db.query(migrate.Airfield).filter(
+        migrate.Airfield.lat.isnot(None),
+        migrate.Airfield.lon.isnot(None),
+    ).all()
     events = []
 
     for label in set(labels) - {-1}:
@@ -278,14 +282,23 @@ def get_active_events(
         centroid_lon = float(np.mean(cluster_c[:, 1]))
         aircraft     = list({p.icao24 for p in cluster_pts})
 
-        # Nearest named fire location within 10 km
-        fire_name = None
+        # 1. Nearest named fire/ROI location within 10 km
+        event_name = None
         for fl in fire_locations:
             if fl.lat and fl.lon:
                 dist_km = ((fl.lat - centroid_lat)**2 + (fl.lon - centroid_lon)**2) ** 0.5 * 111
                 if dist_km < 10:
-                    fire_name = fl.name
+                    event_name = fl.name
                     break
+
+        # 2. Nearest airfield within 10 km (if no ROI matched)
+        if event_name is None:
+            best_dist = float("inf")
+            for af in airfields:
+                dist_km = ((af.lat - centroid_lat)**2 + (af.lon - centroid_lon)**2) ** 0.5 * 111
+                if dist_km < 10 and dist_km < best_dist:
+                    best_dist  = dist_km
+                    event_name = af.name
 
         events.append({
             "lat":            round(centroid_lat, 5),
@@ -293,7 +306,7 @@ def get_active_events(
             "pass_count":     len(cluster_pts),
             "aircraft_count": len(aircraft),
             "aircraft":       aircraft,
-            "fire_location":  fire_name,
+            "fire_location":  event_name,
             "first_pass":     min(p.timestamp for p in cluster_pts),
             "last_pass":      max(p.timestamp for p in cluster_pts),
         })
