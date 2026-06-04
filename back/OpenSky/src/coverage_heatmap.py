@@ -71,14 +71,14 @@ KM_PER_DEG_LAT = 111.0
 # ── Altitude bands ────────────────────────────────────────────────────────────
 # (bottom_ft_inclusive, top_ft_exclusive_or_None, file_suffix, display_label)
 BANDS = [
-    (    0, 1000, "1000ft",       "0 – 1000 ft"),
-    ( 1000, 2000, "2000ft",       "1000 – 2000 ft"),
-    ( 2000, 3000, "3000ft",       "2000 – 3000 ft"),
-    ( 3000, 4000, "4000ft",       "3000 – 4000 ft"),
-    ( 4000, 5000, "5000ft",       "4000 – 5000 ft"),
-    ( 5000, 6000, "6000ft",       "5000 – 6000 ft"),
-    ( 6000, 7000, "7000ft",       "6000 – 7000 ft"),
-    ( 7000, None, "above7000ft",  "above 7000 ft"),
+    (    0, 750, "0750ft",       "0 – 750 ft"),
+    ( 750, 1500, "1500ft",       "750 – 1500 ft"),
+    ( 1500, 2500, "2500ft",       "1500 – 2500 ft"),
+    ( 2500, 3500, "3500ft",       "2500 – 3500 ft"),
+    ( 3500, 4500, "4500ft",       "3500 – 4500 ft"),
+    ( 4500, 5500, "5500ft",       "4500 – 5500 ft"),
+    ( 6600, 6500, "6500ft",       "5500 – 5600 ft"),
+    ( 6500, None, "above6500ft",  "above 5600 ft"),
 ]
 
 def assign_band(agl_ft):
@@ -113,22 +113,24 @@ def snap_to_grid(value, origin, step):
     return round(origin + round((value - origin) / step) * step, 5)
 
 
-def fill_neighbors(values, rows, cols, max_passes=1):
+
+def fill_neighbors(values, rows, cols, max_passes=4):
     """
     Fill null cells by estimating from non-null 8-neighbours with distance decay.
     Each neighbour contributes its value + distance_in_pixels (1 s per orthogonal
     step, √2 s per diagonal step).  The filled cell takes the mean of all
     available decayed estimates, so quality degrades the further from real data.
     Multiple passes compound: a cell 3 hops from the nearest observation gets
-    roughly +3 s added to the source value.
+    roughly +10 s added to the source value.
     Cells with no reachable neighbours within max_passes steps remain null.
     """
     SQRT2 = np.sqrt(2)
     # (row_offset, col_offset, distance_penalty_seconds)
+    penalty_offset = 10.0
     OFFSETS = [
-        (-1, -1, 3.0 * SQRT2), (-1, 0, 3.0), (-1, 1, 3.0 * SQRT2),
-        ( 0, -1, 3.0),                         ( 0, 1, 3.0),
-        ( 1, -1, 3.0 * SQRT2), ( 1, 0, 3.0), ( 1, 1, 3.0 * SQRT2),
+        (-1, -1, penalty_offset * SQRT2), (-1, 0, penalty_offset), (-1, 1, penalty_offset * SQRT2),
+        ( 0, -1, penalty_offset),                         ( 0, 1, penalty_offset),
+        ( 1, -1, penalty_offset * SQRT2), ( 1, 0, penalty_offset), ( 1, 1, penalty_offset * SQRT2),
     ]
 
     grid = np.array([v if v is not None else np.nan for v in values],
@@ -207,7 +209,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Radar coverage heatmap by altitude band")
     parser.add_argument("--days",       type=int,   default=90,   help="Days of telemetry to analyse (default: 90)")
-    parser.add_argument("--min-gap",    type=int,   default=15,   help="Minimum gap to record in seconds (default: 15)")
+    parser.add_argument("--min-gap",    type=int,   default=1,   help="Minimum gap to record in seconds (default: 15)")
     parser.add_argument("--max-gap",    type=int,   default=300,  help="Maximum gap cap in seconds (default: 300)")
     parser.add_argument("--grid-km",    type=float, default=1.0,  help="Grid cell size in km (default: 1.0)")
     parser.add_argument("--output-dir", default=None,             help="Output directory (default: $HEATMAP_DIR or .)")
