@@ -19,7 +19,7 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
 from shapely.ops import unary_union
-from elevation import ElevationProvider
+ELEVATION_API_URL = os.getenv("ELEVATION_API_URL", "http://localhost:8011")
 
 import migrate
 from dataCollector import orchestrate_sync, update_adsb_cache, discover_new_aircraft
@@ -102,61 +102,44 @@ def backfill_agl():
         migrate.FlightTelemetry.altitude_agl_ft == None
     ).order_by(
         desc(migrate.FlightTelemetry.timestamp)
-    ).all() # Processing 200 at a time is safer
+    ).all()
 
     if not points_to_fix:
         logger.debug("No pending AGL calculations found.")
         return
 
-    logger.info(f"Calculating AGL for {len(points_to_fix)} points...")
-   
-    elevation_providers = [
-        ElevationProvider("../data/azur.tif"),
-        ElevationProvider("../data/france.tif"),
-        ElevationProvider("../data/italy.tif"),
-        ElevationProvider("../data/sicilia.tif"),
-        ElevationProvider("../data/catalogna.tif"),
-        ElevationProvider("../data/spain.tif"),
-        ElevationProvider("../data/corsica.tif"),
-        ElevationProvider("../data/switzerland.tif"),
-        ElevationProvider("../data/portugal.tif"),
-        ElevationProvider("../data/brittany.tif"),
-        ElevationProvider("../data/belgium.tif"),
-        ElevationProvider("../data/germany.tif"),
-        ElevationProvider("../data/sweden.tif"),
-        ElevationProvider("../data/albania.tif"),
-        ElevationProvider("../data/cyprus.tif"),
-        ElevationProvider("../data/crete.tif"),
-        ElevationProvider("../data/greece.tif"),
-        ElevationProvider("../data/turkey.tif"),
-        ElevationProvider("../data/romania.tif"),
-        ElevationProvider("../data/lithuania.tif"),
-    ]
-    
-    ELEVATION_BBOX = {
-        'lamin': 34,
-        'lamax': 60.6,
-        'lomin': -9.6,
-        'lomax': 36,
-    }
+    logger.info(f"Calculating AGL for {len(points_to_fix)} points via elevation API...")
 
-    for p in points_to_fix:
-        if not (ELEVATION_BBOX['lamin'] <= p.lat <= ELEVATION_BBOX['lamax'] and
-            ELEVATION_BBOX['lomin'] <= p.lon <= ELEVATION_BBOX['lomax']):
-            p.altitude_agl_ft = 60000
-        else:
-            ground_m = 0
-            for provider in elevation_providers:
-                ground_m = provider.get_elevation(p.lat, p.lon)
-                if ground_m is not None:
-                    break
-            
+    BATCH_SIZE = 500
+    for batch_start in range(0, len(points_to_fix), BATCH_SIZE):
+        batch = points_to_fix[batch_start:batch_start + BATCH_SIZE]
+
+        try:
+            payload = [{"lat": p.lat, "lon": p.lon} for p in batch]
+            resp = requests.post(
+                f"{ELEVATION_API_URL}/elevation/batch",
+                json=payload,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            elevations = resp.json()   # list of {lat, lon, elevation_m, elevation_ft}
+        except Exception as e:
+            logger.error(f"Elevation API batch failed: {e} — marking batch as sentinel")
+            for p in batch:
+                p.altitude_agl_ft = 60000
+            continue
+
+        for p, elev in zip(batch, elevations):
+            ground_m = elev.get("elevation_m")
             if ground_m is not None:
-                # 3. Calculation: MSL - Ground = AGL
                 agl_m = max(0, p.baro_altitude - ground_m)
                 p.altitude_agl_ft = round(agl_m * 3.28084, 0)
             else:
-                p.altitude_agl_ft = round(p.baro_altitude * 3.28084, 0)
+                # Outside tile coverage — use sentinel so it can be reprocessed
+                # if tiles are added later
+                p.altitude_agl_ft = 60000
+
+        logger.debug(f"AGL batch {batch_start}–{batch_start + len(batch)} done")
 
     db.commit()
     logger.info("Batch AGL backfill complete.")
