@@ -1003,13 +1003,23 @@ async function fetchHeatmapList(){
   }catch(e){console.warn('Heatmap list fetch failed:',e.message);}
 }
 
+let currentHeatmapName=null;
+let _heatmapMoveTimer=null;
+
+function _mapBboxParams(){
+  const extent=map.getView().calculateExtent(map.getSize()||[800,600]);
+  const [lonMin,latMin,lonMax,latMax]=ol.proj.transformExtent(extent,'EPSG:3857','EPSG:4326');
+  return `lat_min=${latMin.toFixed(4)}&lat_max=${latMax.toFixed(4)}&lon_min=${lonMin.toFixed(4)}&lon_max=${lonMax.toFixed(4)}`;
+}
+
 async function fetchHeatmap(name){
   if(!name)return;
+  currentHeatmapName=name;
   try{
-    const res=await fetch(`${config.baseUrl}/heatmap/${name}?_=${Date.now()}`,{headers:apiHeaders()});
+    const bbox=_mapBboxParams();
+    const res=await fetch(`${config.baseUrl}/heatmap/${name}?${bbox}&_=${Date.now()}`,{headers:apiHeaders()});
     if(!res.ok){console.warn('Heatmap HTTP error:',res.status);return;}
     heatmapData=await res.json();
-    console.log('[Heatmap] Loaded:',heatmapData?.metadata);
     renderHeatmap(heatmapData);
   }catch(e){console.warn('Heatmap fetch failed:',e.message);}
 }
@@ -1023,11 +1033,17 @@ function toggleHeatmap(){
   legend.style.display=active?'block':'none';
   if(active){
     fetchHeatmapList();
-    if(heatmapData)renderHeatmap(heatmapData);
+    if(currentHeatmapName)fetchHeatmap(currentHeatmapName);
   } else {
     heatmapLayer.getSource().clear();
   }
 }
+
+map.on('moveend',()=>{
+  if(!document.getElementById('btn-heatmap')?.classList.contains('active')||!currentHeatmapName)return;
+  clearTimeout(_heatmapMoveTimer);
+  _heatmapMoveTimer=setTimeout(()=>fetchHeatmap(currentHeatmapName),400);
+});
 
 
 const tooltip=document.getElementById('tooltip');

@@ -13,7 +13,7 @@ from typing_extensions import Annotated
 
 import migrate # Importing your existing models and SessionLocal
 
-import time, os
+import time, os, json
 import glob
 import re
 import logging
@@ -364,14 +364,98 @@ def list_heatmaps():
     return {"heatmaps": names}
 
 
+# In-memory cache: path → (mtime, parsed_data)
+_heatmap_cache: dict = {}
+
+def _load_heatmap(path: str) -> dict:
+    """Load heatmap JSON from disk, using an mtime-keyed in-memory cache."""
+    mtime = os.path.getmtime(path)
+    if path in _heatmap_cache and _heatmap_cache[path][0] == mtime:
+        return _heatmap_cache[path][1]
+    with open(path) as fh:
+        data = json.load(fh)
+    _heatmap_cache[path] = (mtime, data)
+    return data
+
+def _slice_heatmap(data: dict, lat_min: float, lat_max: float,
+                   lon_min: float, lon_max: float) -> dict:
+    """Return a sub-grid clipped to the requested bbox."""
+    m          = data["metadata"]
+    step_lat   = m["step_lat"]
+    step_lon   = m["step_lon"]
+    full_rows  = m["rows"]
+    full_cols  = m["cols"]
+    full_lat_min = m["lat_min"]
+    full_lon_min = m["lon_min"]
+    # JS convention: lat_max = lat_min + rows * step_lat (one step above actual top row)
+    full_lat_max = full_lat_min + full_rows * step_lat
+
+    # Add 2-cell padding so edge features render fully
+    PAD = 2
+    r0 = max(0,          int((full_lat_max - lat_max) / step_lat) - PAD)
+    r1 = min(full_rows,  int((full_lat_max - lat_min) / step_lat) + PAD + 1)
+    c0 = max(0,          int((lon_min - full_lon_min) / step_lon) - PAD)
+    c1 = min(full_cols,  int((lon_max - full_lon_min) / step_lon) + PAD + 1)
+
+    sub_rows = r1 - r0
+    sub_cols = c1 - c0
+
+    if sub_rows <= 0 or sub_cols <= 0:
+        # bbox outside grid — return empty
+        sub_rows = sub_cols = 0
+        values = []
+    else:
+        full_values = data["values"]
+        values = [
+            full_values[r * full_cols + c]
+            for r in range(r0, r1)
+            for c in range(c0, c1)
+        ]
+
+    sub_lat_min = round(full_lat_min + (full_rows - r1) * step_lat, 6)
+    sub_lon_min = round(full_lon_min + c0 * step_lon, 6)
+    covered     = sum(1 for v in values if v is not None)
+
+    sub_meta = dict(m)
+    sub_meta.update({
+        "lat_min":       sub_lat_min,
+        "lat_max":       round(sub_lat_min + sub_rows * step_lat, 6),
+        "lon_min":       sub_lon_min,
+        "lon_max":       round(sub_lon_min + sub_cols * step_lon, 6),
+        "rows":          sub_rows,
+        "cols":          sub_cols,
+        "total_cells":   sub_rows * sub_cols,
+        "covered_cells": covered,
+    })
+    return {"metadata": sub_meta, "values": values}
+
+
 @app.get("/heatmap/{name}", dependencies=[Security(get_api_key)])
-def get_heatmap(name: str):
+def get_heatmap(
+    name:    str,
+    lat_min: Optional[float] = Query(None),
+    lat_max: Optional[float] = Query(None),
+    lon_min: Optional[float] = Query(None),
+    lon_max: Optional[float] = Query(None),
+):
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '', name)
     path = os.path.join(HEATMAP_DIR, f"heatmap_{safe_name}.json")
-    logger.info(f"Heatmap request: name={safe_name}, path={path}, exists={os.path.exists(path)}")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Heatmap '{safe_name}' not found")
-    return FileResponse(path, media_type="application/json")
+
+    data = _load_heatmap(path)
+
+    bbox_provided = all(v is not None for v in (lat_min, lat_max, lon_min, lon_max))
+    if bbox_provided:
+        data = _slice_heatmap(data, lat_min, lat_max, lon_min, lon_max)
+        logger.info(f"Heatmap {safe_name}: bbox slice "
+                    f"lat[{lat_min:.2f},{lat_max:.2f}] lon[{lon_min:.2f},{lon_max:.2f}] "
+                    f"→ {data['metadata']['rows']}×{data['metadata']['cols']} cells")
+    else:
+        logger.info(f"Heatmap {safe_name}: full grid "
+                    f"{data['metadata']['rows']}×{data['metadata']['cols']} cells")
+
+    return data
 
 # ── Frontend static files (mount last so API routes take priority) ──
 if FRONT_DIR.exists():
