@@ -407,18 +407,18 @@ def _slice_heatmap(data: dict, lat_min: float, lat_max: float,
     if sub_rows <= 0 or sub_cols <= 0:
         # bbox outside grid — return empty
         sub_rows = sub_cols = 0
-        values = []
+        indices = []
     else:
-        full_values = data["values"]
-        values = [
-            full_values[r * full_cols + c]
-            for r in range(r0, r1)
-            for c in range(c0, c1)
-        ]
+        indices = [r * full_cols + c for r in range(r0, r1) for c in range(c0, c1)]
+
+    def _slice_array(arr):
+        return [arr[i] for i in indices] if arr else []
+
+    values = _slice_array(data.get("values", []))
+    covered = sum(1 for v in values if v is not None)
 
     sub_lat_min = round(full_lat_min + (full_rows - r1) * step_lat, 6)
     sub_lon_min = round(full_lon_min + c0 * step_lon, 6)
-    covered     = sum(1 for v in values if v is not None)
 
     sub_meta = dict(m)
     sub_meta.update({
@@ -431,7 +431,13 @@ def _slice_heatmap(data: dict, lat_min: float, lat_max: float,
         "total_cells":   sub_rows * sub_cols,
         "covered_cells": covered,
     })
-    return {"metadata": sub_meta, "values": values}
+
+    result = {"metadata": sub_meta, "values": values}
+    # Preserve optional per-cell arrays (speed heatmap: airfields, distances, models)
+    for key in ("airfields", "distances", "models"):
+        if key in data:
+            result[key] = _slice_array(data[key])
+    return result
 
 
 @app.get("/heatmap/{name}", dependencies=[Security(get_api_key)])
