@@ -193,10 +193,10 @@ def discover_new_aircraft():
     Scan for firefighting aircraft not yet in the DB using free ADSB sources.
     Returns list of newly discovered aircraft dicts.
     """
-    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'A139' ]
+    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'A139', 'EC45' ]
     SCAN_KEYWORDS = [
         'canadair', 'bombardier 415', 'superscooper', 'air tractor',
-        'dhc-515', 'cl-215', 'cl-415', 'Leonardo AW139'
+        'dhc-515', 'cl-215', 'cl-415', 'Leonardo AW139', 'Airbus Helicopters H145'
     ]
     SCAN_RADIUS_NM  = 250
 
