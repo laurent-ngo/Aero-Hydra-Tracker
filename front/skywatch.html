@@ -311,8 +311,8 @@
   <button class="header-btn" id="btn-events" onclick="toggleEventsPanel()">&#x26A1; EVENTS</button>
   <div class="header-stats">
     <div class="stat"><span class="stat-val" id="stat-aircraft">0</span><span class="stat-lbl">AIRCRAFT</span></div>
-    <div class="stat"><span class="stat-val" id="stat-rois">0</span><span class="stat-lbl">ROI ZONES</span></div>
     <div class="stat"><span class="stat-val" id="stat-time">--:--:--</span><span class="stat-lbl">UTC</span></div>
+    <div class="stat"><span class="stat-val" id="stat-local-time">--:--:--</span><span class="stat-lbl">LOCAL</span></div>
   </div>
 </header>
 
@@ -1379,7 +1379,7 @@ async function fetchROIs(){
   try{
     const res=await fetch(`${config.baseUrl}/regions-of-interest?level=2`,{headers:apiHeaders()});
     roiData=res.ok?await res.json():[];
-    document.getElementById('stat-rois').textContent=roiData.length;renderROIs();
+    renderROIs();
   }catch(e){}
 }
 async function fetchFireLocations(){
@@ -1563,7 +1563,11 @@ function setMode(m){
   else startReplay();
 }
 function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
-setInterval(()=>{document.getElementById('stat-time').textContent=new Date().toUTCString().slice(17,25);},1000);
+setInterval(()=>{
+  const now=new Date();
+  document.getElementById('stat-time').textContent=now.toUTCString().slice(17,25);
+  document.getElementById('stat-local-time').textContent=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+},1000);
 
 // REPLAY
 let replayTimer=null,replayCursor=0,replayPlaying=false;
