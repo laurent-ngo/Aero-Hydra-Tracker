@@ -347,11 +347,9 @@
       <div class="filter-row"><label>Reg / Owner</label><input type="text" id="filter-callsign" placeholder="e.g. HB-ZKF" oninput="applyFilters()"/></div>
       <div class="filter-row"><label>Type</label>
         <select id="filter-type" onchange="applyFilters()">
-          <option value="">All</option><option value="fire">Fire</option><option value="water">Water</option><option value="training">Training</option>
+          <option value="">All</option><option value="airplane">Airplane</option><option value="helicopter">Helicopter</option>
         </select>
       </div>
-      <div class="filter-row"><label>Min Alt ft</label><input type="number" id="filter-alt-min" placeholder="0" oninput="applyFilters()"/></div>
-      <div class="filter-row"><label>Max Alt ft</label><input type="number" id="filter-alt-max" placeholder="50000" oninput="applyFilters()"/></div>
 
       <div class="section-label">Display</div>
       <div class="filter-row"><label>Tracks</label>
@@ -1484,14 +1482,10 @@ function renderActiveEvents(){
 function applyFilters(){
   const reg=document.getElementById('filter-callsign').value.toLowerCase();
   const type=document.getElementById('filter-type').value;
-  const altMin=parseFloat(document.getElementById('filter-alt-min').value)||0;
-  const altMax=parseFloat(document.getElementById('filter-alt-max').value)||Infinity;
   const selectedOwners=getSelectedOwners();
   filteredAircraft=allAircraft.filter(ac=>{
     if(reg&&!(ac.registration||'').toLowerCase().includes(reg)&&!(ac.icao24||'').toLowerCase().includes(reg)&&!(ac.owner||'').toLowerCase().includes(reg))return false;
     if(type&&ac.type!==type)return false;
-    if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft<altMin)return false;
-    if(ac.last_baro_alt_ft!=null&&ac.last_baro_alt_ft>altMax)return false;
     if(selectedOwners&&!selectedOwners.has(ac.owner))return false;
     const af=document.getElementById('filter-at-airfield').value;
     if(af==='yes'&&!ac.at_airfield)return false;if(af==='no'&&ac.at_airfield)return false;
@@ -1658,7 +1652,7 @@ window.addEventListener('hashchange',navigateToHash);
 // ── UI STATE PERSISTENCE ──────────────────────────────────────
 const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
-  'filter-callsign','filter-type','filter-alt-min','filter-alt-max',
+  'filter-callsign','filter-type',
   'toggle-tracks','toggle-rois','toggle-active-events',
   'filter-at-airfield','filter-is-full',
   'ev-window','ev-passes','ev-radius',
