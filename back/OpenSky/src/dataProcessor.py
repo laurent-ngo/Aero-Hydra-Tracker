@@ -74,9 +74,14 @@ def backfill_telemetry( icao_list = None):
 
             time_diff = curr.timestamp - prev.timestamp
 
-            # 3. Logic: 
-            if  curr.speed_kph is None:
-                
+            # 3. Logic:
+            if curr.speed_kph is None:
+
+                # Skip duplicate timestamps — cannot compute speed over zero time
+                if time_diff == 0:
+                    logger.debug(f"[{icao}] Duplicate timestamp {curr.timestamp} — skipping speed calc")
+                    continue
+
                 hours = time_diff / 3600
                 minutes = time_diff / 60
 
