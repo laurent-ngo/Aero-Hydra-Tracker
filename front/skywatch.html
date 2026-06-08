@@ -361,6 +361,9 @@
       <div class="filter-row"><label>Events</label>
         <select id="toggle-active-events" onchange="renderActiveEvents()"><option value="show">Visible</option><option value="none">Hidden</option></select>
       </div>
+      <div class="filter-row"><label>Airfields</label>
+        <select id="toggle-airfields" onchange="airfieldLayer.setVisible(this.value==='show');waterfieldLayer.setVisible(this.value==='show');"><option value="show">Visible</option><option value="none">Hidden</option></select>
+      </div>
 
       <div class="section-label">Owner</div>
       <div id="filter-owner-container"></div>
@@ -692,10 +695,15 @@ function renderAirfields(){
   if(!allAircraftFleet.length)return;  // wait until fleet data is loaded
   const fleetSource=allAircraftFleet;
 
-  // Group ALL fleet aircraft by last_airfield — no time filter
+  // Group fleet aircraft by last_airfield.
+  // Exclude aircraft that are not currently at the airfield and haven't been seen in 30 days.
+  const STALE_THRESHOLD_S = 14 * 24 * 3600;
+  const nowS = Math.floor(Date.now() / 1000);
   const groups={};
   fleetSource.forEach(ac=>{
     if(!ac.last_airfield)return;
+    // If not physically at the airfield and last seen >30 days ago, skip
+    if(!ac.at_airfield && ac.last_timestamp && (nowS - ac.last_timestamp) > STALE_THRESHOLD_S)return;
     const key=ac.last_airfield;
     if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.airfield_name||key};
     groups[key].aircraft.push(ac);
@@ -1653,7 +1661,7 @@ window.addEventListener('hashchange',navigateToHash);
 const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
   'filter-callsign','filter-type',
-  'toggle-tracks','toggle-rois','toggle-active-events',
+  'toggle-tracks','toggle-rois','toggle-active-events','toggle-airfields',
   'filter-at-airfield','filter-is-full',
   'ev-window','ev-passes','ev-radius',
   'heatmap-select'
@@ -1673,6 +1681,9 @@ function restoreUIState(){
       if(s[id]==null)return;
       const el=document.getElementById(id);if(el)el.value=s[id];
     });
+    // Apply airfields visibility (setting .value doesn't fire onchange)
+    const afVis=document.getElementById('toggle-airfields')?.value;
+    if(afVis){airfieldLayer.setVisible(afVis==='show');waterfieldLayer.setVisible(afVis==='show');}
     // Update slider value labels
     ['ev-window','ev-passes','ev-radius'].forEach(id=>{
       if(s[id]!=null){const lbl=document.getElementById(id+'-val');if(lbl)lbl.textContent=s[id];}
