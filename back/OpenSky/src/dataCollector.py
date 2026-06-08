@@ -20,6 +20,20 @@ CACHE_FILE = "tracked_icao_cache.json"
 ADSB_CACHE_FILE = "adsb_supplement_cache.json"
 
 
+def _info_score(point):
+    """
+    Count how many meaningful fields are populated in a data point.
+    Used to prefer richer points when two sources report the same (icao24, timestamp).
+    Fields checked: lat, lon, baro_alt, on_ground, true_track.
+    """
+    return sum(1 for f in ('lat', 'lon', 'baro_alt', 'true_track')
+               if point.get(f) is not None)
+
+def _cache_point_score(cp):
+    """Same score for a point already stored in the cache dict format."""
+    return sum(1 for f in ('lat', 'lon', 'baro_alt', 'true_track')
+               if cp.get(f) is not None)
+
 def update_adsb_cache():
     """Fetch from all supplementary sources and store new points in cache."""
     supplementary = [
@@ -31,14 +45,19 @@ def update_adsb_cache():
 
     full_db_icao_list = get_cached_icao_list()
 
-    # Fetch all sources in parallel, merge keeping freshest per icao24
+    # Fetch all sources in parallel, merge keeping freshest per icao24.
+    # On equal timestamps, keep the point with more populated fields.
     with ThreadPoolExecutor() as ex:
         all_results = list(ex.map(lambda s: s.get_by_icao24(full_db_icao_list), supplementary))
 
     merged = {}
     for source_results in all_results:
         for icao24, data in source_results.items():
-            if icao24 not in merged or data['timestamp'] > merged[icao24]['timestamp']:
+            if icao24 not in merged:
+                merged[icao24] = data
+            elif data['timestamp'] > merged[icao24]['timestamp']:
+                merged[icao24] = data
+            elif data['timestamp'] == merged[icao24]['timestamp'] and _info_score(data) > _info_score(merged[icao24]):
                 merged[icao24] = data
 
     if not merged:
@@ -54,28 +73,35 @@ def update_adsb_cache():
         except Exception as e:
             logger.warning(f"Could not read ADSB cache: {e}")
 
-    # Add new points — one entry per timestamp per icao24
-    new_count = 0
+    # Add new points — one entry per timestamp per icao24.
+    # On collision, keep whichever point has more populated fields.
+    new_count = updated_count = 0
     for icao24, data in merged.items():
         ts = str(data['timestamp'])
         if icao24 not in cache:
             cache[icao24] = {}
+
+        incoming = {
+            'lat':        data['lat'],
+            'lon':        data['lon'],
+            'baro_alt':   data['baro_alt'],
+            'on_ground':  data['on_ground'],
+            'true_track': data['true_track'],
+            'source':     data['source'],
+        }
+
         if ts not in cache[icao24]:
-            cache[icao24][ts] = {
-                'lat':       data['lat'],
-                'lon':       data['lon'],
-                'baro_alt':  data['baro_alt'],
-                'on_ground': data['on_ground'],
-                'true_track':data['true_track'],
-                'source':    data['source'],
-            }
+            cache[icao24][ts] = incoming
             new_count += 1
+        elif _info_score(incoming) > _cache_point_score(cache[icao24][ts]):
+            cache[icao24][ts] = incoming
+            updated_count += 1
 
     # Write back
     with open(ADSB_CACHE_FILE, 'w') as f:
         json.dump(cache, f)
 
-    logger.info(f"ADSB cache updated: {new_count} new points cached.")
+    logger.info(f"ADSB cache updated: {new_count} new points, {updated_count} replaced with richer data.")
 
 def get_cached_icao_list():
     full_db_icao_list = None
