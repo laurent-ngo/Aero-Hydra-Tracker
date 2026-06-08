@@ -697,7 +697,7 @@ function renderAirfields(){
 
   // Group fleet aircraft by last_airfield.
   // Exclude aircraft that are not currently at the airfield and haven't been seen in 30 days.
-  const STALE_THRESHOLD_S = 14 * 24 * 3600;
+  const STALE_THRESHOLD_S = 4 * 24 * 3600;
   const nowS = Math.floor(Date.now() / 1000);
   const groups={};
   fleetSource.forEach(ac=>{
