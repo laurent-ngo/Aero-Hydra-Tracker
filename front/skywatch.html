@@ -364,6 +364,16 @@
       <div class="filter-row"><label>Airfields</label>
         <select id="toggle-airfields" onchange="airfieldLayer.setVisible(this.value==='show');waterfieldLayer.setVisible(this.value==='show');"><option value="show">Visible</option><option value="none">Hidden</option></select>
       </div>
+      <div class="filter-row"><label>Stale after</label>
+        <select id="stale-threshold-days" onchange="renderAirfields()">
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="60">60 days</option>
+          <option value="90">90 days</option>
+          <option value="0">Never</option>
+        </select>
+      </div>
 
       <div class="section-label">Owner</div>
       <div id="filter-owner-container"></div>
@@ -696,13 +706,14 @@ function renderAirfields(){
   const fleetSource=allAircraftFleet;
 
   // Group fleet aircraft by last_airfield.
-  // Exclude aircraft that are not currently at the airfield and haven't been seen in 30 days.
-  const STALE_THRESHOLD_S = 4 * 24 * 3600;
+  // Exclude aircraft that are not currently at the airfield and haven't been seen within the stale threshold.
+  const staleDays = parseInt(document.getElementById('stale-threshold-days')?.value ?? '30');
+  const STALE_THRESHOLD_S = staleDays > 0 ? staleDays * 24 * 3600 : Infinity;
   const nowS = Math.floor(Date.now() / 1000);
   const groups={};
   fleetSource.forEach(ac=>{
     if(!ac.last_airfield)return;
-    // If not physically at the airfield and last seen >30 days ago, skip
+    // If not physically at the airfield and last seen beyond the stale threshold, skip
     if(!ac.at_airfield && ac.last_timestamp && (nowS - ac.last_timestamp) > STALE_THRESHOLD_S)return;
     const key=ac.last_airfield;
     if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.airfield_name||key};
@@ -1662,7 +1673,7 @@ window.addEventListener('hashchange',navigateToHash);
 const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
   'filter-callsign','filter-type',
-  'toggle-tracks','toggle-rois','toggle-active-events','toggle-airfields',
+  'toggle-tracks','toggle-rois','toggle-active-events','toggle-airfields','stale-threshold-days',
   'filter-at-airfield','filter-is-full',
   'ev-window','ev-passes','ev-radius',
   'heatmap-select'
