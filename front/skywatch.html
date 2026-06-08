@@ -1041,6 +1041,7 @@ function toggleHeatmap(){
     fetchHeatmapList();
     if(currentHeatmapName)fetchHeatmap(currentHeatmapName);
   } else {
+    clearTimeout(_heatmapMoveTimer);
     heatmapLayer.getSource().clear();
   }
 }
