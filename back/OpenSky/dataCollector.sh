@@ -1,6 +1,6 @@
 #!/bin/bash
 
-(sleep 180; echo "wahtdog is killing the script"; kill $$) & 
+(sleep 180; echo "watchdog is killing the script"; kill $$ 2>/dev/null) &
 WATCHDOG_PID=$!
 
 # 1. Navigate to the project root so Python can find its imports
