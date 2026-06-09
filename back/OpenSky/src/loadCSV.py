@@ -50,6 +50,7 @@ def load_aircrafts_from_csv(file_path):
                         aircraft_model=row['aircraft_model'].strip(),
                         icon_id=int(row['icon_id']) if row.get('icon_id', '').strip() else None,
                         icon_size=int(row['icon_size']) if row.get('icon_size', '').strip() else None,
+                        sea_landing=row['sea_landing'].strip().lower() in ('true', '1', 'yes') if row.get('sea_landing', '').strip() else False,
                     )
                     session.add(aircraft)
                     new_records += 1
