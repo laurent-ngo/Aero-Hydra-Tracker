@@ -343,7 +343,6 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                     migrate.FlightTelemetry.is_low_pass == True,
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,
                     migrate.TrackedAircraft.payload_capacity_kg > 0,
-                    migrate.TrackedAircraft.aircraft_type == "airplane",
                     migrate.FlightTelemetry.is_over_water == False
                 ).all()
         )
@@ -356,7 +355,6 @@ def detect_regions_of_interest_clustered(min_samples=5, distance_meters=200, typ
                     migrate.FlightTelemetry.timestamp >= cutoff_timestamp,
                     migrate.TrackedAircraft.payload_capacity_kg > 0,
                     migrate.TrackedAircraft.sea_landing == True,
-                    migrate.TrackedAircraft.aircraft_type == "airplane",
                 ).all()
         )
     else:
