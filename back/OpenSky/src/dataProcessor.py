@@ -234,7 +234,7 @@ def proximity_check( point, airfields, radius_km, alt_threshold_ft):
             return af
     return None
 
-def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius=8.0, airfield_alt_threshold=1500, waterfield_alt_threshold=200):
+def label_flight_phases(threshold_ft=750, helicopter_threshold_ft=500, water_threshold_ft=10, airfield_radius=8.0, airfield_alt_threshold=1500, waterfield_alt_threshold=200):
     # 1. Load all airfields into memory for fast lookup
     airfields = db.query(migrate.Airfield).all()
 
@@ -243,7 +243,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
         migrate.RegionOfInterest.level == 2,
         migrate.RegionOfInterest.water_location_id.isnot(None)
     ).all()
-    
+
     water_roi_polys = []
     for roi in water_rois:
         try:
@@ -260,16 +260,28 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
     if not points:
         logger.debug("No new points to label.")
         return
-    
-    airfield_dict, is_full_dict, waterfield_dict  = get_lastest_aircraft_data()
+
+    airfield_dict, is_full_dict, waterfield_dict = get_lastest_aircraft_data()
     water_bombers_dict = get_water_bombers()
+
+    # Load aircraft type for all tracked aircraft — used for per-type low-pass threshold
+    aircraft_type_dict = {
+        row.icao24: row.aircraft_type
+        for row in db.query(migrate.TrackedAircraft.icao24, migrate.TrackedAircraft.aircraft_type,
+                            migrate.TrackedAircraft.sea_landing).all()
+    }
+    # Also build sea_landing lookup to avoid per-point DB queries
+    sea_landing_dict = {
+        row.icao24: row.sea_landing
+        for row in db.query(migrate.TrackedAircraft.icao24, migrate.TrackedAircraft.sea_landing).all()
+    }
 
     count_low_pass = 0
     count_over_water = 0
     count_at_airfield = 0
     count_at_waterfield = 0
 
-    # Runs throught every new points
+    # Runs through every new point
     for p in points:
 
         p.at_airfield = False
@@ -278,11 +290,15 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
 
         p.is_full = is_full_dict.get(p.icao24)
         if p.is_full is None:
-            p.is_full =  p.icao24 in water_bombers_dict
-     
+            p.is_full = p.icao24 in water_bombers_dict
+
+        # Per-type low-pass threshold
+        ac_type = aircraft_type_dict.get(p.icao24)
+        lp_threshold = helicopter_threshold_ft if ac_type == 'helicopter' else threshold_ft
+
         # 1. Proximity Check (Highest priority)
         nearby_af = proximity_check(p, airfields, airfield_radius, airfield_alt_threshold)
-    
+
         if nearby_af:
             p.at_airfield = True
             p.latest_airfield = nearby_af.icao
@@ -298,13 +314,13 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
                 p.latest_airfield = airfield_dict[p.icao24]
             else:
                 p.latest_airfield = None
-        
+
             # 3. Label Phase (Only if NOT at an airfield)
             if p.baro_altitude_ft is not None and p.altitude_agl_ft is not None and abs(p.baro_altitude_ft - p.altitude_agl_ft) < water_threshold_ft:
                 p.is_over_water = True
                 count_over_water += 1
 
-            if p.altitude_agl_ft is not None and p.altitude_agl_ft <= threshold_ft:
+            if p.altitude_agl_ft is not None and p.altitude_agl_ft <= lp_threshold:
                 p.is_low_pass = True
                 count_low_pass += 1
                 p.is_full = False
@@ -312,8 +328,7 @@ def label_flight_phases(threshold_ft=750, water_threshold_ft=10, airfield_radius
             # Waterfield check — seaplane inside a linked water ROI below threshold
             p.latest_waterfield = waterfield_dict.get(p.icao24)  # inherit by default
 
-            is_seaplane = db.query(migrate.TrackedAircraft).filter_by(icao24=p.icao24).first()
-            if is_seaplane and is_seaplane.sea_landing and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
+            if sea_landing_dict.get(p.icao24) and p.altitude_agl_ft is not None and p.altitude_agl_ft <= waterfield_alt_threshold:
                 pt = Point(p.lat, p.lon)  # [lat,lon] space
                 for poly, ref in water_roi_polys:
                     if poly.contains(pt):
