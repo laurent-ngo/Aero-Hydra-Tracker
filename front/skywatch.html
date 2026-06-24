@@ -614,7 +614,9 @@ const heatmapLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:0})
 const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
 const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
-const airfieldLayer  =new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
+const airfieldSource =new ol.source.Vector();
+const airfieldCluster=new ol.source.Cluster({distance:40,minDistance:20,source:airfieldSource});
+const airfieldLayer  =new ol.layer.Vector({source:airfieldCluster,zIndex:4,style:airfieldClusterStyle});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
 const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
 map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
@@ -627,6 +629,7 @@ spriteImg.src='sprites.png';
 spriteImg.onload=()=>{console.log('Sprites loaded OK');clearIconCache();if(mapReady){renderAircraft();renderAirfields();renderWaterfields();}};
 spriteImg.onerror=()=>{console.error('Sprites FAILED to load — check sprites.png is in same folder as skywatch.html');};
 const iconCache={};
+const _clusterCanvasCache={};
 
 function buildTintedCanvas(iconId,color,size){
   const id=iconId??0;
@@ -657,7 +660,7 @@ function aircraftStyle(iconId,heading,color,iconSize,selected){
   iconCache[key]=new ol.style.Style({image:new ol.style.Icon({img:canvas,imgSize:[size,size],rotation:((heading||0)*Math.PI)/180})});
   return iconCache[key];
 }
-function clearIconCache(){Object.keys(iconCache).forEach(k=>delete iconCache[k]);}
+function clearIconCache(){Object.keys(iconCache).forEach(k=>delete iconCache[k]);Object.keys(_clusterCanvasCache).forEach(k=>delete _clusterCanvasCache[k]);}
 
 const AIRCRAFT_COLORS={ground:{fill:'#94a3b8'},airborne:{fill:'#22c55e'},full:{fill:'#60a5fa'},empty:{fill:'#f97316'}};
 function acColor(ac){
@@ -700,8 +703,32 @@ function buildAirfieldMarkerCanvas(){
   return canvas;
 }
 
+function buildAirfieldClusterCanvas(count){
+  const size=32,canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d'),cx=size/2,cy=size/2,r=13;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle=isDark?'rgba(0,229,255,0.3)':'rgba(0,122,158,0.3)';ctx.fill();
+  ctx.strokeStyle=isDark?'#00e5ff':'#007a9e';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle=isDark?'#00e5ff':'#007a9e';
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(String(count),cx,cy);
+  return canvas;
+}
+
+// _clusterCanvasCache declared near iconCache — invalidated on theme change via clearIconCache()
+function airfieldClusterStyle(feature){
+  const feats=feature.get('features')||[];
+  if(feats.length===1)return feats[0].getStyle();
+  const count=feats.reduce((sum,f)=>sum+(f.get('airfieldGroup')?.aircraft.length||0),0);
+  if(!_clusterCanvasCache[count])_clusterCanvasCache[count]=buildAirfieldClusterCanvas(count);
+  return new ol.style.Style({
+    image:new ol.style.Icon({img:_clusterCanvasCache[count],imgSize:[32,32]})
+  });
+}
+
 function renderAirfields(){
-  const src=airfieldLayer.getSource();src.clear();
+  const src=airfieldSource;src.clear();
   if(!allAircraftFleet.length)return;  // wait until fleet data is loaded
   const fleetSource=allAircraftFleet;
 
@@ -899,7 +926,19 @@ function closeAllPopups(){
   Object.keys(openPopups).forEach(k=>closeMarkerPopup(k));
 }
 
-function showAirfieldPopup(feat,pixel){
+// Returns true if click was consumed by zooming into a multi-airfield cluster
+function handleAirfieldClusterClick(clusterFeat){
+  const feats=clusterFeat.get('features')||[];
+  if(feats.length<=1)return false;
+  const extent=ol.extent.createEmpty();
+  feats.forEach(f=>ol.extent.extend(extent,f.getGeometry().getExtent()));
+  map.getView().fit(extent,{duration:400,padding:[80,80,80,80],maxZoom:map.getView().getZoom()+4});
+  return true;
+}
+
+function showAirfieldPopup(clusterFeat,pixel){
+  const feats=clusterFeat.get('features')||[];
+  const feat=feats.length===1?feats[0]:clusterFeat;
   const g=feat.get('airfieldGroup'),icao=feat.get('airfield');
   const parked=g.aircraft.filter(a=>a.at_airfield).length;
   const name=g.name&&g.name!==icao?g.name:icao;
@@ -1157,7 +1196,7 @@ map.on('click',evt=>{
     if(Math.sqrt(dx*dx+dy*dy) > 5) return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
-  if(afF){showAirfieldPopup(afF,evt.pixel);return;}
+  if(afF){if(handleAirfieldClusterClick(afF))return;showAirfieldPopup(afF,evt.pixel);return;}
   const wfF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===waterfieldLayer});
   if(wfF){showWaterfieldPopup(wfF,evt.pixel);return;}
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
