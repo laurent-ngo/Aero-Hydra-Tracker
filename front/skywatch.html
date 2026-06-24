@@ -1362,7 +1362,7 @@ async function fetchAircraft(){
     if(mode==='live'){const p=document.getElementById('filter-time-preset').value;if(p!=='custom'){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-parseInt(p)*60;updateTimeDisplay();}}
     const params=new URLSearchParams();if(timeStart)params.set('start',timeStart);if(timeStop)params.set('stop',timeStop);
     if(se)se.textContent='Fetching...';
-    const res=await fetch(`${config.baseUrl}/aircraft/active?${params}`,{headers:apiHeaders()});
+    const res=await fetch(`${config.baseUrl}/aircraft/active?${params}&${_mapBboxParams()}`,{headers:apiHeaders()});
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const data=await res.json();allAircraft=Array.isArray(data)?data:(data.aircraft||[]);
     tracksCache={};trackLayer.getSource().clear();
@@ -1386,7 +1386,7 @@ async function fetchTrack(icao24){
   if(!icao24)return;
   try{
     const params=new URLSearchParams();if(timeStart)params.set('start',timeStart);if(timeStop)params.set('stop',timeStop);
-    const res=await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}`,{headers:apiHeaders()});
+    const res=await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}&${_mapBboxParams()}`,{headers:apiHeaders()});
     if(!res.ok)return;
     const data=await res.json();
     tracksCache[icao24]=[...data].sort((a,b)=>a.timestamp-b.timestamp);

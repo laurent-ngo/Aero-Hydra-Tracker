@@ -62,10 +62,15 @@ def serve_root():
     return RedirectResponse(url="/skywatch.html", status_code=302)
 
 
-def _get_aircraft_with_details(db: Session, icao_filter=None):
-    """Common logic for querying aircraft, their last telemetry, and airfield names."""
+def _get_aircraft_with_details(db: Session, icao_filter=None, bbox=None):
+    """Common logic for querying aircraft, their last telemetry, and airfield names.
+
+    bbox: optional (lat_min, lat_max, lon_min, lon_max) tuple — when given, restricts
+    results to aircraft whose last known position falls within it (saves payload size
+    for viewport-based frontend requests).
+    """
     query = db.query(
-        migrate.TrackedAircraft, 
+        migrate.TrackedAircraft,
         migrate.Airfield,
         migrate.FlightTelemetry,
         migrate.WaterLocation
@@ -78,7 +83,7 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
             migrate.TrackedAircraft.last_seen == migrate.FlightTelemetry.timestamp
         )
     ).outerjoin(
-        migrate.Airfield, 
+        migrate.Airfield,
         migrate.FlightTelemetry.latest_airfield == migrate.Airfield.icao
     ).outerjoin(
         migrate.WaterLocation,
@@ -87,6 +92,13 @@ def _get_aircraft_with_details(db: Session, icao_filter=None):
 
     if icao_filter is not None:
         query = query.filter(migrate.TrackedAircraft.icao24.in_(icao_filter))
+
+    if bbox is not None:
+        lat_min, lat_max, lon_min, lon_max = bbox
+        query = query.filter(
+            migrate.FlightTelemetry.lat.between(lat_min, lat_max),
+            migrate.FlightTelemetry.lon.between(lon_min, lon_max),
+        )
 
     results = query.all()
 
@@ -135,9 +147,13 @@ def list_aircraft(db: DbSession):
 
 @app.get("/aircraft/active", response_model=List[dict], dependencies=[Security(get_api_key)])
 def list_active_aircraft(
-    start: int, 
-    stop: int, 
-    db: DbSession
+    start: int,
+    stop: int,
+    db: DbSession,
+    lat_min: Optional[float] = Query(None),
+    lat_max: Optional[float] = Query(None),
+    lon_min: Optional[float] = Query(None),
+    lon_max: Optional[float] = Query(None),
 ):
     # 1. Get unique ICAOs within timeframe
     active_icaos = db.query(migrate.TrackedAircraft.icao24).filter(
@@ -145,19 +161,28 @@ def list_active_aircraft(
         migrate.TrackedAircraft.last_seen <= stop
     ).all()
 
-    
+
     icao_list = [i[0] for i in active_icaos]
 
-    # 2. Use helper with the icao filter
-    return _get_aircraft_with_details(db, icao_filter=icao_list)
+    # 2. Optional bbox — restrict to aircraft last seen within the viewport
+    bbox = None
+    if all(v is not None for v in (lat_min, lat_max, lon_min, lon_max)):
+        bbox = (lat_min, lat_max, lon_min, lon_max)
+
+    # 3. Use helper with the icao filter
+    return _get_aircraft_with_details(db, icao_filter=icao_list, bbox=bbox)
     
 @app.get("/telemetry/{icao24}", responses={400: {"description": "icao24 not found"}}, dependencies=[Security(get_api_key)])
 def get_telemetry(
     db: DbSession,
-    icao24: str, 
-    start: Optional[int] = None, 
+    icao24: str,
+    start: Optional[int] = None,
     stop: Optional[int] = None,
-    limit: int = 1000
+    limit: int = 1000,
+    lat_min: Optional[float] = Query(None),
+    lat_max: Optional[float] = Query(None),
+    lon_min: Optional[float] = Query(None),
+    lon_max: Optional[float] = Query(None),
 ):
     # Validation: 24-hour check (86400 seconds)
     if start is None and stop is None:
@@ -166,22 +191,29 @@ def get_telemetry(
 
     elif stop is None:
         stop = int(time.time())
-        
+
     if start and stop:
         timespan = stop - start
         if timespan < 0:
-            raise HTTPException(status_code=400,                     
+            raise HTTPException(status_code=400,
                 detail="Start timestamp must be before stop timestamp.")
         if timespan > 86400:
-            raise HTTPException(status_code=400, 
+            raise HTTPException(status_code=400,
                 detail="Timespan exceeds 7 Days. Please reduce the range for a more precise mission view."
             )
-        
+
     # Query construction
     query = db.query(migrate.FlightTelemetry).filter(
         migrate.FlightTelemetry.icao24 == icao24,
         migrate.FlightTelemetry.timestamp >= start,
         migrate.FlightTelemetry.timestamp <= stop
+        )
+
+    # Optional bbox — restrict points to the visible map area
+    if all(v is not None for v in (lat_min, lat_max, lon_min, lon_max)):
+        query = query.filter(
+            migrate.FlightTelemetry.lat.between(lat_min, lat_max),
+            migrate.FlightTelemetry.lon.between(lon_min, lon_max),
         )
 
     points = query.order_by(migrate.FlightTelemetry.timestamp.desc()).limit(limit).all()
