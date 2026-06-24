@@ -1401,7 +1401,7 @@ async function fetchAircraft(){
     if(mode==='live'){const p=document.getElementById('filter-time-preset').value;if(p!=='custom'){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop-parseInt(p)*60;updateTimeDisplay();}}
     const params=new URLSearchParams();if(timeStart)params.set('start',timeStart);if(timeStop)params.set('stop',timeStop);
     if(se)se.textContent='Fetching...';
-    const res=await fetch(`${config.baseUrl}/aircraft/active?${params}&${_mapBboxParams()}`,{headers:apiHeaders()});
+    const res=await fetch(`${config.baseUrl}/aircraft/active?${params}`,{headers:apiHeaders()});
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const data=await res.json();allAircraft=Array.isArray(data)?data:(data.aircraft||[]);
     tracksCache={};trackLayer.getSource().clear();
