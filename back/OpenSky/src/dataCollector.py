@@ -230,7 +230,7 @@ def discover_new_aircraft():
     SCAN_POINTS = [
         (44.6993552, 3.8424499),  # south France
         (43.5,       12.0),       # Italy
-        (40.0,       -4.0),       # Spain
+        (40.0,       -2.0),       # Spain
         (39.3,       22.7),       # Greece
         (38.3,       29.8),       # Turkey
     ]
