@@ -148,7 +148,69 @@ def backfill_agl():
 
     db.commit()
     logger.info("Batch AGL backfill complete.")
-    
+
+REVERSE_GEOCODE_URL = "https://api.bigdatacloud.net/data/reverse-geocode-client"
+
+def _reverse_geocode_location(lat, lon):
+    """Return the country name for a point, or a sea/ocean name if it's over open water."""
+    try:
+        resp = requests.get(
+            REVERSE_GEOCODE_URL,
+            params={"latitude": lat, "longitude": lon, "localityLanguage": "en"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"Reverse geocode failed for ({lat},{lon}): {e}")
+        return None
+
+    country = (data.get("countryName") or "").strip()
+    if country:
+        return country
+
+    # Over water — countryName is empty; pull a body-of-water name if offered
+    for entry in data.get("localityInfo", {}).get("informative", []):
+        name = (entry.get("name") or "").strip()
+        if name:
+            return name
+
+    return "International waters"
+
+def backfill_aircraft_location():
+    """
+    Resolve the country (or sea/ocean) of each aircraft's last known position
+    and store it on that latest FlightTelemetry row (not on TrackedAircraft).
+    Intended to run once daily — not per-telemetry-point.
+    """
+    aircraft = db.query(migrate.TrackedAircraft).filter(
+        migrate.TrackedAircraft.last_seen.isnot(None)
+    ).all()
+
+    if not aircraft:
+        logger.debug("No aircraft with a known last position.")
+        return
+
+    updated = 0
+    for ac in aircraft:
+        last_point = db.query(migrate.FlightTelemetry).filter(
+            migrate.FlightTelemetry.icao24 == ac.icao24,
+            migrate.FlightTelemetry.timestamp == ac.last_seen,
+        ).first()
+
+        if not last_point or last_point.lat is None or last_point.lon is None:
+            continue
+
+        location = _reverse_geocode_location(last_point.lat, last_point.lon)
+        if location:
+            last_point.location = location
+            updated += 1
+
+        time.sleep(1)  # polite rate limit for the free reverse-geocoding API
+
+    db.commit()
+    logger.info(f"Location backfill complete: {updated} aircraft updated.")
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Returns distance in km between two points."""
     R = 6371.0  # Earth radius in km
@@ -683,13 +745,23 @@ if __name__ == "__main__":
         help="Scan for new firefighting aircraft not yet in the DB"
     )
 
+    parser.add_argument(
+        "--location",
+        action="store_true",
+        help="Resolve country/ocean of each aircraft's last known position (run once daily)"
+    )
+
     args = parser.parse_args()
 
     if args.adsb_cache:
         update_adsb_cache()
         sys.exit(0)
 
-    
+    if args.location:
+        backfill_aircraft_location()
+        sys.exit(0)
+
+
     if args.ROI: 
 
         detect_regions_of_interest_clustered(type='fire')
