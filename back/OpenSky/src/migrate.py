@@ -73,6 +73,10 @@ class FlightTelemetry(Base):
     latest_airfield = Column(String(4), nullable=True)
     latest_waterfield = Column(String(4), nullable=True)
 
+    # Country name, or sea/ocean name when over water — resolved daily, only for
+    # the latest point of each aircraft. Left null on all other points.
+    location = Column(String(100))
+
     source = Column(String(20), default='opensky', nullable=False)
     
 class RegionOfInterest(Base):
