@@ -22,7 +22,7 @@ from shapely.ops import unary_union
 ELEVATION_API_URL = os.getenv("ELEVATION_API_URL", "http://localhost:8011")
 
 import migrate
-from dataCollector import orchestrate_sync, update_adsb_cache, discover_new_aircraft
+from dataCollector import orchestrate_sync, update_adsb_cache, update_fr24_cache, discover_new_aircraft
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -740,6 +740,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--fr24-cache",
+        action="store_true",
+        help="Only update FR24 cache (queries full fleet via FR24 API)"
+    )
+
+    parser.add_argument(
         "--discover",
         action="store_true",
         help="Scan for new firefighting aircraft not yet in the DB"
@@ -755,6 +761,10 @@ if __name__ == "__main__":
 
     if args.adsb_cache:
         update_adsb_cache()
+        sys.exit(0)
+
+    if args.fr24_cache:
+        update_fr24_cache()
         sys.exit(0)
 
     if args.location:
