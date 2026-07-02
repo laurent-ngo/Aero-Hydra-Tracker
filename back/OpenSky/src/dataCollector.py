@@ -115,17 +115,23 @@ def update_fr24_cache():
     try:
         session = SessionLocal()
         from migrate import TrackedAircraft
-        rows = session.query(TrackedAircraft.icao24, TrackedAircraft.registration).all()
-        reg_to_icao = {r.registration: r.icao24.lower() for r in rows if r.registration}
+        rows = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type).all()
+        by_type = {}
+        for r in rows:
+            if r.registration and r.aircraft_type:
+                by_type.setdefault(r.aircraft_type, {})[r.registration] = r.icao24.lower()
     finally:
         if session:
             session.close()
 
-    if not reg_to_icao:
+    if not by_type:
         logger.info("FR24 cache: no tracked aircraft with registrations.")
         return
 
-    results = fr24.get_by_registrations(reg_to_icao)
+    results = {}
+    for aircraft_type, reg_to_icao in by_type.items():
+        logger.info(f"FR24 cache: querying {len(reg_to_icao)} {aircraft_type}s")
+        results.update(fr24.get_by_registrations(reg_to_icao))
 
     if results:
         for icao, data in results.items():
