@@ -128,10 +128,13 @@ def update_fr24_cache():
         logger.info("FR24 cache: no tracked aircraft with registrations.")
         return
 
+    bbox = FirefleetCollector(None).default_bbox
+    fr24_bounds = f"{bbox['lamax']},{bbox['lamin']},{bbox['lomin']},{bbox['lomax']}"
+
     results = {}
     for aircraft_type, reg_to_icao in by_type.items():
-        logger.info(f"FR24 cache: querying {len(reg_to_icao)} {aircraft_type}s")
-        results.update(fr24.get_by_registrations(reg_to_icao))
+        logger.info(f"FR24 cache: querying {len(reg_to_icao)} {aircraft_type}s within bbox")
+        results.update(fr24.get_by_registrations(reg_to_icao, bounds=fr24_bounds))
 
     if results:
         for icao, data in results.items():
@@ -144,7 +147,7 @@ def update_fr24_cache():
                 data.get('on_ground', False),
             ]
             fr24_id = data.get('fr24_id')
-            if fr24_id:
+            if fr24_id and not data.get('on_ground', True):
                 time.sleep(6)  # 10 req/min budget
                 data['track'] = fr24.get_track(icao, fr24_id) + [snapshot_point]
             else:
@@ -239,12 +242,18 @@ def orchestrate_sync():
                 else:
                     logger.debug(f"[{icao}] OpenSky: no live data.")
 
-            # FR24 — track array contains history + position snapshot; DB PK rejects duplicates
+            # FR24 — historical points skip labeling (is_processed=True);
+            # only points newer than last_ts enter the processing pipeline.
             if icao in fr24_active:
                 fr24_points = fr24_cache[icao].get('track', [])
                 if fr24_points:
-                    bulk_insert_telemetry(session, icao, fr24_points, source='fr24')
-                    logger.info(f"[{icao}] FR24: submitted {len(fr24_points)} points.")
+                    historical = [p for p in fr24_points if p[0] <= last_ts]
+                    new_points  = [p for p in fr24_points if p[0] >  last_ts]
+                    if historical:
+                        bulk_insert_telemetry(session, icao, historical, source='fr24', is_processed=True)
+                    if new_points:
+                        bulk_insert_telemetry(session, icao, new_points, source='fr24')
+                    logger.info(f"[{icao}] FR24: {len(historical)} historical (pre-processed) + {len(new_points)} new.")
 
             # ADSB cache — insert all cached points; DB PK (icao24, timestamp) rejects duplicates.
             # Group by source so each bulk call gets a uniform source tag.
