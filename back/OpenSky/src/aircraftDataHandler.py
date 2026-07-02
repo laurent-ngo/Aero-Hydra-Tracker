@@ -71,7 +71,7 @@ def sync_flight_data(session, icao_code, raw_path_data):
     logger.info(f"Added {len(new_points)} new waypoints.")
 
 
-def bulk_insert_telemetry(session, icao24, path_data, source='opensky'):
+def bulk_insert_telemetry(session, icao24, path_data, source='opensky', is_processed=False):
     if not path_data:
         return
 
@@ -85,7 +85,8 @@ def bulk_insert_telemetry(session, icao24, path_data, source='opensky'):
             "baro_altitude_ft": round(p[3] * 3.28084) if p[3] else 0,
             "true_track": p[4],
             "on_ground": p[5],
-            "source": source
+            "source": source,
+            "is_processed": is_processed,
         }
         for p in path_data
     ]

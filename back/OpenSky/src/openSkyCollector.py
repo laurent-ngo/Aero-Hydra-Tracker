@@ -317,10 +317,11 @@ class FR24Collector:
             'Authorization':  f'Bearer {self.api_key}'
         }
 
-    def get_by_registrations(self, reg_to_icao):
+    def get_by_registrations(self, reg_to_icao, bounds=None):
         """
         Fetch live positions filtered by aircraft registration.
         reg_to_icao: {registration: icao24} dict
+        bounds: optional FR24 bounds string 'north,south,west,east'
         Returns: {icao24: {...}} — same shape as AdsbV2Collector.
         """
         all_regs = list(reg_to_icao.keys())
@@ -339,6 +340,8 @@ class FR24Collector:
             batch = registrations[i:i + 20]
             batch_num = i // 20 + 1
             params = {'registrations': ','.join(batch)}
+            if bounds:
+                params['bounds'] = bounds
             try:
                 logger.info(f"Calling FR24 API/positions (batch {batch_num})")
                 response = requests.get(url, headers=self.headers, params=params, timeout=15)
