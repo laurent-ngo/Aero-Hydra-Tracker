@@ -427,7 +427,8 @@ class FR24Collector:
                 timeout=15
             )
             response.raise_for_status()
-            tracks = response.json().get('tracks', [])
+            body = response.json()
+            tracks = body if isinstance(body, list) else body.get('tracks', [])
 
             points = []
             for p in tracks:
