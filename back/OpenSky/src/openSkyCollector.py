@@ -322,8 +322,6 @@ class FR24Collector:
         Fetch live positions filtered by aircraft registration.
         reg_to_icao: {registration: icao24} dict
         Returns: {icao24: {...}} — same shape as AdsbV2Collector.
-        FR24 /live/flight-positions/light does not support hex filtering;
-        registrations (max 15 per request) is the correct filter.
         """
         all_regs = list(reg_to_icao.keys())
         registrations = [r for r in all_regs if _FR24_REG_RE.match(r)]
@@ -339,15 +337,11 @@ class FR24Collector:
             if i > 0:
                 time.sleep(7)
             batch = registrations[i:i + 20]
-            batch_num = i // 15 + 1
+            batch_num = i // 20 + 1
+            params = {'registrations': ','.join(batch)}
             try:
                 logger.info(f"Calling FR24 API/positions (batch {batch_num})")
-                response = requests.get(
-                    url,
-                    headers=self.headers,
-                    params={'registrations': ','.join(batch)},
-                    timeout=15
-                )
+                response = requests.get(url, headers=self.headers, params=params, timeout=15)
                 response.raise_for_status()
                 self._parse_positions(response.json().get('data', []), icao_lower, results)
             except requests.exceptions.HTTPError as e:
@@ -369,8 +363,7 @@ class FR24Collector:
                     logger.warning(f"FR24 batch {batch_num} got {status}, retrying after {retry_after}s...")
                     time.sleep(retry_after)
                     try:
-                        r = requests.get(url, headers=self.headers,
-                                         params={'registrations': ','.join(batch)}, timeout=15)
+                        r = requests.get(url, headers=self.headers, params=params, timeout=15)
                         r.raise_for_status()
                         self._parse_positions(r.json().get('data', []), icao_lower, results)
                     except Exception as e2:
