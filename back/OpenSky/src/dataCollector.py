@@ -115,7 +115,10 @@ def update_fr24_cache():
     try:
         session = SessionLocal()
         from migrate import TrackedAircraft
-        rows = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type).all()
+        rows = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type) \
+                      .filter(TrackedAircraft.aircraft_type == 'airplane',
+                              TrackedAircraft.payload_capacity_kg > 0) \
+                      .all()
         by_type = {}
         for r in rows:
             if r.registration and r.aircraft_type:
