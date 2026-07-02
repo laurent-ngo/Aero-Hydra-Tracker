@@ -429,6 +429,7 @@ class FR24Collector:
             response.raise_for_status()
             body = response.json()
             tracks = body if isinstance(body, list) else body.get('tracks', [])
+            logger.debug(f"FR24 track raw: type={type(body).__name__}, {len(tracks)} entries, sample={tracks[0] if tracks else 'empty'}")
 
             points = []
             for p in tracks:
@@ -436,7 +437,8 @@ class FR24Collector:
                 try:
                     from datetime import datetime, timezone
                     ts = int(datetime.fromisoformat(ts_str.replace('Z', '+00:00')).timestamp())
-                except Exception:
+                except Exception as ts_err:
+                    logger.debug(f"FR24 track timestamp parse failed for {icao24}: ts_str={ts_str!r} err={ts_err}")
                     continue
                 alt_ft = p.get('alt')
                 alt_m  = round(alt_ft / 3.28084, 1) if alt_ft is not None else None
