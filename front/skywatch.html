@@ -332,6 +332,8 @@
           <option value="15">Last 15 min</option>
           <option value="30">Last 30 min</option>
           <option value="60" selected>Last 1 hour</option>
+          <option value="120">Last 2 hours</option>
+          <option value="180">Last 3 hours</option>
           <option value="360">Last 6 hours</option>
           <option value="1440">Last 24 hours</option>
           <option value="custom">Custom...</option>
@@ -1114,6 +1116,7 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Airfield</span><span class="tooltip-val">${ac.last_airfield||'--'}${ac.airfield_name?' ('+ac.airfield_name+')':''}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Location</span><span class="tooltip-val">${ac.last_location||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Baro Alt</span><span class="tooltip-val">${ac.last_baro_alt_ft!=null?ac.last_baro_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
