@@ -144,7 +144,7 @@ def update_fr24_cache():
                 data.get('on_ground', False),
             ]
             fr24_id = data.get('fr24_id')
-            if fr24_id:
+            if fr24_id and not data.get('on_ground', True):
                 time.sleep(6)  # 10 req/min budget
                 data['track'] = fr24.get_track(icao, fr24_id) + [snapshot_point]
             else:
