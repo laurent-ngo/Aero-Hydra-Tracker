@@ -137,8 +137,8 @@ def update_fr24_cache():
     all_reg_to_icao = {reg: icao for d in by_type.values() for reg, icao in d.items()}
 
     now    = int(time.time())
-    dt_from = datetime.utcfromtimestamp(now - 2 * 3600).strftime('%Y-%m-%dT%H:%M:%S')
-    dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%S')
+    dt_from = datetime.utcfromtimestamp(now - 2 * 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
+    dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
 
     # 1. Get all flight legs active in the last 2 hours
     summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
