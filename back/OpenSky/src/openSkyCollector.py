@@ -463,23 +463,55 @@ class FR24Collector:
                 time.sleep(7)
             batch = all_regs[i:i + 20]
             batch_num = i // 20 + 1
+            params = {
+                'registrations':        ','.join(batch),
+                'flight_datetime_from': dt_from,
+                'flight_datetime_to':   dt_to,
+            }
             try:
                 logger.info(f"Calling FR24 API/flight-summary (batch {batch_num}, {dt_from} → {dt_to})")
-                response = requests.get(
-                    url,
-                    headers=self.headers,
-                    params={
-                        'registrations':      ','.join(batch),
-                        'flight_datetime_from': dt_from,
-                        'flight_datetime_to':   dt_to,
-                    },
-                    timeout=15
-                )
+                response = requests.get(url, headers=self.headers, params=params, timeout=15)
                 response.raise_for_status()
                 for entry in response.json().get('data', []):
                     icao24 = str(entry.get('hex', '') or '').lower().strip()
                     if icao24 and icao24 in icao_lower:
                         summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+            except requests.exceptions.HTTPError as e:
+                status = e.response.status_code if e.response is not None else None
+                if status == 400:
+                    logger.warning(f"FR24 flight-summary batch {batch_num} rejected (400), retrying individually...")
+                    for reg in batch:
+                        try:
+                            r = requests.get(url, headers=self.headers,
+                                             params={**params, 'registrations': reg}, timeout=15)
+                            r.raise_for_status()
+                            for entry in r.json().get('data', []):
+                                icao24 = str(entry.get('hex', '') or '').lower().strip()
+                                if icao24 and icao24 in icao_lower:
+                                    summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+                        except requests.exceptions.HTTPError as e2:
+                            status2 = e2.response.status_code if e2.response is not None else None
+                            if status2 == 429:
+                                retry_after = int(e2.response.headers.get('Retry-After', 60))
+                                logger.warning(f"FR24 flight-summary 429 on '{reg}', retrying after {retry_after}s...")
+                                time.sleep(retry_after)
+                                try:
+                                    r = requests.get(url, headers=self.headers,
+                                                     params={**params, 'registrations': reg}, timeout=15)
+                                    r.raise_for_status()
+                                    for entry in r.json().get('data', []):
+                                        icao24 = str(entry.get('hex', '') or '').lower().strip()
+                                        if icao24 and icao24 in icao_lower:
+                                            summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+                                except Exception as e3:
+                                    logger.info(f"FR24 flight-summary skipped '{reg}' after retry: {e3}")
+                            else:
+                                logger.info(f"FR24 flight-summary skipped '{reg}': {e2}")
+                        except Exception as e2:
+                            logger.info(f"FR24 flight-summary skipped '{reg}': {e2}")
+                        time.sleep(6)
+                else:
+                    logger.error(f"FR24 flight-summary batch {batch_num}: {e}")
             except Exception as e:
                 logger.error(f"FR24 flight-summary batch {batch_num}: {e}")
 
