@@ -4,6 +4,7 @@ import argparse
 import sys
 import logging
 import json
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 from migrate import SessionLocal
@@ -105,7 +106,7 @@ def update_adsb_cache():
     logger.info(f"ADSB cache updated: {new_count} new points, {updated_count} replaced with richer data.")
 
 def update_fr24_cache():
-    """Query FR24 for the full fleet and cache which aircraft are currently active."""
+    """Query FR24 for the full fleet and cache positions and tracks for the last 2 hours."""
     fr24 = FR24Collector() if os.getenv('FR24_API_KEY') else None
     if not fr24:
         logger.info("FR24 cache: no API key configured, skipping.")
@@ -131,34 +132,52 @@ def update_fr24_cache():
         logger.info("FR24 cache: no tracked aircraft with registrations.")
         return
 
-    bbox = FirefleetCollector(None).default_bbox
+    bbox       = FirefleetCollector(None).default_bbox
     fr24_bounds = f"{bbox['lamax']},{bbox['lamin']},{bbox['lomin']},{bbox['lomax']}"
+    all_reg_to_icao = {reg: icao for d in by_type.values() for reg, icao in d.items()}
 
-    results = {}
+    now    = int(time.time())
+    dt_from = datetime.utcfromtimestamp(now - 2 * 3600).strftime('%Y-%m-%dT%H:%M:%S')
+    dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%S')
+
+    # 1. Get all flight legs active in the last 2 hours
+    summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
+
+    # 2. Fetch tracks for every leg, grouped by icao24
+    tracks_by_icao = {}
+    for entry in summaries:
+        icao    = entry['icao24']
+        fr24_id = entry['fr24_id']
+        if fr24_id:
+            time.sleep(6)  # 10 req/min budget
+            points = fr24.get_track(icao, fr24_id)
+            tracks_by_icao.setdefault(icao, []).extend(points)
+
+    # 3. Get current live positions (snapshot) within bbox
+    live = {}
     for aircraft_type, reg_to_icao in by_type.items():
-        logger.info(f"FR24 cache: querying {len(reg_to_icao)} {aircraft_type}s within bbox")
-        results.update(fr24.get_by_registrations(reg_to_icao, bounds=fr24_bounds))
+        logger.info(f"FR24 cache: querying live positions for {len(reg_to_icao)} {aircraft_type}s")
+        live.update(fr24.get_by_registrations(reg_to_icao, bounds=fr24_bounds))
+
+    # 4. Build cache: all icao24s seen in either summaries or live positions
+    results = {}
+    all_icaos = set(tracks_by_icao.keys()) | set(live.keys())
+    for icao in all_icaos:
+        data         = live.get(icao, {'icao24': icao, 'source': 'fr24'})
+        track_points = tracks_by_icao.get(icao, [])
+        if icao in live:
+            snapshot = [
+                data['timestamp'], data['lat'], data['lon'],
+                data.get('baro_alt'), data.get('true_track'), data.get('on_ground', False),
+            ]
+            track_points = track_points + [snapshot]
+        data['track'] = track_points
+        results[icao] = data
 
     if results:
-        for icao, data in results.items():
-            snapshot_point = [
-                data['timestamp'],
-                data['lat'],
-                data['lon'],
-                data.get('baro_alt'),
-                data.get('true_track'),
-                data.get('on_ground', False),
-            ]
-            fr24_id = data.get('fr24_id')
-            if fr24_id:
-                time.sleep(6)  # 10 req/min budget
-                data['track'] = fr24.get_track(icao, fr24_id) + [snapshot_point]
-            else:
-                data['track'] = [snapshot_point]
-
         with open(FR24_CACHE_FILE, 'w') as f:
             json.dump(results, f)
-        logger.info(f"FR24 cache updated: {len(results)} active aircraft with tracks.")
+        logger.info(f"FR24 cache updated: {len(results)} aircraft, {sum(len(v['track']) for v in results.values())} total track points.")
     else:
         if os.path.exists(FR24_CACHE_FILE):
             os.remove(FR24_CACHE_FILE)

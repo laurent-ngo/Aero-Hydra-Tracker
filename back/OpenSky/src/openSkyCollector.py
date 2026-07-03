@@ -447,6 +447,45 @@ class FR24Collector:
             logger.error(f"FR24 track error for {icao24}: {e}")
             return []
 
+    def get_flight_summaries(self, reg_to_icao, dt_from, dt_to):
+        """
+        Return all flight legs for the given registrations within a datetime window.
+        dt_from / dt_to: ISO 8601 strings e.g. '2026-07-03T10:00:00'
+        Returns: list of {fr24_id, icao24} dicts.
+        """
+        all_regs = [r for r in reg_to_icao.keys() if _FR24_REG_RE.match(r)]
+        icao_lower = {icao.lower() for icao in reg_to_icao.values()}
+        url = f"{self.base_url}/flight-summary/light"
+        summaries = []
+
+        for i in range(0, len(all_regs), 20):
+            if i > 0:
+                time.sleep(7)
+            batch = all_regs[i:i + 20]
+            batch_num = i // 20 + 1
+            try:
+                logger.info(f"Calling FR24 API/flight-summary (batch {batch_num}, {dt_from} → {dt_to})")
+                response = requests.get(
+                    url,
+                    headers=self.headers,
+                    params={
+                        'registrations':      ','.join(batch),
+                        'flight_datetime_from': dt_from,
+                        'flight_datetime_to':   dt_to,
+                    },
+                    timeout=15
+                )
+                response.raise_for_status()
+                for entry in response.json().get('data', []):
+                    icao24 = str(entry.get('hex', '') or '').lower().strip()
+                    if icao24 and icao24 in icao_lower:
+                        summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+            except Exception as e:
+                logger.error(f"FR24 flight-summary batch {batch_num}: {e}")
+
+        logger.info(f"FR24 flight-summary: {len(summaries)} legs found")
+        return summaries
+
 
 # --- Local Test ---
 if __name__ == "__main__":
