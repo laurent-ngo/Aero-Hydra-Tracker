@@ -105,8 +105,11 @@ def update_adsb_cache():
 
     logger.info(f"ADSB cache updated: {new_count} new points, {updated_count} replaced with richer data.")
 
-def update_fr24_cache():
-    """Query FR24 for the full fleet and cache positions and tracks for the last 2 hours."""
+def update_fr24_cache(icao_filter=None):
+    """Query FR24 for the full fleet and cache positions and tracks for the last 3 hours.
+
+    icao_filter: optional list of icao24 strings — bypasses DB type/capacity filters.
+    """
     fr24 = FR24Collector() if os.getenv('FR24_API_KEY') else None
     if not fr24:
         logger.info("FR24 cache: no API key configured, skipping.")
@@ -116,10 +119,14 @@ def update_fr24_cache():
     try:
         session = SessionLocal()
         from migrate import TrackedAircraft
-        rows = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type) \
-                      .filter(TrackedAircraft.aircraft_type == 'airplane',
-                              TrackedAircraft.payload_capacity_kg > 0) \
-                      .all()
+        query = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type)
+        if icao_filter:
+            logger.info(f"FR24 cache: using ICAO override ({len(icao_filter)} aircraft), skipping DB filters.")
+            query = query.filter(TrackedAircraft.icao24.in_(icao_filter))
+        else:
+            query = query.filter(TrackedAircraft.aircraft_type == 'airplane',
+                                 TrackedAircraft.payload_capacity_kg > 0)
+        rows = query.all()
         by_type = {}
         for r in rows:
             if r.registration and r.aircraft_type:

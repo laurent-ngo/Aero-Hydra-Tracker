@@ -746,6 +746,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--icao",
+        nargs="+",
+        metavar="ICAO24",
+        help="Override aircraft list for --fr24-cache: provide one or more ICAO24 codes, bypassing DB filters"
+    )
+
+    parser.add_argument(
         "--discover",
         action="store_true",
         help="Scan for new firefighting aircraft not yet in the DB"
@@ -764,7 +771,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args.fr24_cache:
-        update_fr24_cache()
+        update_fr24_cache(icao_filter=[i.lower() for i in args.icao] if args.icao else None)
         sys.exit(0)
 
     if args.location:
