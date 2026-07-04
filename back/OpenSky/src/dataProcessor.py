@@ -753,6 +753,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--hours",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Lookback window in hours for --fr24-cache (default: 3)"
+    )
+
+    parser.add_argument(
         "--discover",
         action="store_true",
         help="Scan for new firefighting aircraft not yet in the DB"
@@ -771,7 +779,10 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args.fr24_cache:
-        update_fr24_cache(icao_filter=[i.lower() for i in args.icao] if args.icao else None)
+        update_fr24_cache(
+            icao_filter=[i.lower() for i in args.icao] if args.icao else None,
+            hours=args.hours,
+        )
         sys.exit(0)
 
     if args.location:
