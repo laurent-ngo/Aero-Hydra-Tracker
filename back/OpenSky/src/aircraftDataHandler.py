@@ -17,15 +17,15 @@ def get_all_tracked_icao24(session, active = False):
                 session.query(TrackedAircraft.icao24)
                 .join(FlightTelemetry, TrackedAircraft.icao24 == FlightTelemetry.icao24)
                 .filter(
+                    TrackedAircraft.active == True,
                     FlightTelemetry.timestamp >= cutoff_timestamp,
-                    FlightTelemetry.baro_altitude_ft <= 10000 # There is little in tracking aircraft cruising at high altitude
-                        )
-                .distinct() # Ensure we don't get the same ICAO multiple times
+                    FlightTelemetry.baro_altitude_ft <= 10000
+                )
+                .distinct()
                 .all()
-        )
+            )
         else:
-            # We query only the icao24 column to keep it fast
-            results = session.query(TrackedAircraft.icao24).all()
+            results = session.query(TrackedAircraft.icao24).filter(TrackedAircraft.active == True).all()
         
         # SQLAlchemy returns a list of tuples like [('3b7b70',), ('43c6f3',)]
         # We flatten it into a simple list of strings

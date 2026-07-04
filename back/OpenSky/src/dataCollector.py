@@ -123,10 +123,12 @@ def update_fr24_cache(icao_filter=None, hours=3):
         query = session.query(TrackedAircraft.icao24, TrackedAircraft.registration, TrackedAircraft.aircraft_type)
         if icao_filter:
             logger.info(f"FR24 cache: using ICAO override ({len(icao_filter)} aircraft), skipping DB filters.")
-            query = query.filter(TrackedAircraft.icao24.in_(icao_filter))
+            query = query.filter(TrackedAircraft.icao24.in_(icao_filter),
+                                 TrackedAircraft.active == True)
         else:
             query = query.filter(TrackedAircraft.aircraft_type == 'airplane',
-                                 TrackedAircraft.payload_capacity_kg > 0)
+                                 TrackedAircraft.payload_capacity_kg > 0,
+                                 TrackedAircraft.active == True)
         rows = query.all()
         by_type = {}
         for r in rows:
