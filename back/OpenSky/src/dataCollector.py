@@ -17,9 +17,12 @@ from aircraftDataHandler import (
     bulk_insert_telemetry
 )
 
-CACHE_FILE      = "tracked_icao_cache.json"
-ADSB_CACHE_FILE = "adsb_supplement_cache.json"
-FR24_CACHE_FILE = "fr24_cache.json"
+CACHE_FILE           = "tracked_icao_cache.json"
+ADSB_CACHE_FILE      = "adsb_supplement_cache.json"
+FR24_CACHE_FILE      = "fr24_cache.json"
+FR24_FETCHED_ID_FILE = "fr24_fetched_ids.json"
+
+FR24_FETCHED_TTL = 48 * 3600  # prune completed legs older than 48h
 
 
 def _info_score(point):
@@ -142,8 +145,6 @@ def update_fr24_cache(icao_filter=None, hours=3):
         logger.info("FR24 cache: no tracked aircraft with registrations.")
         return
 
-    bbox       = FirefleetCollector(None).default_bbox
-    fr24_bounds = f"{bbox['lamax']},{bbox['lamin']},{bbox['lomin']},{bbox['lomax']}"
     all_reg_to_icao = {reg: icao for d in by_type.values() for reg, icao in d.items()}
 
     now    = int(time.time())
@@ -151,39 +152,46 @@ def update_fr24_cache(icao_filter=None, hours=3):
     dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
 
     logger.info(f"FR24 cache: lookback window = {hours}h ({dt_from} → {dt_to})")
-    # 1. Get all flight legs active in the last {hours} hours
+    # Load completed fr24_ids already fetched — {fr24_id: fetched_at_unix}
+    fetched_ids = {}
+    if os.path.exists(FR24_FETCHED_ID_FILE):
+        try:
+            with open(FR24_FETCHED_ID_FILE, 'r') as f:
+                fetched_ids = json.load(f)
+        except Exception:
+            fetched_ids = {}
+    # Prune entries older than TTL
+    cutoff = now - FR24_FETCHED_TTL
+    fetched_ids = {k: v for k, v in fetched_ids.items() if v >= cutoff}
+
+    # 1. Get all flight legs in the window
     summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
 
-    # 2. Fetch tracks for every leg, grouped by icao24
+    # 2. Fetch tracks — skip completed legs already in the fetched set
     tracks_by_icao = {}
     for entry in summaries:
-        icao    = entry['icao24']
-        fr24_id = entry['fr24_id']
-        if fr24_id:
-            time.sleep(6)  # 10 req/min budget
-            points = fr24.get_track(icao, fr24_id)
-            tracks_by_icao.setdefault(icao, []).extend(points)
+        icao         = entry['icao24']
+        fr24_id      = entry['fr24_id']
+        flight_ended = entry.get('flight_ended', False)
+        if not fr24_id:
+            continue
+        if flight_ended and fr24_id in fetched_ids:
+            logger.info(f"[{icao}] FR24: skipping completed leg {fr24_id} (already fetched).")
+            continue
+        time.sleep(6)  # 10 req/min budget
+        points = fr24.get_track(icao, fr24_id)
+        tracks_by_icao.setdefault(icao, []).extend(points)
+        if flight_ended:
+            fetched_ids[fr24_id] = now
 
-    # 3. Get current live positions (snapshot) within bbox
-    live = {}
-    for aircraft_type, reg_to_icao in by_type.items():
-        logger.info(f"FR24 cache: querying live positions for {len(reg_to_icao)} {aircraft_type}s")
-        live.update(fr24.get_by_registrations(reg_to_icao, bounds=fr24_bounds))
+    # Persist updated fetched set
+    with open(FR24_FETCHED_ID_FILE, 'w') as f:
+        json.dump(fetched_ids, f)
 
-    # 4. Build cache: all icao24s seen in either summaries or live positions
+    # 3. Build cache from tracks only
     results = {}
-    all_icaos = set(tracks_by_icao.keys()) | set(live.keys())
-    for icao in all_icaos:
-        data         = live.get(icao, {'icao24': icao, 'source': 'fr24'})
-        track_points = tracks_by_icao.get(icao, [])
-        if icao in live:
-            snapshot = [
-                data['timestamp'], data['lat'], data['lon'],
-                data.get('baro_alt'), data.get('true_track'), data.get('on_ground', False),
-            ]
-            track_points = track_points + [snapshot]
-        data['track'] = track_points
-        results[icao] = data
+    for icao, track_points in tracks_by_icao.items():
+        results[icao] = {'icao24': icao, 'source': 'fr24', 'track': track_points}
 
     if results:
         with open(FR24_CACHE_FILE, 'w') as f:
