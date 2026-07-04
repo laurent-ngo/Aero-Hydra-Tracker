@@ -105,10 +105,11 @@ def update_adsb_cache():
 
     logger.info(f"ADSB cache updated: {new_count} new points, {updated_count} replaced with richer data.")
 
-def update_fr24_cache(icao_filter=None):
-    """Query FR24 for the full fleet and cache positions and tracks for the last 3 hours.
+def update_fr24_cache(icao_filter=None, hours=3):
+    """Query FR24 for the full fleet and cache positions and tracks.
 
     icao_filter: optional list of icao24 strings — bypasses DB type/capacity filters.
+    hours: lookback window in hours (default 3).
     """
     fr24 = FR24Collector() if os.getenv('FR24_API_KEY') else None
     if not fr24:
@@ -144,10 +145,11 @@ def update_fr24_cache(icao_filter=None):
     all_reg_to_icao = {reg: icao for d in by_type.values() for reg, icao in d.items()}
 
     now    = int(time.time())
-    dt_from = datetime.utcfromtimestamp(now - 3 * 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
+    dt_from = datetime.utcfromtimestamp(now - hours * 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
     dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-    # 1. Get all flight legs active in the last 3 hours
+    logger.info(f"FR24 cache: lookback window = {hours}h ({dt_from} → {dt_to})")
+    # 1. Get all flight legs active in the last {hours} hours
     summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
 
     # 2. Fetch tracks for every leg, grouped by icao24
