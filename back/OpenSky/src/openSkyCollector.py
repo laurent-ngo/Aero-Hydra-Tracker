@@ -475,7 +475,11 @@ class FR24Collector:
                 for entry in response.json().get('data', []):
                     icao24 = str(entry.get('hex', '') or '').lower().strip()
                     if icao24 and icao24 in icao_lower:
-                        summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+                        summaries.append({
+                            'fr24_id':      entry.get('fr24_id'),
+                            'icao24':       icao24,
+                            'flight_ended': entry.get('flight_ended', False),
+                        })
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code if e.response is not None else None
                 if status == 400:
@@ -488,7 +492,11 @@ class FR24Collector:
                             for entry in r.json().get('data', []):
                                 icao24 = str(entry.get('hex', '') or '').lower().strip()
                                 if icao24 and icao24 in icao_lower:
-                                    summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+                                    summaries.append({
+                                        'fr24_id':      entry.get('fr24_id'),
+                                        'icao24':       icao24,
+                                        'flight_ended': entry.get('flight_ended', False),
+                                    })
                         except requests.exceptions.HTTPError as e2:
                             status2 = e2.response.status_code if e2.response is not None else None
                             if status2 == 429:
@@ -502,7 +510,11 @@ class FR24Collector:
                                     for entry in r.json().get('data', []):
                                         icao24 = str(entry.get('hex', '') or '').lower().strip()
                                         if icao24 and icao24 in icao_lower:
-                                            summaries.append({'fr24_id': entry.get('fr24_id'), 'icao24': icao24})
+                                            summaries.append({
+                                                'fr24_id':      entry.get('fr24_id'),
+                                                'icao24':       icao24,
+                                                'flight_ended': entry.get('flight_ended', False),
+                                            })
                                 except Exception as e3:
                                     logger.info(f"FR24 flight-summary skipped '{reg}' after retry: {e3}")
                             else:
