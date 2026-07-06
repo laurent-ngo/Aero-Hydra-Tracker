@@ -202,7 +202,6 @@ class AdsbV2Collector:
         'adsbfi':       'https://opendata.adsb.fi/api',
         'airplaneslive':'https://api.airplanes.live/v2',
         'adsbonelol':   'https://api.adsb.lol/v2',
-        'adsboneapi':   'https://api.adsb.one/v2',
     }
 
     def __init__(self, source='adsbfi'):
