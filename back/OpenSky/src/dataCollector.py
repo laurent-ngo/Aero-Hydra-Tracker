@@ -45,7 +45,6 @@ def update_adsb_cache():
         AdsbV2Collector('adsbfi'),
         AdsbV2Collector('airplaneslive'),
         AdsbV2Collector('adsbonelol'),
-        AdsbV2Collector('adsboneapi'),
     ]
 
     full_db_icao_list = get_cached_icao_list()

@@ -202,7 +202,6 @@ class AdsbV2Collector:
         'adsbfi':       'https://opendata.adsb.fi/api',
         'airplaneslive':'https://api.airplanes.live/v2',
         'adsbonelol':   'https://api.adsb.lol/v2',
-        'adsboneapi':   'https://api.adsb.one/v2',
     }
 
     def __init__(self, source='adsbfi'):
@@ -211,46 +210,51 @@ class AdsbV2Collector:
         self.source = source
         self.base_url = self.SOURCES[source]
 
+    ICAO_BATCH_SIZE = 50
+
     def get_by_icao24(self, icao_list):
         clean_icao = {icao.lower() for icao in icao_list}
-        if self.source == 'adsbfi':
-            url = f"https://opendata.adsb.fi/api/v2/icao/{','.join(clean_icao)}"
-        else:
-            url = f"{self.base_url}/icao/{','.join(clean_icao)}"
+        icao_batch_list = list(clean_icao)
+        results = {}
 
-        try:
-            logger.info(f"Calling {self.source} API")
-            response = requests.get(url, timeout=15)
-            response.raise_for_status()
-            aircraft = response.json().get('ac', [])
+        for i in range(0, len(icao_batch_list), self.ICAO_BATCH_SIZE):
+            batch = icao_batch_list[i:i + self.ICAO_BATCH_SIZE]
+            if self.source == 'adsbfi':
+                url = f"https://opendata.adsb.fi/api/v2/icao/{','.join(batch)}"
+            else:
+                url = f"{self.base_url}/icao/{','.join(batch)}"
 
-            results = {}
-            for ac in aircraft:
-                icao24 = str(ac.get('hex', '')).lower().strip()
-                if icao24 not in clean_icao:
-                    continue
-                lat, lon = ac.get('lat'), ac.get('lon')
-                if lat is None or lon is None:
-                    continue
-                baro_alt = ac.get('alt_baro')
-                results[icao24] = {
-                    'icao24':     icao24,
-                    'timestamp':  int(time.time()) - int(ac.get('seen', 0) or 0),
-                    'lat':        lat,
-                    'lon':        lon,
-                    'baro_alt':   baro_alt if baro_alt != 'ground' else None,
-                    'on_ground':  baro_alt == 'ground',
-                    'true_track': ac.get('track'),
-                    'velocity':   ac.get('gs'),
-                    'source':     self.source,
-                }
+            try:
+                logger.info(f"Calling {self.source} API")
+                response = requests.get(url, timeout=15)
+                response.raise_for_status()
+                aircraft = response.json().get('ac', [])
 
-            logger.info(f"{self.source} returned {len(results)} tracked aircraft")
-            return results
+                for ac in aircraft:
+                    icao24 = str(ac.get('hex', '')).lower().strip()
+                    if icao24 not in clean_icao:
+                        continue
+                    lat, lon = ac.get('lat'), ac.get('lon')
+                    if lat is None or lon is None:
+                        continue
+                    baro_alt = ac.get('alt_baro')
+                    results[icao24] = {
+                        'icao24':     icao24,
+                        'timestamp':  int(time.time()) - int(ac.get('seen', 0) or 0),
+                        'lat':        lat,
+                        'lon':        lon,
+                        'baro_alt':   baro_alt if baro_alt != 'ground' else None,
+                        'on_ground':  baro_alt == 'ground',
+                        'true_track': ac.get('track'),
+                        'velocity':   ac.get('gs'),
+                        'source':     self.source,
+                    }
 
-        except Exception as e:
-            logger.error(f"{self.source} error: {e}")
-            return {}
+            except Exception as e:
+                logger.error(f"{self.source} error: {e}")
+
+        logger.info(f"{self.source} returned {len(results)} tracked aircraft")
+        return results
 
     def scan_by_area(self, lat, lon, radius_nm=500, model_keywords=None, type_codes=None, blacklist=None):
 
