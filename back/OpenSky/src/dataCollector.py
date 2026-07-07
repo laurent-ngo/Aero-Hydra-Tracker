@@ -164,8 +164,29 @@ def update_fr24_cache(icao_filter=None, hours=3):
     cutoff = now - FR24_FETCHED_TTL
     fetched_ids = {k: v for k, v in fetched_ids.items() if v >= cutoff}
 
+    # Load previous cache — recover fr24_ids for ongoing legs that may fall
+    # outside the current flight-summary window (departed before dt_from)
+    prev_ongoing = {}  # {icao24: fr24_id} for legs not yet marked completed
+    if os.path.exists(FR24_CACHE_FILE):
+        try:
+            with open(FR24_CACHE_FILE, 'r') as f:
+                prev_cache = json.load(f)
+            for icao, data in prev_cache.items():
+                fr24_id = data.get('fr24_id')
+                if fr24_id and fr24_id not in fetched_ids:
+                    prev_ongoing[icao] = fr24_id
+        except Exception:
+            pass
+
     # 1. Get all flight legs in the window
     summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
+
+    # Merge in ongoing legs from previous cache not already covered by summaries
+    summary_fr24_ids = {e['fr24_id'] for e in summaries if e.get('fr24_id')}
+    for icao, fr24_id in prev_ongoing.items():
+        if fr24_id not in summary_fr24_ids:
+            logger.info(f"[{icao}] FR24: carrying over ongoing leg {fr24_id} from previous cache.")
+            summaries.append({'icao24': icao, 'fr24_id': fr24_id, 'flight_ended': False})
 
     # 2. Fetch tracks — skip completed legs already in the fetched set
     tracks_by_icao = {}
@@ -188,10 +209,13 @@ def update_fr24_cache(icao_filter=None, hours=3):
     with open(FR24_FETCHED_ID_FILE, 'w') as f:
         json.dump(fetched_ids, f)
 
-    # 3. Build cache from tracks only
+    # 3. Build cache from tracks only — store fr24_id so next run can carry it over
     results = {}
-    for icao, track_points in tracks_by_icao.items():
-        results[icao] = {'icao24': icao, 'source': 'fr24', 'track': track_points}
+    for entry in summaries:
+        icao    = entry['icao24']
+        fr24_id = entry['fr24_id']
+        if icao in tracks_by_icao:
+            results[icao] = {'icao24': icao, 'source': 'fr24', 'fr24_id': fr24_id, 'track': tracks_by_icao[icao]}
 
     if results:
         with open(FR24_CACHE_FILE, 'w') as f:
