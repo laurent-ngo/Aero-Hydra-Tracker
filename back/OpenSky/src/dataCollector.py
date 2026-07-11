@@ -22,7 +22,7 @@ ADSB_CACHE_FILE      = "adsb_supplement_cache.json"
 FR24_CACHE_FILE      = "fr24_cache.json"
 FR24_FETCHED_ID_FILE = "fr24_fetched_ids.json"
 
-FR24_FETCHED_TTL = 48 * 3600  # prune completed legs older than 48h
+FR24_FETCHED_TTL = 6 * 3600  # prune completed legs older than 6h
 
 
 def _info_score(point):
@@ -165,16 +165,31 @@ def update_fr24_cache(icao_filter=None, hours=3):
     fetched_ids = {k: v for k, v in fetched_ids.items() if v >= cutoff}
 
     # Load previous cache — recover fr24_ids for ongoing legs that may fall
-    # outside the current flight-summary window (departed before dt_from)
-    prev_ongoing = {}  # {icao24: fr24_id} for legs not yet marked completed
+    # outside the current flight-summary window (departed before dt_from).
+    # Skip legs where the last point is on the ground or older than 3 hours.
+    stale_cutoff = now - 3 * 3600
+    prev_ongoing = {}
     if os.path.exists(FR24_CACHE_FILE):
         try:
             with open(FR24_CACHE_FILE, 'r') as f:
                 prev_cache = json.load(f)
             for icao, data in prev_cache.items():
                 fr24_id = data.get('fr24_id')
-                if fr24_id and fr24_id not in fetched_ids:
-                    prev_ongoing[icao] = fr24_id
+                if not fr24_id or fr24_id in fetched_ids:
+                    continue
+                track = data.get('track', [])
+                if not track:
+                    continue
+                last = track[-1]  # [timestamp, lat, lon, baro_alt, true_track, on_ground]
+                last_ts   = last[0] if len(last) > 0 else 0
+                on_ground = last[5] if len(last) > 5 else False
+                if on_ground:
+                    logger.info(f"[{icao}] FR24: leg {fr24_id} ended on ground, not carrying over.")
+                    continue
+                if last_ts < stale_cutoff:
+                    logger.info(f"[{icao}] FR24: leg {fr24_id} last seen >3h ago, not carrying over.")
+                    continue
+                prev_ongoing[icao] = fr24_id
         except Exception:
             pass
 
