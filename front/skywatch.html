@@ -729,16 +729,14 @@ function airfieldClusterStyle(feature){
   });
 }
 
-function renderAirfields(){
+function renderAirfields(fleetOverride, nowOverride){
   const src=airfieldSource;src.clear();
-  if(!allAircraftFleet.length)return;  // wait until fleet data is loaded
-  const fleetSource=allAircraftFleet;
+  const fleetSource=fleetOverride||allAircraftFleet;
+  if(!fleetSource.length)return;
 
-  // Group fleet aircraft by last_airfield.
-  // Exclude aircraft that are not currently at the airfield and haven't been seen within the stale threshold.
   const staleDays = parseInt(document.getElementById('stale-threshold-days')?.value ?? '30');
   const STALE_THRESHOLD_S = staleDays > 0 ? staleDays * 24 * 3600 : Infinity;
-  const nowS = Math.floor(Date.now() / 1000);
+  const nowS = nowOverride||Math.floor(Date.now() / 1000);
   const groups={};
   fleetSource.forEach(ac=>{
     if(!ac.last_airfield)return;
@@ -1637,13 +1635,15 @@ setInterval(()=>{
 },1000);
 
 // REPLAY
+const REPLAY_TRAIL_SECONDS = 600; // 10-minute rolling trail
 let replayTimer=null,replayCursor=0,replayPlaying=false;
 function replayRenderAt(ts){
   const src=aircraftLayer.getSource();src.clear();
   const trk=trackLayer.getSource();trk.clear();
 
-  // Use full fleet — anyone with cached tracks in this time range
+  const trailCutoff = ts - REPLAY_TRAIL_SECONDS;
   const replayAircraft = allAircraftFleet.filter(ac => tracksCache[ac.icao24]?.length > 0);
+  const replayFleetState = [];
 
   replayAircraft.forEach(ac=>{
     const pts=tracksCache[ac.icao24];
@@ -1655,26 +1655,43 @@ function replayRenderAt(ts){
     const color=acColor({...ac,at_airfield:p.at_airfield,is_full:p.is_full});
     const feat=new ol.Feature({
       geometry:new ol.geom.Point(ol.proj.fromLonLat([p.lon,p.lat])),
-      aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full}
+      aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full,last_airfield:p.latest_airfield}
     });
     feat.setStyle(aircraftStyle(ac.icon,p.true_track,color,ac.icon_size,ac.icao24===selectedIcao));
     feat.setId(ac.icao24);
     src.addFeature(feat);
-    const tail=pts.slice(0,idx+1);
-    for(let i=0;i<tail.length-1;i++){
-      const p0=tail[i],p1=tail[i+1];if(p0.lon==null||p1.lon==null)continue;
+
+    // Accumulate replay fleet state for airfield markers
+    replayFleetState.push({
+      ...ac,
+      last_lon:p.lon, last_lat:p.lat,
+      at_airfield:p.at_airfield,
+      is_full:p.is_full,
+      last_airfield:p.latest_airfield,
+      last_timestamp:p.timestamp,
+    });
+
+    // Draw trail: rolling window + persistent low-pass lines
+    for(let i=0;i<idx;i++){
+      const p0=pts[i],p1=pts[i+1];
+      if(p0.lon==null||p1.lon==null)continue;
+      const veryLow = p0.altitude_agl_ft != null && p0.altitude_agl_ft < 100;
+      if(!veryLow && p0.timestamp < trailCutoff)continue;
       const sf=new ol.Feature({geometry:new ol.geom.LineString([
         ol.proj.fromLonLat([p0.lon,p0.lat]),
         ol.proj.fromLonLat([p1.lon,p1.lat])
       ])});
       sf.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({
         color:altColor(p0.altitude_agl_ft??null),
-        width:ac.icao24===selectedIcao?3:1.5,
+        width:veryLow?(ac.icao24===selectedIcao?4:2):(ac.icao24===selectedIcao?3:1.5),
         lineCap:'round'
       })}));
       trk.addFeature(sf);
     }
   });
+
+  // Rebuild airfield markers from replayed state
+  renderAirfields(replayFleetState, ts);
 
   document.getElementById('replay-time').textContent=new Date(ts*1000).toUTCString().slice(0,25);
   const pct=timeStart&&timeStop&&timeStop>timeStart?((ts-timeStart)/(timeStop-timeStart))*1000:0;
