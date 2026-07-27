@@ -358,7 +358,7 @@
         <select id="toggle-tracks" onchange="renderTracks()"><option value="all">All</option><option value="selected">Selected</option><option value="none">None</option></select>
       </div>
       <div class="filter-row"><label>ROIs</label>
-        <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="water">Water only</option><option value="training">Training only</option><option value="none">Hidden</option></select>
+        <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="fire-named">Fire (named)</option><option value="water">Water only</option><option value="water-named">Water (named)</option><option value="none">Hidden</option></select>
       </div>
       <div class="filter-row"><label>Events</label>
         <select id="toggle-active-events" onchange="renderActiveEvents()"><option value="show">Visible</option><option value="none">Hidden</option></select>
@@ -1241,14 +1241,25 @@ function pointInPolygon(plat,plon,coords){
   }
   return inside;
 }
+const _autoNameRe=/^(Area \d{6}|Level \d+ Zone - Area \d+)$/;
+function _isNamed(roi,coords){
+  if(roi.type==='fire'){
+    return !!fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords));
+  }
+  return roi.name&&!_autoNameRe.test(roi.name);
+}
 function renderROIs(){
   const src=roiLayer.getSource();src.clear();
   const rm=document.getElementById('toggle-rois').value;if(rm==='none')return;
   roiData.forEach(roi=>{
-    if(rm!=='all'&&roi.type!==rm)return;
+    const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
+    if(!coords||coords.length<3)return;
+    if(rm==='fire'&&roi.type!=='fire')return;
+    else if(rm==='fire-named'&&(roi.type!=='fire'||!_isNamed(roi,coords)))return;
+    else if(rm==='water'&&roi.type!=='water')return;
+    else if(rm==='water-named'&&(roi.type!=='water'||!_isNamed(roi,coords)))return;
+    else if(rm!=='all'&&rm!=='fire'&&rm!=='fire-named'&&rm!=='water'&&rm!=='water-named')return;
     try{
-      const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
-      if(!coords||coords.length<3)return;
       const matchedFl=roi.type==='fire'?fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords)):null;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),

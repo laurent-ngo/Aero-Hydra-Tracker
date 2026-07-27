@@ -156,11 +156,11 @@ def list_active_aircraft(
     lon_min: Optional[float] = Query(None),
     lon_max: Optional[float] = Query(None),
 ):
-    # 1. Get unique ICAOs within timeframe
-    active_icaos = db.query(migrate.TrackedAircraft.icao24).filter(
-        migrate.TrackedAircraft.last_seen >= start,
-        migrate.TrackedAircraft.last_seen <= stop
-    ).all()
+    # 1. Get unique ICAOs that have telemetry within the timeframe
+    active_icaos = db.query(migrate.FlightTelemetry.icao24).filter(
+        migrate.FlightTelemetry.timestamp >= start,
+        migrate.FlightTelemetry.timestamp <= stop
+    ).distinct().all()
 
 
     icao_list = [i[0] for i in active_icaos]
@@ -179,7 +179,7 @@ def get_telemetry(
     icao24: str,
     start: Optional[int] = None,
     stop: Optional[int] = None,
-    limit: int = 1000,
+    limit: int = 10000,
     lat_min: Optional[float] = Query(None),
     lat_max: Optional[float] = Query(None),
     lon_min: Optional[float] = Query(None),
@@ -198,9 +198,9 @@ def get_telemetry(
         if timespan < 0:
             raise HTTPException(status_code=400,
                 detail="Start timestamp must be before stop timestamp.")
-        if timespan > 86400:
+        if timespan > 7 * 86400:
             raise HTTPException(status_code=400,
-                detail="Timespan exceeds 7 Days. Please reduce the range for a more precise mission view."
+                detail="Timespan exceeds 7 days. Please reduce the range."
             )
 
     # Query construction
