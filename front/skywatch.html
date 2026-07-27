@@ -1225,7 +1225,8 @@ function renderTracks(){
     for(let i=0;i<pts.length-1;i++){
       const p0=pts[i],p1=pts[i+1];
       const feat=new ol.Feature({geometry:new ol.geom.LineString([ol.proj.fromLonLat([p0.lon,p0.lat]),ol.proj.fromLonLat([p1.lon,p1.lat])])});
-      feat.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({color:altColor(p0.altitude_agl_ft??null),width:sel?3:1.5,lineCap:'round'})}));
+      const liveAgl=(p0.baro_altitude!=null&&p0.baro_altitude>0)?(p0.altitude_agl_ft??null):null;
+      feat.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({color:altColor(liveAgl),width:sel?3:1.5,lineCap:'round'})}));
       src.addFeature(feat);
     }
   });
@@ -1675,14 +1676,15 @@ function replayRenderAt(ts){
     for(let i=0;i<idx;i++){
       const p0=pts[i],p1=pts[i+1];
       if(p0.lon==null||p1.lon==null)continue;
-      const veryLow = p0.altitude_agl_ft != null && p0.altitude_agl_ft < 100;
+      const aglFt = (p0.baro_altitude != null && p0.baro_altitude > 0) ? (p0.altitude_agl_ft ?? null) : null;
+      const veryLow = aglFt != null && aglFt < 100;
       if(!veryLow && p0.timestamp < trailCutoff)continue;
       const sf=new ol.Feature({geometry:new ol.geom.LineString([
         ol.proj.fromLonLat([p0.lon,p0.lat]),
         ol.proj.fromLonLat([p1.lon,p1.lat])
       ])});
       sf.setStyle(new ol.style.Style({stroke:new ol.style.Stroke({
-        color:altColor(p0.altitude_agl_ft??null),
+        color:altColor(aglFt),
         width:veryLow?(ac.icao24===selectedIcao?4:2):(ac.icao24===selectedIcao?3:1.5),
         lineCap:'round'
       })}));
