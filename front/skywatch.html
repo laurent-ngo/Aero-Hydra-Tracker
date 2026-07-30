@@ -1641,6 +1641,7 @@ function replayRenderAt(ts){
   const src=aircraftLayer.getSource();src.clear();
   const trk=trackLayer.getSource();trk.clear();
 
+  waterfieldLayer.getSource().clear();
   const trailCutoff = ts - REPLAY_TRAIL_SECONDS;
   const replayAircraft = allAircraftFleet.filter(ac => tracksCache[ac.icao24]?.length > 0);
   const replayFleetState = [];
