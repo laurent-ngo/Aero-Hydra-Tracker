@@ -761,6 +761,18 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--start",
+        metavar="DATETIME",
+        help="Start datetime for --fr24-cache window, e.g. 2024-08-01T10:00:00 (overrides --hours)"
+    )
+
+    parser.add_argument(
+        "--end",
+        metavar="DATETIME",
+        help="End datetime for --fr24-cache window, e.g. 2024-08-01T18:00:00 (default: now)"
+    )
+
+    parser.add_argument(
         "--discover",
         action="store_true",
         help="Scan for new firefighting aircraft not yet in the DB"
@@ -779,9 +791,15 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args.fr24_cache:
+        def _parse_dt(s):
+            from datetime import datetime
+            s = s.rstrip('Z').replace(' ', 'T')
+            return datetime.fromisoformat(s).strftime('%Y-%m-%dT%H:%M:%SZ')
         update_fr24_cache(
             icao_filter=[i.lower() for i in args.icao] if args.icao else None,
             hours=args.hours,
+            dt_from_override=_parse_dt(args.start) if args.start else None,
+            dt_to_override=_parse_dt(args.end) if args.end else None,
         )
         sys.exit(0)
 

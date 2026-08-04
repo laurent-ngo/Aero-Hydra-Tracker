@@ -108,11 +108,13 @@ def update_adsb_cache():
 
     logger.info(f"ADSB cache updated: {new_count} new points, {updated_count} replaced with richer data.")
 
-def update_fr24_cache(icao_filter=None, hours=3):
+def update_fr24_cache(icao_filter=None, hours=3, dt_from_override=None, dt_to_override=None):
     """Query FR24 for the full fleet and cache positions and tracks.
 
     icao_filter: optional list of icao24 strings — bypasses DB type/capacity filters.
-    hours: lookback window in hours (default 3).
+    hours: lookback window in hours (default 3), ignored when dt_from_override is set.
+    dt_from_override: ISO datetime string for window start (e.g. '2024-08-01T10:00:00Z').
+    dt_to_override: ISO datetime string for window end (default: now).
     """
     fr24 = FR24Collector() if os.getenv('FR24_API_KEY') else None
     if not fr24:
@@ -147,11 +149,15 @@ def update_fr24_cache(icao_filter=None, hours=3):
 
     all_reg_to_icao = {reg: icao for d in by_type.values() for reg, icao in d.items()}
 
-    now    = int(time.time())
-    dt_from = datetime.utcfromtimestamp(now - hours * 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
-    dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-    logger.info(f"FR24 cache: lookback window = {hours}h ({dt_from} → {dt_to})")
+    now = int(time.time())
+    if dt_from_override:
+        dt_from = dt_from_override
+        dt_to   = dt_to_override or datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
+        logger.info(f"FR24 cache: explicit window ({dt_from} → {dt_to})")
+    else:
+        dt_from = datetime.utcfromtimestamp(now - hours * 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
+        dt_to   = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
+        logger.info(f"FR24 cache: lookback window = {hours}h ({dt_from} → {dt_to})")
     # Load completed fr24_ids already fetched — {fr24_id: fetched_at_unix}
     fetched_ids = {}
     if os.path.exists(FR24_FETCHED_ID_FILE):
@@ -383,11 +389,12 @@ def discover_new_aircraft():
     Scan for firefighting aircraft not yet in the DB using free ADSB sources.
     Returns list of newly discovered aircraft dicts.
     """
-    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'A139', 'EC45', 'S64', 'B214' ]
+    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'A139', 'EC45', 'S64', 'B214', 'T710' ]
     SCAN_KEYWORDS = [
         'canadair', 'bombardier 415', 'superscooper', 'air tractor',
         'dhc-515', 'cl-215', 'cl-415', 'Leonardo AW139', 'Airbus Helicopters H145',
-        'Airbus Helicopters H125', 'Erickson S-64F Skycrane', 'BELL 214'
+        'Airbus Helicopters H125', 'Erickson S-64F Skycrane', 'BELL 214',
+        'Thrush 710', 'S2R-T710',
     ]
     SCAN_RADIUS_NM  = 250
 
