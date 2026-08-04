@@ -19,6 +19,8 @@
     .leg-swatch{display:inline-block;width:22px;height:3px;border-radius:2px;flex-shrink:0;}
     #replay-bar{display:none;flex-shrink:0;background:var(--panel);border-top:1px solid var(--panel-border);padding:8px 16px;gap:12px;align-items:center;font-family:'Share Tech Mono',monospace;font-size:11px;}
     #replay-bar.visible{display:flex;}
+    #replay-spinner{display:none;width:16px;height:16px;border:2px solid var(--panel-border);border-top-color:var(--accent);border-radius:50%;animation:replay-spin 0.7s linear infinite;flex-shrink:0;}
+    @keyframes replay-spin{to{transform:rotate(360deg)}}
     #replay-slider{flex:1;accent-color:var(--accent);height:4px;cursor:pointer;}
     .replay-btn{background:transparent;border:1px solid var(--panel-border);color:var(--text);width:30px;height:30px;border-radius:3px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;}
     .replay-btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -461,6 +463,7 @@
         <option value="1">x1</option><option value="5">x5</option><option value="10">x10</option>
         <option value="30" selected>x30</option><option value="60">x60</option><option value="120">x120</option>
       </select>
+      <div id="replay-spinner"></div>
     </div>
 
     <div class="bottom-panel collapsed" id="bottom-panel">
@@ -1635,8 +1638,16 @@ setInterval(()=>{
 },1000);
 
 // REPLAY
-const REPLAY_TRAIL_SECONDS = 600; // 10-minute rolling trail
+const REPLAY_TRAIL_SECONDS = 600;
+const REPLAY_CHUNK_SECONDS = 7200;
+const REPLAY_PREFETCH_LEAD = 900;
+const REPLAY_MAX_SEGMENT_KM = 5;    // skip segments longer than this (data gaps)
 let replayTimer=null,replayCursor=0,replayPlaying=false;
+let tracksReplayEnd={},replayFetching={},replayLoadCount=0;
+function replaySetLoading(delta){
+  replayLoadCount=Math.max(0,replayLoadCount+delta);
+  document.getElementById('replay-spinner').style.display=replayLoadCount>0?'block':'none';
+}
 function replayRenderAt(ts){
   const src=aircraftLayer.getSource();src.clear();
   const trk=trackLayer.getSource();trk.clear();
@@ -1679,6 +1690,8 @@ function replayRenderAt(ts){
       const aglFt = (p0.baro_altitude != null && p0.baro_altitude > 0) ? (p0.altitude_agl_ft ?? null) : null;
       const veryLow = aglFt != null && aglFt < 100;
       if(!veryLow && p0.timestamp < trailCutoff)continue;
+      const dlat=p1.lat-p0.lat,dlon=(p1.lon-p0.lon)*Math.cos((p0.lat+p1.lat)*Math.PI/360);
+      if(Math.sqrt(dlat*dlat+dlon*dlon)*111.32>REPLAY_MAX_SEGMENT_KM)continue;
       const sf=new ol.Feature({geometry:new ol.geom.LineString([
         ol.proj.fromLonLat([p0.lon,p0.lat]),
         ol.proj.fromLonLat([p1.lon,p1.lat])
@@ -1709,17 +1722,51 @@ function replayTick(){
   if(!replayPlaying)return;
   replayCursor+=parseInt(document.getElementById('replay-speed').value)*0.1;
   if(replayCursor>=timeStop){replayCursor=timeStop;replayPlaying=false;document.getElementById('replay-playpause').textContent='▶';document.getElementById('replay-playpause').classList.remove('active');}
-  replayRenderAt(replayCursor);if(replayPlaying)replayTimer=setTimeout(replayTick,100);
+  replayRenderAt(replayCursor);
+  replayMaybePrefetch(replayCursor);
+  if(replayPlaying)replayTimer=setTimeout(replayTick,100);
 }
-function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart);replayRenderAt(replayCursor);}
+function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart);replayRenderAt(replayCursor);replayMaybePrefetch(replayCursor);}
 function replayStepBack(){replayCursor=Math.max(timeStart,replayCursor-60);replayRenderAt(replayCursor);}
 function replayStepFwd(){replayCursor=Math.min(timeStop,replayCursor+60);replayRenderAt(replayCursor);}
+async function fetchTrackChunk(icao24,chunkStart,chunkEnd){
+  if(!icao24)return;
+  replaySetLoading(+1);
+  try{
+    const params=new URLSearchParams();
+    params.set('start',chunkStart);params.set('stop',chunkEnd);
+    const res=await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}&${_mapBboxParams()}`,{headers:apiHeaders()});
+    if(!res.ok){replaySetLoading(-1);return;}
+    const data=await res.json();
+    const existing=tracksCache[icao24]||[];
+    const merged=[...existing,...(Array.isArray(data)?data:[])].sort((a,b)=>a.timestamp-b.timestamp);
+    tracksCache[icao24]=merged.filter((p,i)=>i===0||p.timestamp!==merged[i-1].timestamp);
+    tracksReplayEnd[icao24]=chunkEnd;
+  }catch(e){}
+  replaySetLoading(-1);
+}
+function replayMaybePrefetch(cursor){
+  if(!allAircraftFleet)return;
+  allAircraftFleet.forEach(ac=>{
+    const loaded=tracksReplayEnd[ac.icao24];
+    if(!loaded||loaded>=timeStop)return;
+    if(cursor+REPLAY_PREFETCH_LEAD<loaded)return;
+    if(replayFetching[ac.icao24])return;
+    const nextEnd=Math.min(loaded+REPLAY_CHUNK_SECONDS,timeStop);
+    replayFetching[ac.icao24]=true;
+    fetchTrackChunk(ac.icao24,loaded,nextEnd).then(()=>{delete replayFetching[ac.icao24];});
+  });
+}
 function startReplay(){
   stopPolling();
   document.getElementById('replay-bar').classList.add('visible');
+  tracksReplayEnd={};replayFetching={};replayLoadCount=0;
+  tracksCache={};trackLayer.getSource().clear();
+  replaySetLoading(+1);
   fetchAll().then(async ()=>{
-    // Fetch tracks for all fleet aircraft in the time range
-    await Promise.all(allAircraftFleet.map(ac => fetchTrack(ac.icao24)));
+    const chunkEnd=Math.min(timeStart+REPLAY_CHUNK_SECONDS,timeStop);
+    await Promise.all(allAircraftFleet.map(ac=>fetchTrackChunk(ac.icao24,timeStart,chunkEnd)));
+    replaySetLoading(-1);
     replayCursor=timeStart;
     replayPlaying=false;
     document.getElementById('replay-playpause').textContent='▶';
