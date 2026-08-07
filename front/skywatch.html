@@ -19,6 +19,8 @@
     .leg-swatch{display:inline-block;width:22px;height:3px;border-radius:2px;flex-shrink:0;}
     #replay-bar{display:none;flex-shrink:0;background:var(--panel);border-top:1px solid var(--panel-border);padding:8px 16px;gap:12px;align-items:center;font-family:'Share Tech Mono',monospace;font-size:11px;}
     #replay-bar.visible{display:flex;}
+    #replay-spinner{display:none;width:16px;height:16px;border:2px solid var(--panel-border);border-top-color:var(--accent);border-radius:50%;animation:replay-spin 0.7s linear infinite;flex-shrink:0;}
+    @keyframes replay-spin{to{transform:rotate(360deg)}}
     #replay-slider{flex:1;accent-color:var(--accent);height:4px;cursor:pointer;}
     .replay-btn{background:transparent;border:1px solid var(--panel-border);color:var(--text);width:30px;height:30px;border-radius:3px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;}
     .replay-btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -407,12 +409,12 @@
       </div>
       <div id="alt-legend" style="position:absolute;bottom:16px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
         <div style="margin-bottom:4px;letter-spacing:1px;">AGL ALT</div>
-        <div class="leg-row" data-tier="ground"><span class="leg-swatch"></span> &lt; 100 ft - Ground</div>
-        <div class="leg-row" data-tier="taxi"><span class="leg-swatch"></span> &lt; 750 ft - Taxi</div>
-        <div class="leg-row" data-tier="low"><span class="leg-swatch"></span> &lt; 5000 ft - Low</div>
-        <div class="leg-row" data-tier="mid"><span class="leg-swatch"></span> &lt; 13000 ft - Mid</div>
-        <div class="leg-row" data-tier="high"><span class="leg-swatch"></span> &lt; 20000 ft - High</div>
-        <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft - Cruise</div>
+        <div class="leg-row" data-tier="ground"><span class="leg-swatch"></span> &lt; 100 ft</div>
+        <div class="leg-row" data-tier="taxi"><span class="leg-swatch"></span> &lt; 750 ft</div>
+        <div class="leg-row" data-tier="low"><span class="leg-swatch"></span> &lt; 5000 ft</div>
+        <div class="leg-row" data-tier="mid"><span class="leg-swatch"></span> &lt; 13000 ft</div>
+        <div class="leg-row" data-tier="high"><span class="leg-swatch"></span> &lt; 20000 ft</div>
+        <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft</div>
         <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
       </div>
       <div id="heatmap-legend" style="display:none;position:absolute;top:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
@@ -456,11 +458,13 @@
       <button class="replay-btn" onclick="replayStepBack()">&#x23EE;</button>
       <button class="replay-btn" onclick="replayStepFwd()">&#x23ED;</button>
       <input type="range" id="replay-slider" min="0" max="1000" value="0" oninput="replayScrub(this.value)"/>
-      <div class="replay-time" id="replay-time">--:--:-- UTC</div>
+      <div class="replay-time" id="replay-time" style="min-width:220px;">--:--:-- UTC<br><span style="font-size:10px;opacity:0.7;" id="replay-time-local">--:--:-- local</span></div>
       <select class="replay-speed" id="replay-speed">
         <option value="1">x1</option><option value="5">x5</option><option value="10">x10</option>
         <option value="30" selected>x30</option><option value="60">x60</option><option value="120">x120</option>
+        <option value="240">x240</option><option value="500">x500</option><option value="1000">x1000</option>
       </select>
+      <div id="replay-spinner"></div>
     </div>
 
     <div class="bottom-panel collapsed" id="bottom-panel">
@@ -668,8 +672,7 @@ const AIRCRAFT_COLORS={ground:{fill:'#94a3b8'},airborne:{fill:'#22c55e'},full:{f
 function acColor(ac){
   if(ac.at_airfield)return AIRCRAFT_COLORS.ground.fill;
   const p=ac.payload_capacity_kg!=null&&ac.payload_capacity_kg>0;
-  if(p&&ac.is_full)return AIRCRAFT_COLORS.full.fill;
-  if(p)return AIRCRAFT_COLORS.empty.fill;
+  if(p)return AIRCRAFT_COLORS.full.fill;
   return AIRCRAFT_COLORS.airborne.fill;
 }
 
@@ -743,15 +746,15 @@ function renderAirfields(fleetOverride, nowOverride){
     // If not physically at the airfield and last seen beyond the stale threshold, skip
     if(!ac.at_airfield && ac.last_timestamp && (nowS - ac.last_timestamp) > STALE_THRESHOLD_S)return;
     const key=ac.last_airfield;
-    if(!groups[key])groups[key]={aircraft:[],lat:null,lon:null,name:ac.airfield_name||key};
+    const idxEntry=_airfieldIndex[key];
+    if(!groups[key])groups[key]={aircraft:[],lat:idxEntry?.lat??null,lon:idxEntry?.lon??null,name:idxEntry?.name||ac.airfield_name||key};
     groups[key].aircraft.push(ac);
-    // Prefer airfield_lat/lon — overwrite whenever we find it (any aircraft in group may have it)
-    if(ac.airfield_lat!=null&&ac.airfield_lon!=null){
-      groups[key].lat=ac.airfield_lat;
-      groups[key].lon=ac.airfield_lon;
-    } else if(groups[key].lat==null&&ac.last_lat!=null&&ac.last_lon!=null){
-      groups[key].lat=ac.last_lat;  // only use as last resort if nothing better yet
-      groups[key].lon=ac.last_lon;
+    // Fill coords: prefer index (always correct for this ICAO), then ac.airfield_lat/lon if key matches, then aircraft position
+    if(groups[key].lat==null){
+      if(ac.airfield_lat!=null&&ac.airfield_lon!=null)
+        {groups[key].lat=ac.airfield_lat;groups[key].lon=ac.airfield_lon;}
+      else if(ac.last_lat!=null&&ac.last_lon!=null)
+        {groups[key].lat=ac.last_lat;groups[key].lon=ac.last_lon;}
     }
   });
 
@@ -1422,12 +1425,32 @@ async function fetchAircraft(){
     allAircraft.forEach(ac=>fetchTrack(ac.icao24));
   }catch(e){console.warn(e.message);if(se)se.textContent='ERR '+e.message;}
 }
+let _airfieldIndex={};  // ICAO → {lat,lon,name}
+function buildAirfieldIndex(){
+  _airfieldIndex={};
+  allAircraftFleet.forEach(ac=>{
+    if(ac.last_airfield&&ac.airfield_lat!=null&&ac.airfield_lon!=null){
+      if(!_airfieldIndex[ac.last_airfield])
+        _airfieldIndex[ac.last_airfield]={lat:ac.airfield_lat,lon:ac.airfield_lon,name:ac.airfield_name||ac.last_airfield};
+    }
+  });
+}
+function nearestAirfield(lat,lon,maxKm=5){
+  let best=null,bestDist=Infinity;
+  Object.entries(_airfieldIndex).forEach(([icao,af])=>{
+    const dlat=af.lat-lat,dlon=(af.lon-lon)*Math.cos((af.lat+lat)*Math.PI/360);
+    const d=Math.sqrt(dlat*dlat+dlon*dlon)*111.32;
+    if(d<maxKm&&d<bestDist){bestDist=d;best={icao,...af};}
+  });
+  return best;
+}
 async function fetchAllAircraftFleet(){
   try{
     const res=await fetch(`${config.baseUrl}/aircraft`,{headers:apiHeaders()});
     if(!res.ok)return;
     const data=await res.json();
     allAircraftFleet=Array.isArray(data)?data:(data.aircraft||[]);
+    buildAirfieldIndex();
     buildOwnerFilter();
     renderAirfields();
     renderWaterfields();
@@ -1635,8 +1658,16 @@ setInterval(()=>{
 },1000);
 
 // REPLAY
-const REPLAY_TRAIL_SECONDS = 600; // 10-minute rolling trail
+const REPLAY_TRAIL_SECONDS = 600;
+const REPLAY_CHUNK_SECONDS = 7200;
+const REPLAY_PREFETCH_LEAD = 900;
+const REPLAY_MAX_SEGMENT_KM = 5;    // skip segments longer than this (data gaps)
 let replayTimer=null,replayCursor=0,replayPlaying=false;
+let tracksReplayEnd={},replayFetching={},replayLoadCount=0;
+function replaySetLoading(delta){
+  replayLoadCount=Math.max(0,replayLoadCount+delta);
+  document.getElementById('replay-spinner').style.display=replayLoadCount>0?'block':'none';
+}
 function replayRenderAt(ts){
   const src=aircraftLayer.getSource();src.clear();
   const trk=trackLayer.getSource();trk.clear();
@@ -1653,10 +1684,17 @@ function replayRenderAt(ts){
     for(let i=0;i<pts.length;i++){if(pts[i].timestamp<=ts)idx=i;else break;}
     if(idx<0)return;
     const p=pts[idx];if(p.lon==null||p.lat==null)return;
-    const color=acColor({...ac,at_airfield:p.at_airfield,is_full:p.is_full});
+    // Infer at_airfield from on_ground when DB field isn't processed yet
+    let replayLatestAirfield = p.latest_airfield;
+    if(!replayLatestAirfield && p.on_ground){
+      const nearby=nearestAirfield(p.lat,p.lon,5);
+      replayLatestAirfield = nearby?.icao || ac.last_airfield || null;
+    }
+    const replayAtAirfield = p.at_airfield ?? (p.on_ground && !!replayLatestAirfield);
+    const color=acColor({...ac,at_airfield:replayAtAirfield,is_full:p.is_full});
     const feat=new ol.Feature({
       geometry:new ol.geom.Point(ol.proj.fromLonLat([p.lon,p.lat])),
-      aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:p.at_airfield,is_full:p.is_full,last_airfield:p.latest_airfield}
+      aircraft:{...ac,last_lon:p.lon,last_lat:p.lat,at_airfield:replayAtAirfield,is_full:p.is_full,last_airfield:replayLatestAirfield}
     });
     feat.setStyle(aircraftStyle(ac.icon,p.true_track,color,ac.icon_size,ac.icao24===selectedIcao));
     feat.setId(ac.icao24);
@@ -1666,9 +1704,9 @@ function replayRenderAt(ts){
     replayFleetState.push({
       ...ac,
       last_lon:p.lon, last_lat:p.lat,
-      at_airfield:p.at_airfield,
+      at_airfield:replayAtAirfield,
       is_full:p.is_full,
-      last_airfield:p.latest_airfield,
+      last_airfield:replayLatestAirfield,
       last_timestamp:p.timestamp,
     });
 
@@ -1679,6 +1717,8 @@ function replayRenderAt(ts){
       const aglFt = (p0.baro_altitude != null && p0.baro_altitude > 0) ? (p0.altitude_agl_ft ?? null) : null;
       const veryLow = aglFt != null && aglFt < 100;
       if(!veryLow && p0.timestamp < trailCutoff)continue;
+      const dlat=p1.lat-p0.lat,dlon=(p1.lon-p0.lon)*Math.cos((p0.lat+p1.lat)*Math.PI/360);
+      if(Math.sqrt(dlat*dlat+dlon*dlon)*111.32>REPLAY_MAX_SEGMENT_KM)continue;
       const sf=new ol.Feature({geometry:new ol.geom.LineString([
         ol.proj.fromLonLat([p0.lon,p0.lat]),
         ol.proj.fromLonLat([p1.lon,p1.lat])
@@ -1695,7 +1735,9 @@ function replayRenderAt(ts){
   // Rebuild airfield markers from replayed state
   renderAirfields(replayFleetState, ts);
 
-  document.getElementById('replay-time').textContent=new Date(ts*1000).toUTCString().slice(0,25);
+  const _rd=new Date(ts*1000);
+  document.getElementById('replay-time').childNodes[0].textContent=_rd.toUTCString().slice(0,25)+' UTC';
+  document.getElementById('replay-time-local').textContent=_rd.toLocaleString([],{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' local';
   const pct=timeStart&&timeStop&&timeStop>timeStart?((ts-timeStart)/(timeStop-timeStart))*1000:0;
   document.getElementById('replay-slider').value=Math.round(pct);
 }
@@ -1709,17 +1751,51 @@ function replayTick(){
   if(!replayPlaying)return;
   replayCursor+=parseInt(document.getElementById('replay-speed').value)*0.1;
   if(replayCursor>=timeStop){replayCursor=timeStop;replayPlaying=false;document.getElementById('replay-playpause').textContent='▶';document.getElementById('replay-playpause').classList.remove('active');}
-  replayRenderAt(replayCursor);if(replayPlaying)replayTimer=setTimeout(replayTick,100);
+  replayRenderAt(replayCursor);
+  replayMaybePrefetch(replayCursor);
+  if(replayPlaying)replayTimer=setTimeout(replayTick,100);
 }
-function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart);replayRenderAt(replayCursor);}
+function replayScrub(val){replayCursor=timeStart+(val/1000)*(timeStop-timeStart);replayRenderAt(replayCursor);replayMaybePrefetch(replayCursor);}
 function replayStepBack(){replayCursor=Math.max(timeStart,replayCursor-60);replayRenderAt(replayCursor);}
 function replayStepFwd(){replayCursor=Math.min(timeStop,replayCursor+60);replayRenderAt(replayCursor);}
+async function fetchTrackChunk(icao24,chunkStart,chunkEnd){
+  if(!icao24)return;
+  replaySetLoading(+1);
+  try{
+    const params=new URLSearchParams();
+    params.set('start',chunkStart);params.set('stop',chunkEnd);
+    const res=await fetch(`${config.baseUrl}/telemetry/${icao24}?${params}&${_mapBboxParams()}`,{headers:apiHeaders()});
+    if(!res.ok){replaySetLoading(-1);return;}
+    const data=await res.json();
+    const existing=tracksCache[icao24]||[];
+    const merged=[...existing,...(Array.isArray(data)?data:[])].sort((a,b)=>a.timestamp-b.timestamp);
+    tracksCache[icao24]=merged.filter((p,i)=>i===0||p.timestamp!==merged[i-1].timestamp);
+    tracksReplayEnd[icao24]=chunkEnd;
+  }catch(e){}
+  replaySetLoading(-1);
+}
+function replayMaybePrefetch(cursor){
+  if(!allAircraftFleet)return;
+  allAircraftFleet.forEach(ac=>{
+    const loaded=tracksReplayEnd[ac.icao24];
+    if(!loaded||loaded>=timeStop)return;
+    if(cursor+REPLAY_PREFETCH_LEAD<loaded)return;
+    if(replayFetching[ac.icao24])return;
+    const nextEnd=Math.min(loaded+REPLAY_CHUNK_SECONDS,timeStop);
+    replayFetching[ac.icao24]=true;
+    fetchTrackChunk(ac.icao24,loaded,nextEnd).then(()=>{delete replayFetching[ac.icao24];});
+  });
+}
 function startReplay(){
   stopPolling();
   document.getElementById('replay-bar').classList.add('visible');
+  tracksReplayEnd={};replayFetching={};replayLoadCount=0;
+  tracksCache={};trackLayer.getSource().clear();
+  replaySetLoading(+1);
   fetchAll().then(async ()=>{
-    // Fetch tracks for all fleet aircraft in the time range
-    await Promise.all(allAircraftFleet.map(ac => fetchTrack(ac.icao24)));
+    const chunkEnd=Math.min(timeStart+REPLAY_CHUNK_SECONDS,timeStop);
+    await Promise.all(allAircraftFleet.map(ac=>fetchTrackChunk(ac.icao24,timeStart,chunkEnd)));
+    replaySetLoading(-1);
     replayCursor=timeStart;
     replayPlaying=false;
     document.getElementById('replay-playpause').textContent='▶';
