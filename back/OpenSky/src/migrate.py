@@ -129,6 +129,43 @@ class FireLocation(Base):
     lon = Column(Float)
 
 
+class FirmsFireIncident(Base):
+    __tablename__ = 'firms_fire_incident'
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    first_detected = Column(String(10))   # YYYY-MM-DD
+    last_detected  = Column(String(10))   # YYYY-MM-DD
+    status         = Column(String(10), default='active')  # active / closed
+    perimeter      = Column(Text)         # GeoJSON polygon (union of hotspots + buffer)
+    centroid_lat   = Column(Float)
+    centroid_lon   = Column(Float)
+    area_ha        = Column(Float)
+    buffer_km      = Column(Float, default=1.0)
+    hotspot_count  = Column(Integer, default=0)
+    max_frp        = Column(Float)        # max fire radiative power across all hotspots
+
+
+class FirmsHotspot(Base):
+    __tablename__ = 'firms_hotspot'
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    source_id  = Column(String(100), unique=True)  # dedup key
+    fire_id    = Column(Integer, ForeignKey('firms_fire_incident.id'), nullable=True)
+
+    acq_date   = Column(String(10))   # YYYY-MM-DD
+    acq_time   = Column(String(4))    # HHMM
+    lat        = Column(Float)
+    lon        = Column(Float)
+    scan_km    = Column(Float)        # pixel width  (from FIRMS scan field)
+    track_km   = Column(Float)        # pixel height (from FIRMS track field)
+    confidence = Column(String(20))   # 'low'/'nominal'/'high' (VIIRS) or 0-100 (MODIS)
+    frp        = Column(Float)        # fire radiative power MW
+    satellite  = Column(String(20))
+    instrument = Column(String(20))
+    geometry   = Column(Text)         # GeoJSON of buffered pixel footprint
+    fetched_at = Column(Integer)      # unix timestamp
+
+
 # --- Migration Logic ---
 def run_migration():
     try:
