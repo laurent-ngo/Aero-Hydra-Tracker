@@ -359,6 +359,9 @@
       <div class="filter-row"><label>Tracks</label>
         <select id="toggle-tracks" onchange="renderTracks()"><option value="all">All</option><option value="selected">Selected</option><option value="none">None</option></select>
       </div>
+      <div class="filter-row"><label>Fires</label>
+        <select id="toggle-fires" onchange="renderFires()"><option value="show">Visible</option><option value="none">Hidden</option></select>
+      </div>
       <div class="filter-row"><label>ROIs</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="fire-named">Fire (named)</option><option value="water">Water only</option><option value="water-named">Water (named)</option><option value="none">Hidden</option></select>
       </div>
@@ -612,12 +615,13 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],firesData=[],heatmapData=null,mode='live',pollTimer=null;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
 const heatmapLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:0});
-const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
+const fireLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
+const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
 const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
 const airfieldSource =new ol.source.Vector();
@@ -625,7 +629,7 @@ const airfieldCluster=new ol.source.Cluster({distance:40,minDistance:20,source:a
 const airfieldLayer  =new ol.layer.Vector({source:airfieldCluster,zIndex:4,style:airfieldClusterStyle});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
 const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
-map.addLayer(heatmapLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
+map.addLayer(heatmapLayer);map.addLayer(fireLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
 mapReady=true;
 
 // SPRITES
@@ -1171,6 +1175,22 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row" style="color:#ff8040;font-size:10px;margin-top:4px;">Click to zoom in</div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
+  const fireF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===fireLayer});
+  if(fireF&&fireF.get('fireData')){
+    const fd=fireF.get('fireData');
+    tooltip.style.display='block';
+    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
+    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const frpStr=fd.max_frp!=null?fd.max_frp.toFixed(0)+' MW':'--';
+    const areaStr=fd.area_ha!=null?fd.area_ha.toLocaleString()+' ha':'--';
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff6600;">Fire #${fd.id}</div>
+      <div class="tooltip-row"><span class="tooltip-key">First seen</span><span class="tooltip-val">${fd.first_detected||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Last seen</span><span class="tooltip-val">${fd.last_detected||'--'}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Area</span><span class="tooltip-val">${areaStr}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Max FRP</span><span class="tooltip-val">${frpStr}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">Hotspots</span><span class="tooltip-val">${fd.hotspot_count||'--'}</span></div>`;
+    map.getTargetElement().style.cursor='';return;
+  }
   const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
   if(roiF){
     const name=roiF.get('roiName');
@@ -1248,6 +1268,35 @@ function _isNamed(roi,coords){
     return !!fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords));
   }
   return roi.name&&!_autoNameRe.test(roi.name);
+}
+function _fireColor(maxFrp){
+  if(!maxFrp||maxFrp<100) return {fill:'rgba(255,200,0,0.2)',  stroke:'rgba(255,165,0,0.8)'};
+  if(maxFrp<500)           return {fill:'rgba(255,100,0,0.22)', stroke:'rgba(255,60,0,0.85)'};
+                           return {fill:'rgba(220,20,20,0.25)', stroke:'rgba(200,0,0,0.9)'};
+}
+function renderFires(firesOverride){
+  const src=fireLayer.getSource();src.clear();
+  const fm=document.getElementById('toggle-fires').value;if(fm==='none')return;
+  const data=firesOverride||firesData;
+  data.forEach(fire=>{
+    if(!fire.perimeter)return;
+    const geomType=fire.perimeter.type;
+    let olGeom;
+    try{
+      if(geomType==='Polygon')
+        olGeom=new ol.geom.Polygon(fire.perimeter.coordinates).transform('EPSG:4326','EPSG:3857');
+      else if(geomType==='MultiPolygon')
+        olGeom=new ol.geom.MultiPolygon(fire.perimeter.coordinates).transform('EPSG:4326','EPSG:3857');
+      else return;
+    }catch(e){return;}
+    const c=_fireColor(fire.max_frp);
+    const feat=new ol.Feature({geometry:olGeom,fireData:fire});
+    feat.setStyle(new ol.style.Style({
+      fill:new ol.style.Fill({color:c.fill}),
+      stroke:new ol.style.Stroke({color:c.stroke,width:1.5})
+    }));
+    src.addFeature(feat);
+  });
 }
 function renderROIs(){
   const src=roiLayer.getSource();src.clear();
@@ -1409,7 +1458,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchActiveEvents()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchActiveEvents()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1480,6 +1529,13 @@ async function fetchFireLocations(){
     fireLocations=res.ok?await res.json():[];
     renderROIs();
   }catch(e){}
+}
+async function fetchFires(){
+  try{
+    const res=await fetch(`${config.baseUrl}/fires?status=active`,{headers:apiHeaders()});
+    firesData=res.ok?await res.json():[];
+    renderFires();
+  }catch(e){firesData=[];}
 }
 function toggleEventsPanel(){
   const panel=document.getElementById('events-panel');

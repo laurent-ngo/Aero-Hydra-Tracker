@@ -23,6 +23,7 @@ ELEVATION_API_URL = os.getenv("ELEVATION_API_URL", "http://localhost:8011")
 
 import migrate
 from dataCollector import orchestrate_sync, update_adsb_cache, update_fr24_cache, discover_new_aircraft
+from firmsCollector import run_firms_sync
 
 user = os.getenv('DB_USER', 'neondb_owner')
 password = os.getenv('DB_PASSWORD')
@@ -773,6 +774,20 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--firms-sync",
+        action="store_true",
+        help="Fetch latest FIRMS hotspots and update fire incidents"
+    )
+
+    parser.add_argument(
+        "--firms-days",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of days to fetch for --firms-sync (default: 5, max: 5)"
+    )
+
+    parser.add_argument(
         "--discover",
         action="store_true",
         help="Scan for new firefighting aircraft not yet in the DB"
@@ -788,6 +803,10 @@ if __name__ == "__main__":
 
     if args.adsb_cache:
         update_adsb_cache()
+        sys.exit(0)
+
+    if args.firms_sync:
+        run_firms_sync(days=args.firms_days)
         sys.exit(0)
 
     if args.fr24_cache:

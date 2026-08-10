@@ -11,7 +11,8 @@ from sqlalchemy import func, and_
 from typing import List, Optional
 from typing_extensions import Annotated
 
-import migrate # Importing your existing models and SessionLocal
+import migrate
+from migrate import FirmsFireIncident, FirmsHotspot
 
 import time, os, json
 import glob
@@ -234,6 +235,55 @@ def get_telemetry(
         results.append(p_dict)
 
     return results
+
+@app.get("/fires", dependencies=[Security(get_api_key)])
+def get_fires(
+    db: DbSession,
+    status: Optional[str] = None,        # 'active' | 'closed'
+    start:  Optional[str] = None,        # YYYY-MM-DD — fires active on or after this date
+    end:    Optional[str] = None,        # YYYY-MM-DD — fires active on or before this date
+):
+    q = db.query(FirmsFireIncident)
+    if status:
+        q = q.filter(FirmsFireIncident.status == status)
+    if start:
+        q = q.filter(FirmsFireIncident.last_detected >= start)
+    if end:
+        q = q.filter(FirmsFireIncident.first_detected <= end)
+    fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
+    return [
+        {
+            "id":             f.id,
+            "status":         f.status,
+            "first_detected": f.first_detected,
+            "last_detected":  f.last_detected,
+            "centroid_lat":   f.centroid_lat,
+            "centroid_lon":   f.centroid_lon,
+            "area_ha":        f.area_ha,
+            "hotspot_count":  f.hotspot_count,
+            "max_frp":        f.max_frp,
+            "perimeter":      json.loads(f.perimeter) if f.perimeter else None,
+        }
+        for f in fires
+    ]
+
+@app.get("/fires/{fire_id}/hotspots", dependencies=[Security(get_api_key)])
+def get_fire_hotspots(db: DbSession, fire_id: int):
+    hotspots = db.query(FirmsHotspot).filter(FirmsHotspot.fire_id == fire_id).order_by(FirmsHotspot.acq_date, FirmsHotspot.acq_time).all()
+    return [
+        {
+            "id":         h.id,
+            "acq_date":   h.acq_date,
+            "acq_time":   h.acq_time,
+            "lat":        h.lat,
+            "lon":        h.lon,
+            "confidence": h.confidence,
+            "frp":        h.frp,
+            "satellite":  h.satellite,
+            "geometry":   json.loads(h.geometry) if h.geometry else None,
+        }
+        for h in hotspots
+    ]
 
 @app.get("/regions-of-interest", dependencies=[Security(get_api_key)]) # Updated to match your frontend fetch URL
 def get_rois(
