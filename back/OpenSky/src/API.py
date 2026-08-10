@@ -242,6 +242,10 @@ def get_fires(
     status: Optional[str] = None,        # 'active' | 'closed'
     start:  Optional[str] = None,        # YYYY-MM-DD — fires active on or after this date
     end:    Optional[str] = None,        # YYYY-MM-DD — fires active on or before this date
+    min_lat: Optional[float] = None,
+    max_lat: Optional[float] = None,
+    min_lon: Optional[float] = None,
+    max_lon: Optional[float] = None,
 ):
     q = db.query(FirmsFireIncident)
     if status:
@@ -250,6 +254,14 @@ def get_fires(
         q = q.filter(FirmsFireIncident.last_detected >= start)
     if end:
         q = q.filter(FirmsFireIncident.first_detected <= end)
+    if min_lat is not None:
+        q = q.filter(FirmsFireIncident.centroid_lat >= min_lat)
+    if max_lat is not None:
+        q = q.filter(FirmsFireIncident.centroid_lat <= max_lat)
+    if min_lon is not None:
+        q = q.filter(FirmsFireIncident.centroid_lon >= min_lon)
+    if max_lon is not None:
+        q = q.filter(FirmsFireIncident.centroid_lon <= max_lon)
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
     return [
         {

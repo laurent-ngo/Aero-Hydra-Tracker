@@ -1103,10 +1103,16 @@ function toggleHeatmap(){
   }
 }
 
+let _firesMoveTimer=null;
 map.on('moveend',()=>{
   if(!document.getElementById('btn-heatmap')?.classList.contains('active')||!currentHeatmapName)return;
   clearTimeout(_heatmapMoveTimer);
   _heatmapMoveTimer=setTimeout(()=>fetchHeatmap(currentHeatmapName),400);
+});
+map.on('moveend',()=>{
+  if(mode!=='live')return;
+  clearTimeout(_firesMoveTimer);
+  _firesMoveTimer=setTimeout(fetchFires,600);
 });
 
 
@@ -1532,7 +1538,9 @@ async function fetchFireLocations(){
 }
 async function fetchFires(){
   try{
-    const res=await fetch(`${config.baseUrl}/fires?status=active`,{headers:apiHeaders()});
+    const ext=ol.proj.transformExtent(map.getView().calculateExtent(map.getSize()),'EPSG:3857','EPSG:4326');
+    const params=new URLSearchParams({status:'active',min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
+    const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
   }catch(e){firesData=[];}
