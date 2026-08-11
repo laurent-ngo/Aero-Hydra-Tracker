@@ -847,11 +847,8 @@ if __name__ == "__main__":
 
     if args.ROI: 
 
-        detect_regions_of_interest_clustered(type='fire')
         detect_regions_of_interest_clustered(type='water')
 
-        grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='fire')
-        
         grow_and_level_up_rois(starting_level=1, buffer_km=1.0, type='water')
 
         sys.exit(0)

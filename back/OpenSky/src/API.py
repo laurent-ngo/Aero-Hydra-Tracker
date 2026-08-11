@@ -405,7 +405,6 @@ def get_active_events(
         algorithm='ball_tree', metric='haversine'
     ).fit(np.radians(coords)).labels_
 
-    fire_locations = db.query(migrate.FireLocation).all()
     airfields      = db.query(migrate.Airfield).filter(
         migrate.Airfield.lat.isnot(None),
         migrate.Airfield.lon.isnot(None),
@@ -421,23 +420,14 @@ def get_active_events(
         centroid_lon = float(np.mean(cluster_c[:, 1]))
         aircraft     = list({p.icao24 for p in cluster_pts})
 
-        # 1. Nearest named fire/ROI location within 10 km
+        # Nearest airfield within 10 km
         event_name = None
-        for fl in fire_locations:
-            if fl.lat and fl.lon:
-                dist_km = ((fl.lat - centroid_lat)**2 + (fl.lon - centroid_lon)**2) ** 0.5 * 111
-                if dist_km < 10:
-                    event_name = fl.name
-                    break
-
-        # 2. Nearest airfield within 10 km (if no ROI matched)
-        if event_name is None:
-            best_dist = float("inf")
-            for af in airfields:
-                dist_km = ((af.lat - centroid_lat)**2 + (af.lon - centroid_lon)**2) ** 0.5 * 111
-                if dist_km < 10 and dist_km < best_dist:
-                    best_dist  = dist_km
-                    event_name = af.name
+        best_dist = float("inf")
+        for af in airfields:
+            dist_km = ((af.lat - centroid_lat)**2 + (af.lon - centroid_lon)**2) ** 0.5 * 111
+            if dist_km < 10 and dist_km < best_dist:
+                best_dist  = dist_km
+                event_name = af.name
 
         events.append({
             "lat":            round(centroid_lat, 5),
@@ -452,43 +442,6 @@ def get_active_events(
 
     return sorted(events, key=lambda e: e["last_pass"], reverse=True)
 
-
-class FireLocationIn(BaseModel):
-    name: str
-    lat: float
-    lon: float
-
-class FireLocationUpdate(BaseModel):
-    name: str
-
-@app.get("/fire-locations", dependencies=[Security(get_api_key)])
-def list_fire_locations(db: DbSession):
-    locs = db.query(migrate.FireLocation).all()
-    return [{"id": l.id, "ref": l.ref, "name": l.name, "lat": l.lat, "lon": l.lon} for l in locs]
-
-@app.put("/fire-location/{loc_id}", dependencies=[Security(get_api_key)])
-def update_fire_location(loc_id: int, body: FireLocationUpdate, db: DbSession):
-    loc = db.query(migrate.FireLocation).filter_by(id=loc_id).first()
-    if not loc:
-        raise HTTPException(status_code=404, detail="Fire location not found")
-    loc.name = body.name
-    db.commit()
-    db.refresh(loc)
-    return {"id": loc.id, "ref": loc.ref, "name": loc.name, "lat": loc.lat, "lon": loc.lon}
-
-@app.post("/fire-location", dependencies=[Security(get_api_key)])
-def create_fire_location(body: FireLocationIn, db: DbSession):
-    raw = re.sub(r'[^A-Za-z0-9]', '', body.name).upper()[:4]
-    ref = raw or "FIRE"
-    suffix = 1
-    while db.query(migrate.FireLocation).filter_by(ref=ref).first():
-        ref = (raw[:3] or "FIR") + str(suffix)
-        suffix += 1
-    loc = migrate.FireLocation(ref=ref, name=body.name, lat=body.lat, lon=body.lon)
-    db.add(loc)
-    db.commit()
-    db.refresh(loc)
-    return {"id": loc.id, "ref": loc.ref, "name": loc.name, "lat": loc.lat, "lon": loc.lon}
 
 HEATMAP_DIR = os.getenv("HEATMAP_DIR", ".")
 
