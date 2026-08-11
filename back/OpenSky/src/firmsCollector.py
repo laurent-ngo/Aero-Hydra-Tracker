@@ -27,6 +27,8 @@ NRT_CUTOFF_DAYS   = 7    # NRT date param is only reliable for the last 7 days
 
 FIRE_BUFFER_KM   = 1.0   # km buffer around union of hotspot geometries
 FIRE_CLOSE_DAYS  = 3     # close fire if no hotspot detected for this many days
+COMMIT_BATCH     = 200   # flush to disk every N hotspots
+FIRE_MATCH_DEG   = 2.0   # ~220 km bbox pre-filter before shapely intersects()
 
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
@@ -67,9 +69,18 @@ def fetch_firms_csv(bbox, source, date_str, day_range=1):
 def _source_id(row):
     return f"{row['acq_date']}_{row.get('acq_time','')}_{float(row['latitude']):.4f}_{float(row['longitude']):.4f}_{row.get('satellite','')}"
 
-def _matching_fires(session, hotspot_geom):
+def _matching_fires(session, hotspot_geom, acq_date):
+    from datetime import date as _date, timedelta as _td
+    d = _date.fromisoformat(acq_date)
+    date_min = (d - _td(days=2)).isoformat()
+    date_max = (d + _td(days=2)).isoformat()
+    centroid = hotspot_geom.centroid
     fires = session.query(FirmsFireIncident).filter(
-        FirmsFireIncident.status == 'active'
+        FirmsFireIncident.status == 'active',
+        FirmsFireIncident.last_detected  >= date_min,
+        FirmsFireIncident.first_detected <= date_max,
+        FirmsFireIncident.centroid_lat.between(centroid.y - FIRE_MATCH_DEG, centroid.y + FIRE_MATCH_DEG),
+        FirmsFireIncident.centroid_lon.between(centroid.x - FIRE_MATCH_DEG, centroid.x + FIRE_MATCH_DEG),
     ).all()
     return [f for f in fires if f.perimeter and shape(json.loads(f.perimeter)).intersects(hotspot_geom)]
 
@@ -132,11 +143,11 @@ def process_hotspot(session, row):
         existing.fetched_at = int(time.time())
         session.flush()
         _recompute_perimeter(session, session.query(FirmsFireIncident).get(existing.fire_id))
-        session.commit()
+        session.flush()
         logger.info(f"FIRMS: updated hotspot {src_id} (geometry changed)")
         return 'updated'
 
-    matches = _matching_fires(session, geom)
+    matches = _matching_fires(session, geom, row['acq_date'])
 
     if len(matches) > 1:
         fire = _merge_fires(session, matches)
@@ -181,7 +192,7 @@ def process_hotspot(session, row):
     fire.last_detected  = max(fire.last_detected,  row['acq_date'])
     fire.first_detected = min(fire.first_detected, row['acq_date'])
     _recompute_perimeter(session, fire)
-    session.commit()
+    session.flush()
 
 
 # ── Stale fire closure ────────────────────────────────────────────────────────
@@ -210,7 +221,7 @@ def import_firms_csv_files(paths):
             with open(path, newline='', encoding='utf-8') as f:
                 rows = list(csv.DictReader(f))
             logger.info(f"FIRMS import: {len(rows)} rows in {path}")
-            ok = skipped = updated = errors = 0
+            ok = skipped = updated = errors = pending = 0
             for row in rows:
                 try:
                     result = process_hotspot(session, row)
@@ -220,10 +231,17 @@ def import_firms_csv_files(paths):
                         skipped += 1
                     else:
                         ok += 1
+                    pending += 1
+                    if pending >= COMMIT_BATCH:
+                        session.commit()
+                        pending = 0
                 except Exception as e:
                     logger.warning(f"FIRMS import: hotspot error ({e})")
                     session.rollback()
+                    pending = 0
                     errors += 1
+            if pending:
+                session.commit()
             logger.info(f"FIRMS import: {path} — {ok} new, {updated} updated, {skipped} skipped, {errors} errors")
         close_stale_fires(session)
         logger.info("FIRMS import: complete.")
@@ -266,6 +284,21 @@ def run_firms_sync(days=5, date_start=None, date_end=None):
 
     session = SessionLocal()
     try:
+        pending = 0
+
+        def _process_row(row):
+            nonlocal pending
+            try:
+                process_hotspot(session, row)
+                pending += 1
+                if pending >= COMMIT_BATCH:
+                    session.commit()
+                    pending = 0
+            except Exception as e:
+                logger.warning(f"FIRMS: hotspot error ({e})")
+                session.rollback()
+                pending = 0
+
         # ── SP (archive): one day at a time ──────────────────────────────────
         if start <= sp_end:
             for day in _iter_days(start.isoformat(), sp_end.isoformat()):
@@ -276,11 +309,7 @@ def run_firms_sync(days=5, date_start=None, date_end=None):
                             rows = fetch_firms_csv(region['bbox'], source, day, day_range=1)
                             logger.info(f"FIRMS: {len(rows)} hotspots from {source} on {day}")
                             for row in rows:
-                                try:
-                                    process_hotspot(session, row)
-                                except Exception as e:
-                                    logger.warning(f"FIRMS: hotspot error ({e})")
-                                    session.rollback()
+                                _process_row(row)
                         except Exception as e:
                             logger.error(f"FIRMS: fetch error for {source} on {day}: {e}")
                         time.sleep(0.5)
@@ -295,14 +324,13 @@ def run_firms_sync(days=5, date_start=None, date_end=None):
                             rows = fetch_firms_csv(region['bbox'], source, day, day_range=1)
                             logger.info(f"FIRMS: {len(rows)} hotspots from {source} on {day}")
                             for row in rows:
-                                try:
-                                    process_hotspot(session, row)
-                                except Exception as e:
-                                    logger.warning(f"FIRMS: hotspot error ({e})")
-                                    session.rollback()
+                                _process_row(row)
                         except Exception as e:
                             logger.error(f"FIRMS: fetch error for {source} on {day}: {e}")
                         time.sleep(0.5)
+
+        if pending:
+            session.commit()
         close_stale_fires(session)
         logger.info("FIRMS: sync complete.")
     finally:

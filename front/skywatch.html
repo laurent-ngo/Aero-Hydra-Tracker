@@ -400,6 +400,7 @@
             <input type="checkbox" id="frp-extreme" checked onchange="onFrpFilterChange()" style="accent-color:#dd0000;cursor:pointer;"/> <span style="color:#dd0000;">Ext</span> <span style="color:var(--text-dim);font-size:10px;">&gt;500</span>
           </label>
         </div>
+        <div class="filter-row"><label>Min spots</label><input type="number" id="fires-min-hotspots" min="1" placeholder="any" style="width:70px;" onchange="fetchFires()"/></div>
         <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
         <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
         <div class="filter-row" style="margin-top:4px;"><label>Hotspots</label>
@@ -1285,6 +1286,11 @@ const _autoNameRe=/^(Area \d{6}|Level \d+ Zone - Area \d+)$/;
 function _isNamed(roi){
   return roi.name&&!_autoNameRe.test(roi.name);
 }
+function _tsToDate(ts){return new Date(ts*1000).toISOString().slice(0,10);}
+function _replayDates(){
+  if(mode==='replay'&&timeStart&&timeStop)return{start:_tsToDate(timeStart),end:_tsToDate(timeStop)};
+  return{start:document.getElementById('fires-date-start').value,end:document.getElementById('fires-date-end').value};
+}
 function _frpCategory(frp){
   if(!frp||frp<30)  return 'low';
   if(frp<100)       return 'medium';
@@ -1371,7 +1377,7 @@ function renderFires(firesOverride){
     }));
     src.addFeature(feat);
   });
-  if(hotspotsVisible)renderHotspots();
+  if(hotspotsVisible)renderHotspots(mode==='replay'?replayCursor:null);
 }
 function renderROIs(){
   const src=roiLayer.getSource();src.clear();
@@ -1597,13 +1603,13 @@ async function fetchFires(){
   if(!firesVisible)return;
   try{
     const ext=ol.proj.transformExtent(map.getView().calculateExtent(map.getSize()),'EPSG:3857','EPSG:4326');
-    const startDate=document.getElementById('fires-date-start').value;
-    const endDate=document.getElementById('fires-date-end').value;
+    const{start:startDate,end:endDate}=_replayDates();
     const params=new URLSearchParams({min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
     if(startDate)params.set('start',startDate);
     if(endDate)params.set('end',endDate);
     if(!startDate&&!endDate)params.set('status','active');
     const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
+    const minSpots=parseInt(document.getElementById('fires-min-hotspots').value);if(minSpots>0)params.set('min_hotspots',minSpots);
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
@@ -1611,8 +1617,7 @@ async function fetchFires(){
 }
 async function fetchHotspots(){
   if(!firesVisible||!hotspotsVisible)return;
-  const startDate=document.getElementById('fires-date-start').value;
-  const endDate=document.getElementById('fires-date-end').value;
+  const{start:startDate,end:endDate}=_replayDates();
   if(!startDate&&!endDate){hotspotLayer.getSource().clear();hotspotsData=[];return;}
   try{
     const ext=ol.proj.transformExtent(map.getView().calculateExtent(map.getSize()),'EPSG:3857','EPSG:4326');
@@ -1624,12 +1629,14 @@ async function fetchHotspots(){
     renderHotspots();
   }catch(e){hotspotsData=[];hotspotLayer.getSource().clear();}
 }
-function renderHotspots(){
+function renderHotspots(cursorTs=null){
   const src=hotspotLayer.getSource();src.clear();
   if(!firesVisible||!hotspotsVisible)return;
+  const cursorDate=cursorTs?_tsToDate(cursorTs):null;
   const visibleFireIds=new Set(firesData.filter(f=>f.perimeter&&_frpWanted(f.max_frp)).map(f=>f.id));
   hotspotsData.forEach(h=>{
     if(!visibleFireIds.has(h.fire_id))return;
+    if(cursorDate&&h.acq_date!==cursorDate)return;
     const pt=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([h.lon,h.lat])),hotspotData:h});
     const frp=h.frp||0;
     const r=frp>=500?'rgba(170,0,0,0.95)':frp>=100?'rgba(255,60,0,0.88)':frp>=30?'rgba(255,140,0,0.82)':'rgba(255,210,0,0.78)';
@@ -1890,6 +1897,7 @@ function replayRenderAt(ts){
   document.getElementById('replay-time-local').textContent=_rd.toLocaleString([],{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' local';
   const pct=timeStart&&timeStop&&timeStop>timeStart?((ts-timeStart)/(timeStop-timeStart))*1000:0;
   document.getElementById('replay-slider').value=Math.round(pct);
+  if(firesVisible&&hotspotsVisible)renderHotspots(ts);
 }
 function replayTogglePlay(){
   replayPlaying=!replayPlaying;
