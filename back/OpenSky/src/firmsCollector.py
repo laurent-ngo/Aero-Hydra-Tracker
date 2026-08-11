@@ -202,15 +202,22 @@ def process_hotspot(session, row):
 
 def close_stale_fires(session):
     cutoff = (datetime.utcnow() - timedelta(days=FIRE_CLOSE_DAYS)).strftime('%Y-%m-%d')
-    stale = session.query(FirmsFireIncident).filter(
-        FirmsFireIncident.status == 'active',
-        FirmsFireIncident.last_detected < cutoff,
-    ).all()
-    for fire in stale:
-        fire.status = 'closed'
-        logger.info(f"FIRMS: closed stale fire {fire.id} (last seen {fire.last_detected})")
-    if stale:
-        session.commit()
+    for attempt in range(DEADLOCK_RETRIES):
+        try:
+            n = session.query(FirmsFireIncident).filter(
+                FirmsFireIncident.status == 'active',
+                FirmsFireIncident.last_detected < cutoff,
+            ).update({'status': 'closed'}, synchronize_session=False)
+            session.commit()
+            if n:
+                logger.info(f"FIRMS: closed {n} stale fires (last_detected < {cutoff})")
+            return
+        except OperationalError as e:
+            session.rollback()
+            if 'deadlock' in str(e).lower() and attempt < DEADLOCK_RETRIES - 1:
+                time.sleep(random.uniform(0.2, 1.0) * (attempt + 1))
+                continue
+            logger.warning(f"FIRMS: close_stale_fires failed ({e})")
 
 
 # ── CSV file import ───────────────────────────────────────────────────────────
@@ -258,7 +265,10 @@ def import_firms_csv_files(paths):
             if pending:
                 session.commit()
             logger.info(f"FIRMS import: {path} — {ok} new, {updated} updated, {skipped} skipped, {errors} errors")
-        close_stale_fires(session)
+        try:
+            close_stale_fires(session)
+        except Exception as e:
+            logger.warning(f"FIRMS import: close_stale_fires skipped ({e})")
         logger.info("FIRMS import: complete.")
     finally:
         session.close()
