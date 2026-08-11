@@ -364,9 +364,14 @@
       <div class="section-label">Aircraft</div>
       <div class="filter-row"><label>Reg / Owner</label><input type="text" id="filter-callsign" placeholder="e.g. HB-ZKF" oninput="applyFilters()"/></div>
       <div class="filter-row"><label>Type</label>
-        <select id="filter-type" onchange="applyFilters()">
-          <option value="">All</option><option value="airplane">Airplane</option><option value="helicopter">Helicopter</option>
-        </select>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);cursor:pointer;min-width:unset;">
+            <input type="checkbox" id="filter-type-airplane" checked onchange="applyFilters()" style="accent-color:var(--accent);cursor:pointer;"/> Airplane
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);cursor:pointer;min-width:unset;">
+            <input type="checkbox" id="filter-type-helicopter" checked onchange="applyFilters()" style="accent-color:var(--accent);cursor:pointer;"/> Helicopter
+          </label>
+        </div>
       </div>
 
       <div class="section-label">Display</div>
@@ -1707,11 +1712,13 @@ function renderActiveEvents(){
 // FILTERS & SELECTION
 function applyFilters(){
   const reg=document.getElementById('filter-callsign').value.toLowerCase();
-  const type=document.getElementById('filter-type').value;
+  const wantAirplane=document.getElementById('filter-type-airplane').checked;
+  const wantHelicopter=document.getElementById('filter-type-helicopter').checked;
   const selectedOwners=getSelectedOwners();
   filteredAircraft=allAircraft.filter(ac=>{
     if(reg&&!(ac.registration||'').toLowerCase().includes(reg)&&!(ac.icao24||'').toLowerCase().includes(reg)&&!(ac.owner||'').toLowerCase().includes(reg))return false;
-    if(type&&ac.type!==type)return false;
+    if(!wantAirplane&&ac.type==='airplane')return false;
+    if(!wantHelicopter&&ac.type==='helicopter')return false;
     if(selectedOwners&&!selectedOwners.has(ac.owner))return false;
     const af=document.getElementById('filter-at-airfield').value;
     if(af==='yes'&&!ac.at_airfield)return false;if(af==='no'&&ac.at_airfield)return false;
@@ -1952,7 +1959,7 @@ window.addEventListener('hashchange',navigateToHash);
 // ── UI STATE PERSISTENCE ──────────────────────────────────────
 const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
-  'filter-callsign','filter-type',
+  'filter-callsign',
   'toggle-tracks','toggle-rois','stale-threshold-days',
   'fires-date-start','fires-date-end',
   'filter-at-airfield','filter-is-full',
@@ -1963,6 +1970,8 @@ function saveUIState(){
   const state={};
   UI_PERSIST.forEach(id=>{const el=document.getElementById(id);if(el)state[id]=el.value;});
   state['heatmap-active']=document.getElementById('btn-heatmap')?.classList.contains('active')||false;
+  state['filter-type-airplane']=document.getElementById('filter-type-airplane').checked;
+  state['filter-type-helicopter']=document.getElementById('filter-type-helicopter').checked;
   state['fires-visible']=firesVisible;
   state['events-visible']=eventsVisible;
   state['airfields-visible']=airfieldsVisible;
@@ -1977,6 +1986,9 @@ function restoreUIState(){
       if(s[id]==null)return;
       const el=document.getElementById(id);if(el)el.value=s[id];
     });
+    // Restore type checkboxes
+    if(s['filter-type-airplane']!=null)document.getElementById('filter-type-airplane').checked=s['filter-type-airplane'];
+    if(s['filter-type-helicopter']!=null)document.getElementById('filter-type-helicopter').checked=s['filter-type-helicopter'];
     // Restore toggle button states
     if(s['fires-visible']!=null){
       firesVisible=s['fires-visible'];
