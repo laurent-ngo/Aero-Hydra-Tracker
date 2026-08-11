@@ -235,6 +235,24 @@
     .owner-option:hover { background: var(--row-hover); }
     .owner-option input { cursor: pointer; accent-color: var(--accent); }
 
+    /* ── TOGGLE BUTTONS ── */
+    .toggle-group { display: flex; flex: 1; }
+    .toggle-btn {
+      flex: 1; text-align: center;
+      background: var(--input-bg); border: 1px solid var(--panel-border);
+      color: var(--text-dim); padding: 4px 0;
+      cursor: pointer; font-size: 11px; font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 1px; transition: all 0.15s;
+    }
+    .toggle-btn:first-child { border-radius: 3px 0 0 3px; }
+    .toggle-btn + .toggle-btn { border-left: none; border-radius: 0 3px 3px 0; }
+    .toggle-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+    .fires-date-sub { margin: -2px 0 8px 0; padding: 6px 8px; border-left: 2px solid var(--panel-border); margin-left: 2px; }
+    .fires-date-sub .filter-row { margin-bottom: 4px; }
+    input[type="date"] { background: var(--input-bg); border: 1px solid var(--panel-border); color: var(--text); padding: 4px 6px; border-radius: 3px; font-size: 11px; font-family: 'Share Tech Mono', monospace; flex: 1; outline: none; color-scheme: dark; }
+    [data-theme="light"] input[type="date"] { color-scheme: light; }
+    input[type="date"]:focus { border-color: var(--accent); }
+
     /* ── MOBILE RESPONSIVE ── */
     @media (max-width: 640px) {
       /* Header: single scrollable row — buttons never wrap */
@@ -360,16 +378,29 @@
         <select id="toggle-tracks" onchange="renderTracks()"><option value="all">All</option><option value="selected">Selected</option><option value="none">None</option></select>
       </div>
       <div class="filter-row"><label>Fires</label>
-        <select id="toggle-fires" onchange="renderFires()"><option value="show">Visible</option><option value="none">Hidden</option></select>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="fires-btn-on" onclick="setFiresVisible(true)">ON</button>
+          <button class="toggle-btn" id="fires-btn-off" onclick="setFiresVisible(false)">OFF</button>
+        </div>
+      </div>
+      <div id="fires-date-sub" class="fires-date-sub">
+        <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
+        <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
       </div>
       <div class="filter-row"><label>ROIs</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="fire-named">Fire (named)</option><option value="water">Water only</option><option value="water-named">Water (named)</option><option value="none">Hidden</option></select>
       </div>
       <div class="filter-row"><label>Events</label>
-        <select id="toggle-active-events" onchange="renderActiveEvents()"><option value="show">Visible</option><option value="none">Hidden</option></select>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="events-btn-on" onclick="setEventsVisible(true)">ON</button>
+          <button class="toggle-btn" id="events-btn-off" onclick="setEventsVisible(false)">OFF</button>
+        </div>
       </div>
       <div class="filter-row"><label>Airfields</label>
-        <select id="toggle-airfields" onchange="airfieldLayer.setVisible(this.value==='show');waterfieldLayer.setVisible(this.value==='show');"><option value="show">Visible</option><option value="none">Hidden</option></select>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="airfields-btn-on" onclick="setAirfieldsVisible(true)">ON</button>
+          <button class="toggle-btn" id="airfields-btn-off" onclick="setAirfieldsVisible(false)">OFF</button>
+        </div>
       </div>
       <div class="filter-row"><label>Stale after</label>
         <select id="stale-threshold-days" onchange="renderAirfields()">
@@ -615,21 +646,23 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],firesData=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
+let firesVisible=true,eventsVisible=true,airfieldsVisible=true;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
 const heatmapLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:0});
 const fireLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:1});
-const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
-const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
-const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
+const hotspotLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2});
+const roiLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
+const trackLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:3});
+const aircraftLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:4});
 const airfieldSource =new ol.source.Vector();
 const airfieldCluster=new ol.source.Cluster({distance:40,minDistance:20,source:airfieldSource});
 const airfieldLayer  =new ol.layer.Vector({source:airfieldCluster,zIndex:4,style:airfieldClusterStyle});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
 const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
-map.addLayer(heatmapLayer);map.addLayer(fireLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
+map.addLayer(heatmapLayer);map.addLayer(fireLayer);map.addLayer(hotspotLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
 mapReady=true;
 
 // SPRITES
@@ -1280,9 +1313,36 @@ function _fireColor(maxFrp){
   if(maxFrp<500)           return {fill:'rgba(255,100,0,0.22)', stroke:'rgba(255,60,0,0.85)'};
                            return {fill:'rgba(220,20,20,0.25)', stroke:'rgba(200,0,0,0.9)'};
 }
+function setFiresVisible(on){
+  firesVisible=on;
+  document.getElementById('fires-btn-on').classList.toggle('active',on);
+  document.getElementById('fires-btn-off').classList.toggle('active',!on);
+  document.getElementById('fires-date-sub').style.display=on?'':'none';
+  if(on){fetchFires();fetchHotspots();}
+  else{fireLayer.getSource().clear();hotspotLayer.getSource().clear();}
+  saveUIState();
+}
+function setEventsVisible(on){
+  eventsVisible=on;
+  document.getElementById('events-btn-on').classList.toggle('active',on);
+  document.getElementById('events-btn-off').classList.toggle('active',!on);
+  renderActiveEvents();
+  saveUIState();
+}
+function setAirfieldsVisible(on){
+  airfieldsVisible=on;
+  document.getElementById('airfields-btn-on').classList.toggle('active',on);
+  document.getElementById('airfields-btn-off').classList.toggle('active',!on);
+  airfieldLayer.setVisible(on);waterfieldLayer.setVisible(on);
+  saveUIState();
+}
+function onFiresDateChange(){
+  fetchFires();
+  fetchHotspots();
+}
 function renderFires(firesOverride){
   const src=fireLayer.getSource();src.clear();
-  const fm=document.getElementById('toggle-fires').value;if(fm==='none')return;
+  if(!firesVisible)return;
   const data=firesOverride||firesData;
   data.forEach(fire=>{
     if(!fire.perimeter)return;
@@ -1464,7 +1524,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchActiveEvents()]);}
+async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchHotspots(),fetchActiveEvents()]);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1537,13 +1597,45 @@ async function fetchFireLocations(){
   }catch(e){}
 }
 async function fetchFires(){
+  if(!firesVisible)return;
   try{
     const ext=ol.proj.transformExtent(map.getView().calculateExtent(map.getSize()),'EPSG:3857','EPSG:4326');
-    const params=new URLSearchParams({status:'active',min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
+    const startDate=document.getElementById('fires-date-start').value;
+    const endDate=document.getElementById('fires-date-end').value;
+    const params=new URLSearchParams({min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
+    if(startDate)params.set('start',startDate);
+    if(endDate)params.set('end',endDate);
+    if(!startDate&&!endDate)params.set('status','active');
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
   }catch(e){firesData=[];}
+}
+async function fetchHotspots(){
+  if(!firesVisible)return;
+  const startDate=document.getElementById('fires-date-start').value;
+  const endDate=document.getElementById('fires-date-end').value;
+  if(!startDate&&!endDate){hotspotLayer.getSource().clear();hotspotsData=[];return;}
+  try{
+    const ext=ol.proj.transformExtent(map.getView().calculateExtent(map.getSize()),'EPSG:3857','EPSG:4326');
+    const params=new URLSearchParams({min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
+    if(startDate)params.set('start',startDate);
+    if(endDate)params.set('end',endDate);
+    const res=await fetch(`${config.baseUrl}/hotspots?${params}`,{headers:apiHeaders()});
+    hotspotsData=res.ok?await res.json():[];
+    renderHotspots();
+  }catch(e){hotspotsData=[];hotspotLayer.getSource().clear();}
+}
+function renderHotspots(){
+  const src=hotspotLayer.getSource();src.clear();
+  if(!firesVisible)return;
+  hotspotsData.forEach(h=>{
+    const pt=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([h.lon,h.lat])),hotspotData:h});
+    const frp=h.frp||0;
+    const r=frp>300?'rgba(220,20,20,0.9)':frp>100?'rgba(255,80,0,0.85)':frp>30?'rgba(255,160,0,0.8)':'rgba(255,200,80,0.75)';
+    pt.setStyle(new ol.style.Style({image:new ol.style.Circle({radius:3.5,fill:new ol.style.Fill({color:r}),stroke:new ol.style.Stroke({color:'rgba(0,0,0,0.4)',width:0.5})})}));
+    src.addFeature(pt);
+  });
 }
 function toggleEventsPanel(){
   const panel=document.getElementById('events-panel');
@@ -1602,7 +1694,7 @@ function showActiveEventPopup(ev,pixel){
 }
 function renderActiveEvents(){
   const src=activeEventLayer.getSource();src.clear();
-  if(document.getElementById('toggle-active-events').value==='none')return;
+  if(!eventsVisible)return;
   activeEvents.forEach(ev=>{
     const center=ol.proj.fromLonLat([ev.lon,ev.lat]);
     // Area ring — radius from slider (EPSG:3857 units ≈ metres)
@@ -1885,7 +1977,8 @@ window.addEventListener('hashchange',navigateToHash);
 const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
   'filter-callsign','filter-type',
-  'toggle-tracks','toggle-rois','toggle-active-events','toggle-airfields','stale-threshold-days',
+  'toggle-tracks','toggle-rois','stale-threshold-days',
+  'fires-date-start','fires-date-end',
   'filter-at-airfield','filter-is-full',
   'ev-window','ev-passes','ev-radius',
   'heatmap-select'
@@ -1894,6 +1987,9 @@ function saveUIState(){
   const state={};
   UI_PERSIST.forEach(id=>{const el=document.getElementById(id);if(el)state[id]=el.value;});
   state['heatmap-active']=document.getElementById('btn-heatmap')?.classList.contains('active')||false;
+  state['fires-visible']=firesVisible;
+  state['events-visible']=eventsVisible;
+  state['airfields-visible']=airfieldsVisible;
   localStorage.setItem('sw-ui',JSON.stringify(state));
 }
 function restoreUIState(){
@@ -1905,9 +2001,24 @@ function restoreUIState(){
       if(s[id]==null)return;
       const el=document.getElementById(id);if(el)el.value=s[id];
     });
-    // Apply airfields visibility (setting .value doesn't fire onchange)
-    const afVis=document.getElementById('toggle-airfields')?.value;
-    if(afVis){airfieldLayer.setVisible(afVis==='show');waterfieldLayer.setVisible(afVis==='show');}
+    // Restore toggle button states
+    if(s['fires-visible']!=null){
+      firesVisible=s['fires-visible'];
+      document.getElementById('fires-btn-on').classList.toggle('active',firesVisible);
+      document.getElementById('fires-btn-off').classList.toggle('active',!firesVisible);
+      document.getElementById('fires-date-sub').style.display=firesVisible?'':'none';
+    }
+    if(s['events-visible']!=null){
+      eventsVisible=s['events-visible'];
+      document.getElementById('events-btn-on').classList.toggle('active',eventsVisible);
+      document.getElementById('events-btn-off').classList.toggle('active',!eventsVisible);
+    }
+    if(s['airfields-visible']!=null){
+      airfieldsVisible=s['airfields-visible'];
+      document.getElementById('airfields-btn-on').classList.toggle('active',airfieldsVisible);
+      document.getElementById('airfields-btn-off').classList.toggle('active',!airfieldsVisible);
+      airfieldLayer.setVisible(airfieldsVisible);waterfieldLayer.setVisible(airfieldsVisible);
+    }
     // Update slider value labels
     ['ev-window','ev-passes','ev-radius'].forEach(id=>{
       if(s[id]!=null){const lbl=document.getElementById(id+'-val');if(lbl)lbl.textContent=s[id];}
