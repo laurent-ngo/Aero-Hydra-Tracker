@@ -385,8 +385,29 @@
         </div>
       </div>
       <div id="fires-date-sub" class="fires-date-sub">
+        <div style="font-size:10px;letter-spacing:1px;color:var(--text-dim);text-transform:uppercase;margin-bottom:5px;">FRP Intensity</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text);">
+            <input type="checkbox" id="frp-low" checked onchange="onFrpFilterChange()" style="accent-color:#ffcc00;cursor:pointer;"/> <span style="color:#ffcc00;">Low</span> <span style="color:var(--text-dim);font-size:10px;">&lt;30</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text);">
+            <input type="checkbox" id="frp-medium" checked onchange="onFrpFilterChange()" style="accent-color:#ffa020;cursor:pointer;"/> <span style="color:#ffa020;">Med</span> <span style="color:var(--text-dim);font-size:10px;">30–100</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text);">
+            <input type="checkbox" id="frp-high" checked onchange="onFrpFilterChange()" style="accent-color:#ff5010;cursor:pointer;"/> <span style="color:#ff5010;">High</span> <span style="color:var(--text-dim);font-size:10px;">100–500</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text);">
+            <input type="checkbox" id="frp-extreme" checked onchange="onFrpFilterChange()" style="accent-color:#dd0000;cursor:pointer;"/> <span style="color:#dd0000;">Ext</span> <span style="color:var(--text-dim);font-size:10px;">&gt;500</span>
+          </label>
+        </div>
         <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
         <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
+        <div class="filter-row" style="margin-top:4px;"><label>Hotspots</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" id="hotspots-btn-on" onclick="setHotspotsVisible(true)">ON</button>
+            <button class="toggle-btn active" id="hotspots-btn-off" onclick="setHotspotsVisible(false)">OFF</button>
+          </div>
+        </div>
       </div>
       <div class="filter-row"><label>ROIs</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="fire-named">Fire (named)</option><option value="water">Water only</option><option value="water-named">Water (named)</option><option value="none">Hidden</option></select>
@@ -635,7 +656,7 @@ function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
-let firesVisible=true,eventsVisible=true,airfieldsVisible=true;
+let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -1296,18 +1317,37 @@ function _isNamed(roi,coords){
   }
   return roi.name&&!_autoNameRe.test(roi.name);
 }
+function _frpCategory(frp){
+  if(!frp||frp<30)  return 'low';
+  if(frp<100)       return 'medium';
+  if(frp<500)       return 'high';
+  return 'extreme';
+}
+function _frpWanted(frp){
+  const cat=_frpCategory(frp);
+  return document.getElementById('frp-'+cat)?.checked!==false;
+}
 function _fireColor(maxFrp){
-  if(!maxFrp||maxFrp<100) return {fill:'rgba(255,200,0,0.2)',  stroke:'rgba(255,165,0,0.8)'};
-  if(maxFrp<500)           return {fill:'rgba(255,100,0,0.22)', stroke:'rgba(255,60,0,0.85)'};
-                           return {fill:'rgba(220,20,20,0.25)', stroke:'rgba(200,0,0,0.9)'};
+  if(!maxFrp||maxFrp<30)  return {fill:'rgba(255,210,0,0.18)',  stroke:'rgba(255,190,0,0.75)'};
+  if(maxFrp<100)           return {fill:'rgba(255,150,0,0.20)',  stroke:'rgba(255,110,0,0.80)'};
+  if(maxFrp<500)           return {fill:'rgba(255,80,0,0.22)',   stroke:'rgba(255,40,0,0.85)'};
+                           return {fill:'rgba(200,0,0,0.28)',    stroke:'rgba(170,0,0,0.92)'};
 }
 function setFiresVisible(on){
   firesVisible=on;
   document.getElementById('fires-btn-on').classList.toggle('active',on);
   document.getElementById('fires-btn-off').classList.toggle('active',!on);
   document.getElementById('fires-date-sub').style.display=on?'':'none';
-  if(on){fetchFires();fetchHotspots();}
+  if(on){fetchFires();if(hotspotsVisible)fetchHotspots();}
   else{fireLayer.getSource().clear();hotspotLayer.getSource().clear();}
+  saveUIState();
+}
+function setHotspotsVisible(on){
+  hotspotsVisible=on;
+  document.getElementById('hotspots-btn-on').classList.toggle('active',on);
+  document.getElementById('hotspots-btn-off').classList.toggle('active',!on);
+  if(on)fetchHotspots();
+  else hotspotLayer.getSource().clear();
   saveUIState();
 }
 function setEventsVisible(on){
@@ -1327,7 +1367,17 @@ function setAirfieldsVisible(on){
 }
 function onFiresDateChange(){
   fetchFires();
-  fetchHotspots();
+  if(hotspotsVisible)fetchHotspots();
+}
+function _frpCategoryParams(){
+  const all=['low','medium','high','extreme'];
+  const sel=all.filter(c=>document.getElementById('frp-'+c)?.checked);
+  return sel.length===4?null:sel.join(',');  // null = all selected, no param needed
+}
+function onFrpFilterChange(){
+  fetchFires();
+  if(hotspotsVisible)fetchHotspots();
+  saveUIState();
 }
 function renderFires(firesOverride){
   const src=fireLayer.getSource();src.clear();
@@ -1335,6 +1385,7 @@ function renderFires(firesOverride){
   const data=firesOverride||firesData;
   data.forEach(fire=>{
     if(!fire.perimeter)return;
+    if(!_frpWanted(fire.max_frp))return;
     const geomType=fire.perimeter.type;
     let olGeom;
     try{
@@ -1513,7 +1564,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){await Promise.all([fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchHotspots(),fetchActiveEvents()]);}
+async function fetchAll(){const tasks=[fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchActiveEvents()];if(hotspotsVisible)tasks.push(fetchHotspots());await Promise.all(tasks);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1595,13 +1646,14 @@ async function fetchFires(){
     if(startDate)params.set('start',startDate);
     if(endDate)params.set('end',endDate);
     if(!startDate&&!endDate)params.set('status','active');
+    const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
   }catch(e){firesData=[];}
 }
 async function fetchHotspots(){
-  if(!firesVisible)return;
+  if(!firesVisible||!hotspotsVisible)return;
   const startDate=document.getElementById('fires-date-start').value;
   const endDate=document.getElementById('fires-date-end').value;
   if(!startDate&&!endDate){hotspotLayer.getSource().clear();hotspotsData=[];return;}
@@ -1610,6 +1662,7 @@ async function fetchHotspots(){
     const params=new URLSearchParams({min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
     if(startDate)params.set('start',startDate);
     if(endDate)params.set('end',endDate);
+    const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
     const res=await fetch(`${config.baseUrl}/hotspots?${params}`,{headers:apiHeaders()});
     hotspotsData=res.ok?await res.json():[];
     renderHotspots();
@@ -1617,11 +1670,12 @@ async function fetchHotspots(){
 }
 function renderHotspots(){
   const src=hotspotLayer.getSource();src.clear();
-  if(!firesVisible)return;
+  if(!firesVisible||!hotspotsVisible)return;
   hotspotsData.forEach(h=>{
+    if(!_frpWanted(h.frp))return;
     const pt=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([h.lon,h.lat])),hotspotData:h});
     const frp=h.frp||0;
-    const r=frp>300?'rgba(220,20,20,0.9)':frp>100?'rgba(255,80,0,0.85)':frp>30?'rgba(255,160,0,0.8)':'rgba(255,200,80,0.75)';
+    const r=frp>=500?'rgba(170,0,0,0.95)':frp>=100?'rgba(255,60,0,0.88)':frp>=30?'rgba(255,140,0,0.82)':'rgba(255,210,0,0.78)';
     pt.setStyle(new ol.style.Style({image:new ol.style.Circle({radius:3.5,fill:new ol.style.Fill({color:r}),stroke:new ol.style.Stroke({color:'rgba(0,0,0,0.4)',width:0.5})})}));
     src.addFeature(pt);
   });
@@ -1972,7 +2026,9 @@ function saveUIState(){
   state['heatmap-active']=document.getElementById('btn-heatmap')?.classList.contains('active')||false;
   state['filter-type-airplane']=document.getElementById('filter-type-airplane').checked;
   state['filter-type-helicopter']=document.getElementById('filter-type-helicopter').checked;
+  ['frp-low','frp-medium','frp-high','frp-extreme'].forEach(id=>{state[id]=document.getElementById(id).checked;});
   state['fires-visible']=firesVisible;
+  state['hotspots-visible']=hotspotsVisible;
   state['events-visible']=eventsVisible;
   state['airfields-visible']=airfieldsVisible;
   localStorage.setItem('sw-ui',JSON.stringify(state));
@@ -1989,12 +2045,19 @@ function restoreUIState(){
     // Restore type checkboxes
     if(s['filter-type-airplane']!=null)document.getElementById('filter-type-airplane').checked=s['filter-type-airplane'];
     if(s['filter-type-helicopter']!=null)document.getElementById('filter-type-helicopter').checked=s['filter-type-helicopter'];
+    // Restore FRP checkboxes
+    ['frp-low','frp-medium','frp-high','frp-extreme'].forEach(id=>{if(s[id]!=null)document.getElementById(id).checked=s[id];});
     // Restore toggle button states
     if(s['fires-visible']!=null){
       firesVisible=s['fires-visible'];
       document.getElementById('fires-btn-on').classList.toggle('active',firesVisible);
       document.getElementById('fires-btn-off').classList.toggle('active',!firesVisible);
       document.getElementById('fires-date-sub').style.display=firesVisible?'':'none';
+    }
+    if(s['hotspots-visible']!=null){
+      hotspotsVisible=s['hotspots-visible'];
+      document.getElementById('hotspots-btn-on').classList.toggle('active',hotspotsVisible);
+      document.getElementById('hotspots-btn-off').classList.toggle('active',!hotspotsVisible);
     }
     if(s['events-visible']!=null){
       eventsVisible=s['events-visible'];

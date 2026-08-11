@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 import pathlib
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from typing_extensions import Annotated
 
@@ -246,6 +246,7 @@ def get_fires(
     max_lat: Optional[float] = None,
     min_lon: Optional[float] = None,
     max_lon: Optional[float] = None,
+    frp_categories: Optional[str] = None,  # comma-separated: low,medium,high,extreme
 ):
     q = db.query(FirmsFireIncident)
     if status:
@@ -262,6 +263,15 @@ def get_fires(
         q = q.filter(FirmsFireIncident.centroid_lon >= min_lon)
     if max_lon is not None:
         q = q.filter(FirmsFireIncident.centroid_lon <= max_lon)
+    if frp_categories:
+        cats = {c.strip() for c in frp_categories.split(',')}
+        conds = []
+        if 'low'     in cats: conds.append(or_(FirmsFireIncident.max_frp == None, FirmsFireIncident.max_frp < 30))
+        if 'medium'  in cats: conds.append(and_(FirmsFireIncident.max_frp >= 30,  FirmsFireIncident.max_frp < 100))
+        if 'high'    in cats: conds.append(and_(FirmsFireIncident.max_frp >= 100, FirmsFireIncident.max_frp < 500))
+        if 'extreme' in cats: conds.append(FirmsFireIncident.max_frp >= 500)
+        if conds:
+            q = q.filter(or_(*conds))
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
     return [
         {
@@ -288,6 +298,7 @@ def get_hotspots(
     max_lat: Optional[float] = None,
     min_lon: Optional[float] = None,
     max_lon: Optional[float] = None,
+    frp_categories: Optional[str] = None,
 ):
     q = db.query(FirmsHotspot)
     if start:   q = q.filter(FirmsHotspot.acq_date >= start)
@@ -296,6 +307,15 @@ def get_hotspots(
     if max_lat is not None: q = q.filter(FirmsHotspot.lat <= max_lat)
     if min_lon is not None: q = q.filter(FirmsHotspot.lon >= min_lon)
     if max_lon is not None: q = q.filter(FirmsHotspot.lon <= max_lon)
+    if frp_categories:
+        cats = {c.strip() for c in frp_categories.split(',')}
+        conds = []
+        if 'low'     in cats: conds.append(or_(FirmsHotspot.frp == None, FirmsHotspot.frp < 30))
+        if 'medium'  in cats: conds.append(and_(FirmsHotspot.frp >= 30,  FirmsHotspot.frp < 100))
+        if 'high'    in cats: conds.append(and_(FirmsHotspot.frp >= 100, FirmsHotspot.frp < 500))
+        if 'extreme' in cats: conds.append(FirmsHotspot.frp >= 500)
+        if conds:
+            q = q.filter(or_(*conds))
     return [{"fire_id":h.fire_id,"lat":h.lat,"lon":h.lon,"acq_date":h.acq_date,"frp":h.frp,"confidence":h.confidence,"satellite":h.satellite} for h in q.all()]
 
 
