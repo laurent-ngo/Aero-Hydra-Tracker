@@ -3,11 +3,13 @@ import csv
 import json
 import math
 import time
+import random
 import logging
 import requests
 from datetime import datetime, timedelta
 from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
+from sqlalchemy.exc import OperationalError
 
 from migrate import SessionLocal, FirmsFireIncident, FirmsHotspot
 
@@ -29,6 +31,7 @@ FIRE_BUFFER_KM   = 1.0   # km buffer around union of hotspot geometries
 FIRE_CLOSE_DAYS  = 3     # close fire if no hotspot detected for this many days
 COMMIT_BATCH     = 200   # flush to disk every N hotspots
 FIRE_MATCH_DEG   = 2.0   # ~220 km bbox pre-filter before shapely intersects()
+DEADLOCK_RETRIES = 4     # max retries on concurrent deadlock
 
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
@@ -223,23 +226,35 @@ def import_firms_csv_files(paths):
             logger.info(f"FIRMS import: {len(rows)} rows in {path}")
             ok = skipped = updated = errors = pending = 0
             for row in rows:
-                try:
-                    result = process_hotspot(session, row)
-                    if result == 'updated':
-                        updated += 1
-                    elif result == 'skipped':
-                        skipped += 1
-                    else:
-                        ok += 1
-                    pending += 1
-                    if pending >= COMMIT_BATCH:
-                        session.commit()
+                for attempt in range(DEADLOCK_RETRIES):
+                    try:
+                        result = process_hotspot(session, row)
+                        if result == 'updated':
+                            updated += 1
+                        elif result == 'skipped':
+                            skipped += 1
+                        else:
+                            ok += 1
+                        pending += 1
+                        if pending >= COMMIT_BATCH:
+                            session.commit()
+                            pending = 0
+                        break
+                    except OperationalError as e:
+                        session.rollback()
                         pending = 0
-                except Exception as e:
-                    logger.warning(f"FIRMS import: hotspot error ({e})")
-                    session.rollback()
-                    pending = 0
-                    errors += 1
+                        if 'deadlock' in str(e).lower() and attempt < DEADLOCK_RETRIES - 1:
+                            time.sleep(random.uniform(0.1, 0.5) * (attempt + 1))
+                            continue
+                        logger.warning(f"FIRMS import: hotspot error ({e})")
+                        errors += 1
+                        break
+                    except Exception as e:
+                        logger.warning(f"FIRMS import: hotspot error ({e})")
+                        session.rollback()
+                        pending = 0
+                        errors += 1
+                        break
             if pending:
                 session.commit()
             logger.info(f"FIRMS import: {path} — {ok} new, {updated} updated, {skipped} skipped, {errors} errors")
