@@ -279,6 +279,26 @@ def get_fires(
         for f in fires
     ]
 
+@app.get("/hotspots", dependencies=[Security(get_api_key)])
+def get_hotspots(
+    db: DbSession,
+    start:   Optional[str]   = None,
+    end:     Optional[str]   = None,
+    min_lat: Optional[float] = None,
+    max_lat: Optional[float] = None,
+    min_lon: Optional[float] = None,
+    max_lon: Optional[float] = None,
+):
+    q = db.query(FirmsHotspot)
+    if start:   q = q.filter(FirmsHotspot.acq_date >= start)
+    if end:     q = q.filter(FirmsHotspot.acq_date <= end)
+    if min_lat is not None: q = q.filter(FirmsHotspot.lat >= min_lat)
+    if max_lat is not None: q = q.filter(FirmsHotspot.lat <= max_lat)
+    if min_lon is not None: q = q.filter(FirmsHotspot.lon >= min_lon)
+    if max_lon is not None: q = q.filter(FirmsHotspot.lon <= max_lon)
+    return [{"fire_id":h.fire_id,"lat":h.lat,"lon":h.lon,"acq_date":h.acq_date,"frp":h.frp,"confidence":h.confidence,"satellite":h.satellite} for h in q.all()]
+
+
 @app.get("/fires/{fire_id}/hotspots", dependencies=[Security(get_api_key)])
 def get_fire_hotspots(db: DbSession, fire_id: int):
     hotspots = db.query(FirmsHotspot).filter(FirmsHotspot.fire_id == fire_id).order_by(FirmsHotspot.acq_date, FirmsHotspot.acq_time).all()

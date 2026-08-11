@@ -764,13 +764,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--start",
         metavar="DATETIME",
-        help="Start datetime for --fr24-cache window, e.g. 2024-08-01T10:00:00 (overrides --hours)"
+        help="Start date/datetime for --fr24-cache or --firms-sync, e.g. 2024-08-01 or 2024-08-01T10:00:00"
     )
 
     parser.add_argument(
         "--end",
         metavar="DATETIME",
-        help="End datetime for --fr24-cache window, e.g. 2024-08-01T18:00:00 (default: now)"
+        help="End date/datetime for --fr24-cache or --firms-sync, e.g. 2024-08-10 (default: now/today)"
+    )
+
+    parser.add_argument(
+        "--firms-import",
+        metavar="FILE",
+        nargs="+",
+        help="Import one or more FIRMS CSV files downloaded from the portal"
     )
 
     parser.add_argument(
@@ -805,8 +812,19 @@ if __name__ == "__main__":
         update_adsb_cache()
         sys.exit(0)
 
+    if args.firms_import:
+        from firmsCollector import import_firms_csv_files
+        import_firms_csv_files(args.firms_import)
+        sys.exit(0)
+
     if args.firms_sync:
-        run_firms_sync(days=args.firms_days)
+        def _parse_date(s):
+            return s.split('T')[0].split(' ')[0]  # accept YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
+        run_firms_sync(
+            days=args.firms_days,
+            date_start=_parse_date(args.start) if args.start else None,
+            date_end=_parse_date(args.end) if args.end else None,
+        )
         sys.exit(0)
 
     if args.fr24_cache:
