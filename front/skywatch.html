@@ -409,8 +409,8 @@
           </div>
         </div>
       </div>
-      <div class="filter-row"><label>ROIs</label>
-        <select id="toggle-rois" onchange="renderROIs()"><option value="all">All types</option><option value="fire">Fire only</option><option value="fire-named">Fire (named)</option><option value="water">Water only</option><option value="water-named">Water (named)</option><option value="none">Hidden</option></select>
+      <div class="filter-row"><label>Water ROI</label>
+        <select id="toggle-rois" onchange="renderROIs()"><option value="all">All</option><option value="water-named">Named only</option><option value="none">Hidden</option></select>
       </div>
       <div class="filter-row"><label>Events</label>
         <div class="toggle-group">
@@ -582,16 +582,6 @@
 </div>
 
 
-<div class="modal-backdrop" id="fire-name-modal">
-  <div class="modal">
-    <h2>&#x1F525; NAME FIRE LOCATION</h2>
-    <div class="modal-row"><label>NAME</label><input type="text" id="fire-name-input" placeholder="e.g. Var Fire 2025"/></div>
-    <div class="modal-actions">
-      <button class="btn primary" onclick="saveFireLocation()">SAVE</button>
-      <button class="btn" onclick="closeFireNameModal()">CANCEL</button>
-    </div>
-  </div>
-</div>
 
 <script>
 console.log('SkyWatch script loaded');
@@ -601,23 +591,6 @@ let config = {
   interval: parseInt(localStorage.getItem('sw-interval') || '30'),
   apiKey:   localStorage.getItem('sw-apiKey')   || ''
 };
-let pendingFireRoi=null;
-function openFireNameModal(feat){pendingFireRoi=feat;document.getElementById('fire-name-input').value=feat.get('roiName')||'';document.getElementById('fire-name-modal').classList.add('open');}
-function closeFireNameModal(){pendingFireRoi=null;document.getElementById('fire-name-modal').classList.remove('open');}
-async function saveFireLocation(){
-  if(!pendingFireRoi)return;
-  const name=document.getElementById('fire-name-input').value.trim();
-  if(!name)return;
-  const existingId=pendingFireRoi.get('fireLocationId');
-  try{
-    const res=existingId
-      ?await fetch(`${config.baseUrl}/fire-location/${existingId}`,{method:'PUT',headers:apiHeaders(),body:JSON.stringify({name})})
-      :await fetch(`${config.baseUrl}/fire-location`,{method:'POST',headers:apiHeaders(),body:JSON.stringify({name,lat:pendingFireRoi.get('roiLat'),lon:pendingFireRoi.get('roiLon')})});
-    if(!res.ok)throw new Error(await res.text());
-    closeFireNameModal();
-    fetchFireLocations();
-  }catch(e){alert('Failed to save: '+e.message);}
-}
 function openModal(){document.getElementById('cfg-base-url').value=config.baseUrl;document.getElementById('cfg-interval').value=config.interval;document.getElementById('cfg-api-key').value=config.apiKey;document.getElementById('modal').classList.add('open');}
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 function saveConfig(){config.baseUrl=document.getElementById('cfg-base-url').value.trim();config.interval=parseInt(document.getElementById('cfg-interval').value);config.apiKey=document.getElementById('cfg-api-key').value.trim();localStorage.setItem('sw-baseUrl',config.baseUrl);localStorage.setItem('sw-interval',config.interval);localStorage.setItem('sw-apiKey',config.apiKey);closeModal();fetchAll();}
@@ -655,7 +628,7 @@ function updateLegendSwatches(){
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
-let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],fireLocations=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
+let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
 let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false;
 
 // MAP
@@ -1274,8 +1247,6 @@ map.on('click',evt=>{
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
   const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
   if(evF&&evF.get('eventData')){showActiveEventPopup(evF.get('eventData'),evt.pixel);return;}
-  const roiF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===roiLayer});
-  if(roiF&&roiF.get('roiType')==='fire'){openFireNameModal(roiF);return;}
   closeAllPopups();
 });
 
@@ -1311,10 +1282,7 @@ function pointInPolygon(plat,plon,coords){
   return inside;
 }
 const _autoNameRe=/^(Area \d{6}|Level \d+ Zone - Area \d+)$/;
-function _isNamed(roi,coords){
-  if(roi.type==='fire'){
-    return !!fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords));
-  }
+function _isNamed(roi){
   return roi.name&&!_autoNameRe.test(roi.name);
 }
 function _frpCategory(frp){
@@ -1409,24 +1377,19 @@ function renderROIs(){
   const src=roiLayer.getSource();src.clear();
   const rm=document.getElementById('toggle-rois').value;if(rm==='none')return;
   roiData.forEach(roi=>{
+    if(roi.type==='fire')return;
     const coords=typeof roi.geometry==='string'?JSON.parse(roi.geometry):roi.geometry;
     if(!coords||coords.length<3)return;
-    if(rm==='fire'&&roi.type!=='fire')return;
-    else if(rm==='fire-named'&&(roi.type!=='fire'||!_isNamed(roi,coords)))return;
-    else if(rm==='water'&&roi.type!=='water')return;
-    else if(rm==='water-named'&&(roi.type!=='water'||!_isNamed(roi,coords)))return;
-    else if(rm!=='all'&&rm!=='fire'&&rm!=='fire-named'&&rm!=='water'&&rm!=='water-named')return;
+    if(rm==='water-named'&&!_isNamed(roi))return;
     try{
-      const matchedFl=roi.type==='fire'?fireLocations.find(fl=>pointInPolygon(fl.lat,fl.lon,coords)):null;
       const feat=new ol.Feature({
         geometry:new ol.geom.Polygon([coords.map(c=>ol.proj.fromLonLat([c[1],c[0]]))]),
-        roiName: matchedFl?.name||roi.name||'—',
+        roiName: roi.name||'—',
         roiType: roi.type,
         roiDetectedAt: roi.detected_at||null,
         roiId: roi.id,
         roiLat: roi.lat,
         roiLon: roi.lon,
-        fireLocationId: matchedFl?.id||null,
       });
       feat.setStyle(roiStyle(roi.type,roi.level));src.addFeature(feat);
     }catch(e){}
@@ -1565,7 +1528,7 @@ function initTimeRange(){timeStop=Math.floor(Date.now()/1000);timeStart=timeStop
 
 // DATA FETCHING
 function apiHeaders(){const h={'Content-Type':'application/json'};if(config.apiKey)h['X-API-Key']=config.apiKey;return h;}
-async function fetchAll(){const tasks=[fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFireLocations(),fetchFires(),fetchActiveEvents()];if(hotspotsVisible)tasks.push(fetchHotspots());await Promise.all(tasks);}
+async function fetchAll(){const tasks=[fetchAircraft(),fetchAllAircraftFleet(),fetchROIs(),fetchFires(),fetchActiveEvents()];if(hotspotsVisible)tasks.push(fetchHotspots());await Promise.all(tasks);}
 async function fetchAircraft(){
   const se=document.getElementById('fetch-status');
   try{
@@ -1627,13 +1590,6 @@ async function fetchROIs(){
   try{
     const res=await fetch(`${config.baseUrl}/regions-of-interest?level=2`,{headers:apiHeaders()});
     roiData=res.ok?await res.json():[];
-    renderROIs();
-  }catch(e){}
-}
-async function fetchFireLocations(){
-  try{
-    const res=await fetch(`${config.baseUrl}/fire-locations`,{headers:apiHeaders()});
-    fireLocations=res.ok?await res.json():[];
     renderROIs();
   }catch(e){}
 }

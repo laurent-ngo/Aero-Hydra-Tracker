@@ -98,7 +98,7 @@ class RegionOfInterest(Base):
 
     
     __table_args__ = (
-        CheckConstraint(type.in_(['fire', 'water', 'training']), name='type_check'),
+        CheckConstraint(type.in_(['water', 'training']), name='type_check'),
     )
 
 class Airfield(Base):
@@ -118,16 +118,6 @@ class WaterLocation(Base):
     name = Column(String)
     lat = Column(Float)
     lon = Column(Float)
-
-class FireLocation(Base):
-    __tablename__ = 'fire_locations'
-
-    id  = Column(Integer, primary_key=True)
-    ref = Column(String(4), unique=True)
-    name = Column(String)
-    lat = Column(Float)
-    lon = Column(Float)
-
 
 class FirmsFireIncident(Base):
     __tablename__ = 'firms_fire_incident'
