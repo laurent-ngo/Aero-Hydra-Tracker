@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
 from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 
 from migrate import SessionLocal, FirmsFireIncident, FirmsHotspot
 
@@ -201,23 +202,26 @@ def process_hotspot(session, row):
 # ── Stale fire closure ────────────────────────────────────────────────────────
 
 def close_stale_fires(session):
-    cutoff = (datetime.utcnow() - timedelta(days=FIRE_CLOSE_DAYS)).strftime('%Y-%m-%d')
-    for attempt in range(DEADLOCK_RETRIES):
-        try:
-            n = session.query(FirmsFireIncident).filter(
-                FirmsFireIncident.status == 'active',
-                FirmsFireIncident.last_detected < cutoff,
-            ).update({'status': 'closed'}, synchronize_session=False)
-            session.commit()
-            if n:
-                logger.info(f"FIRMS: closed {n} stale fires (last_detected < {cutoff})")
-            return
-        except OperationalError as e:
-            session.rollback()
-            if 'deadlock' in str(e).lower() and attempt < DEADLOCK_RETRIES - 1:
-                time.sleep(random.uniform(0.2, 1.0) * (attempt + 1))
-                continue
-            logger.warning(f"FIRMS: close_stale_fires failed ({e})")
+    # Advisory lock ensures only one concurrent process runs this
+    got_lock = session.execute(text("SELECT pg_try_advisory_lock(20260811)")).scalar()
+    if not got_lock:
+        logger.info("FIRMS: close_stale_fires skipped (another process holds the lock)")
+        return
+    try:
+        cutoff = (datetime.utcnow() - timedelta(days=FIRE_CLOSE_DAYS)).strftime('%Y-%m-%d')
+        n = session.query(FirmsFireIncident).filter(
+            FirmsFireIncident.status == 'active',
+            FirmsFireIncident.last_detected < cutoff,
+        ).update({'status': 'closed'}, synchronize_session=False)
+        session.commit()
+        if n:
+            logger.info(f"FIRMS: closed {n} stale fires (last_detected < {cutoff})")
+    except OperationalError as e:
+        session.rollback()
+        logger.warning(f"FIRMS: close_stale_fires failed ({e})")
+    finally:
+        session.execute(text("SELECT pg_advisory_unlock(20260811)"))
+        session.commit()
 
 
 # ── CSV file import ───────────────────────────────────────────────────────────
