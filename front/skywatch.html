@@ -1403,6 +1403,7 @@ function renderFires(firesOverride){
     }));
     src.addFeature(feat);
   });
+  if(hotspotsVisible)renderHotspots();
 }
 function renderROIs(){
   const src=roiLayer.getSource();src.clear();
@@ -1662,7 +1663,6 @@ async function fetchHotspots(){
     const params=new URLSearchParams({min_lon:ext[0].toFixed(4),min_lat:ext[1].toFixed(4),max_lon:ext[2].toFixed(4),max_lat:ext[3].toFixed(4)});
     if(startDate)params.set('start',startDate);
     if(endDate)params.set('end',endDate);
-    const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
     const res=await fetch(`${config.baseUrl}/hotspots?${params}`,{headers:apiHeaders()});
     hotspotsData=res.ok?await res.json():[];
     renderHotspots();
@@ -1671,8 +1671,9 @@ async function fetchHotspots(){
 function renderHotspots(){
   const src=hotspotLayer.getSource();src.clear();
   if(!firesVisible||!hotspotsVisible)return;
+  const visibleFireIds=new Set(firesData.filter(f=>f.perimeter&&_frpWanted(f.max_frp)).map(f=>f.id));
   hotspotsData.forEach(h=>{
-    if(!_frpWanted(h.frp))return;
+    if(!visibleFireIds.has(h.fire_id))return;
     const pt=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([h.lon,h.lat])),hotspotData:h});
     const frp=h.frp||0;
     const r=frp>=500?'rgba(170,0,0,0.95)':frp>=100?'rgba(255,60,0,0.88)':frp>=30?'rgba(255,140,0,0.82)':'rgba(255,210,0,0.78)';
