@@ -21,7 +21,10 @@ SCAN_REGIONS = [
     {'name': 'france_italy', 'bbox': '-5,36,19,51'},
 ]
 
-FIRMS_SOURCES    = ['VIIRS_NOAA20_NRT', 'VIIRS_SNPP_NRT']
+FIRMS_SOURCES_NRT = ['VIIRS_NOAA20_NRT', 'VIIRS_SNPP_NRT']
+FIRMS_SOURCES_SP  = ['VIIRS_NOAA20_SP',  'VIIRS_SNPP_SP']   # standard/archive (>7 days old)
+NRT_CUTOFF_DAYS   = 7    # NRT date param is only reliable for the last 7 days
+
 FIRE_BUFFER_KM   = 1.0   # km buffer around union of hotspot geometries
 FIRE_CLOSE_DAYS  = 3     # close fire if no hotspot detected for this many days
 
@@ -102,14 +105,36 @@ def _recompute_perimeter(session, fire):
 
 def process_hotspot(session, row):
     src_id = _source_id(row)
-    if session.query(FirmsHotspot).filter(FirmsHotspot.source_id == src_id).first():
-        return  # already stored
 
     lat      = float(row['latitude'])
     lon      = float(row['longitude'])
     scan_km  = float(row.get('scan',  0.5))
     track_km = float(row.get('track', 0.5))
     geom     = _hotspot_geom(lat, lon, scan_km, track_km)
+    geom_str = json.dumps(mapping(geom))
+
+    existing = session.query(FirmsHotspot).filter(FirmsHotspot.source_id == src_id).first()
+    if existing:
+        if existing.geometry == geom_str:
+            return 'skipped'  # identical — nothing to do
+        # geometry changed (recalibrated scan/track) — update in place
+        existing.lat      = lat
+        existing.lon      = lon
+        existing.scan_km  = scan_km
+        existing.track_km = track_km
+        existing.geometry = geom_str
+        frp = None
+        try:
+            frp = float(row['frp']) if row.get('frp') else None
+        except ValueError:
+            pass
+        existing.frp        = frp
+        existing.fetched_at = int(time.time())
+        session.flush()
+        _recompute_perimeter(session, session.query(FirmsFireIncident).get(existing.fire_id))
+        session.commit()
+        logger.info(f"FIRMS: updated hotspot {src_id} (geometry changed)")
+        return 'updated'
 
     matches = _matching_fires(session, geom)
 
@@ -153,7 +178,8 @@ def process_hotspot(session, row):
     session.add(hotspot)
     session.flush()
 
-    fire.last_detected = max(fire.last_detected, row['acq_date'])
+    fire.last_detected  = max(fire.last_detected,  row['acq_date'])
+    fire.first_detected = min(fire.first_detected, row['acq_date'])
     _recompute_perimeter(session, fire)
     session.commit()
 
@@ -173,31 +199,110 @@ def close_stale_fires(session):
         session.commit()
 
 
+# ── CSV file import ───────────────────────────────────────────────────────────
+
+def import_firms_csv_files(paths):
+    """Import FIRMS CSV files downloaded from the portal into the database."""
+    session = SessionLocal()
+    try:
+        for path in paths:
+            logger.info(f"FIRMS import: reading {path}")
+            with open(path, newline='', encoding='utf-8') as f:
+                rows = list(csv.DictReader(f))
+            logger.info(f"FIRMS import: {len(rows)} rows in {path}")
+            ok = skipped = updated = errors = 0
+            for row in rows:
+                try:
+                    result = process_hotspot(session, row)
+                    if result == 'updated':
+                        updated += 1
+                    elif result == 'skipped':
+                        skipped += 1
+                    else:
+                        ok += 1
+                except Exception as e:
+                    logger.warning(f"FIRMS import: hotspot error ({e})")
+                    session.rollback()
+                    errors += 1
+            logger.info(f"FIRMS import: {path} — {ok} new, {updated} updated, {skipped} skipped, {errors} errors")
+        close_stale_fires(session)
+        logger.info("FIRMS import: complete.")
+    finally:
+        session.close()
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def run_firms_sync(days=5):
+def _iter_days(date_start_str, date_end_str):
+    """Yield each date between start and end inclusive as YYYY-MM-DD."""
+    from datetime import date as _date, timedelta as _td
+    cur = _date.fromisoformat(date_start_str)
+    end = _date.fromisoformat(date_end_str)
+    while cur <= end:
+        yield cur.isoformat()
+        cur += _td(days=1)
+
+def run_firms_sync(days=5, date_start=None, date_end=None):
+    """
+    date_start / date_end: YYYY-MM-DD strings (optional).
+    When provided they override `days`.
+    - Recent dates (≤ NRT_CUTOFF_DAYS): NRT sources, up to 10 days per request.
+    - Older dates: SP (archive) sources, one day per request (API constraint).
+    """
     if not FIRMS_API_KEY:
         logger.error("NASA_API_KEY not set — skipping FIRMS sync.")
         return
 
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+
+    end   = _date.fromisoformat(date_end)   if date_end   else today
+    start = _date.fromisoformat(date_start) if date_start else end - _td(days=days - 1)
+
+    # Split the full range into an SP portion (old) and an NRT portion (recent)
+    nrt_boundary = today - _td(days=NRT_CUTOFF_DAYS)
+    sp_end   = min(end,   nrt_boundary - _td(days=1))
+    nrt_start = max(start, nrt_boundary)
+
     session = SessionLocal()
     try:
-        today = datetime.utcnow().strftime('%Y-%m-%d')
-        for region in SCAN_REGIONS:
-            for source in FIRMS_SOURCES:
-                logger.info(f"FIRMS: fetching {source} / {region['name']} / last {days}d")
-                try:
-                    rows = fetch_firms_csv(region['bbox'], source, today, day_range=min(days, 5))
-                    logger.info(f"FIRMS: {len(rows)} hotspots from {source}")
-                    for row in rows:
+        # ── SP (archive): one day at a time ──────────────────────────────────
+        if start <= sp_end:
+            for day in _iter_days(start.isoformat(), sp_end.isoformat()):
+                for region in SCAN_REGIONS:
+                    for source in FIRMS_SOURCES_SP:
+                        logger.info(f"FIRMS: fetching {source} / {region['name']} / 1d on {day}")
                         try:
-                            process_hotspot(session, row)
+                            rows = fetch_firms_csv(region['bbox'], source, day, day_range=1)
+                            logger.info(f"FIRMS: {len(rows)} hotspots from {source} on {day}")
+                            for row in rows:
+                                try:
+                                    process_hotspot(session, row)
+                                except Exception as e:
+                                    logger.warning(f"FIRMS: hotspot error ({e})")
+                                    session.rollback()
                         except Exception as e:
-                            logger.warning(f"FIRMS: hotspot error ({e})")
-                            session.rollback()
-                except Exception as e:
-                    logger.error(f"FIRMS: fetch error for {source}: {e}")
-                time.sleep(1)
+                            logger.error(f"FIRMS: fetch error for {source} on {day}: {e}")
+                        time.sleep(0.5)
+
+        # ── NRT: one day at a time (API rejects day_range > 1) ───────────────
+        if nrt_start <= end:
+            for day in _iter_days(nrt_start.isoformat(), end.isoformat()):
+                for region in SCAN_REGIONS:
+                    for source in FIRMS_SOURCES_NRT:
+                        logger.info(f"FIRMS: fetching {source} / {region['name']} / 1d on {day}")
+                        try:
+                            rows = fetch_firms_csv(region['bbox'], source, day, day_range=1)
+                            logger.info(f"FIRMS: {len(rows)} hotspots from {source} on {day}")
+                            for row in rows:
+                                try:
+                                    process_hotspot(session, row)
+                                except Exception as e:
+                                    logger.warning(f"FIRMS: hotspot error ({e})")
+                                    session.rollback()
+                        except Exception as e:
+                            logger.error(f"FIRMS: fetch error for {source} on {day}: {e}")
+                        time.sleep(0.5)
         close_stale_fires(session)
         logger.info("FIRMS: sync complete.")
     finally:
