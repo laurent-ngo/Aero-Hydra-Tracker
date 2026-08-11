@@ -400,6 +400,7 @@
             <input type="checkbox" id="frp-extreme" checked onchange="onFrpFilterChange()" style="accent-color:#dd0000;cursor:pointer;"/> <span style="color:#dd0000;">Ext</span> <span style="color:var(--text-dim);font-size:10px;">&gt;500</span>
           </label>
         </div>
+        <div class="filter-row"><label>Min spots</label><input type="number" id="fires-min-hotspots" min="1" placeholder="any" style="width:70px;" onchange="fetchFires()"/></div>
         <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
         <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
         <div class="filter-row" style="margin-top:4px;"><label>Hotspots</label>
@@ -1608,6 +1609,7 @@ async function fetchFires(){
     if(endDate)params.set('end',endDate);
     if(!startDate&&!endDate)params.set('status','active');
     const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
+    const minSpots=parseInt(document.getElementById('fires-min-hotspots').value);if(minSpots>0)params.set('min_hotspots',minSpots);
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();

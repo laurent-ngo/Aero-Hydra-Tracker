@@ -247,6 +247,7 @@ def get_fires(
     min_lon: Optional[float] = None,
     max_lon: Optional[float] = None,
     frp_categories: Optional[str] = None,  # comma-separated: low,medium,high,extreme
+    min_hotspots:   Optional[int] = None,
 ):
     q = db.query(FirmsFireIncident)
     if status:
@@ -272,6 +273,8 @@ def get_fires(
         if 'extreme' in cats: conds.append(FirmsFireIncident.max_frp >= 500)
         if conds:
             q = q.filter(or_(*conds))
+    if min_hotspots is not None:
+        q = q.filter(FirmsFireIncident.hotspot_count >= min_hotspots)
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
     return [
         {
