@@ -3,11 +3,14 @@ import csv
 import json
 import math
 import time
+import random
 import logging
 import requests
 from datetime import datetime, timedelta
 from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
+from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 
 from migrate import SessionLocal, FirmsFireIncident, FirmsHotspot
 
@@ -29,6 +32,7 @@ FIRE_BUFFER_KM   = 1.0   # km buffer around union of hotspot geometries
 FIRE_CLOSE_DAYS  = 3     # close fire if no hotspot detected for this many days
 COMMIT_BATCH     = 200   # flush to disk every N hotspots
 FIRE_MATCH_DEG   = 2.0   # ~220 km bbox pre-filter before shapely intersects()
+DEADLOCK_RETRIES = 4     # max retries on concurrent deadlock
 
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
@@ -198,16 +202,90 @@ def process_hotspot(session, row):
 # ── Stale fire closure ────────────────────────────────────────────────────────
 
 def close_stale_fires(session):
-    cutoff = (datetime.utcnow() - timedelta(days=FIRE_CLOSE_DAYS)).strftime('%Y-%m-%d')
-    stale = session.query(FirmsFireIncident).filter(
-        FirmsFireIncident.status == 'active',
-        FirmsFireIncident.last_detected < cutoff,
-    ).all()
-    for fire in stale:
-        fire.status = 'closed'
-        logger.info(f"FIRMS: closed stale fire {fire.id} (last seen {fire.last_detected})")
-    if stale:
+    # Advisory lock ensures only one concurrent process runs this
+    got_lock = session.execute(text("SELECT pg_try_advisory_lock(20260811)")).scalar()
+    if not got_lock:
+        logger.info("FIRMS: close_stale_fires skipped (another process holds the lock)")
+        return
+    try:
+        cutoff = (datetime.utcnow() - timedelta(days=FIRE_CLOSE_DAYS)).strftime('%Y-%m-%d')
+        n = session.query(FirmsFireIncident).filter(
+            FirmsFireIncident.status == 'active',
+            FirmsFireIncident.last_detected < cutoff,
+        ).update({'status': 'closed'}, synchronize_session=False)
         session.commit()
+        if n:
+            logger.info(f"FIRMS: closed {n} stale fires (last_detected < {cutoff})")
+    except OperationalError as e:
+        session.rollback()
+        logger.warning(f"FIRMS: close_stale_fires failed ({e})")
+    finally:
+        session.execute(text("SELECT pg_advisory_unlock(20260811)"))
+        session.commit()
+
+
+# ── Duplicate fire merge ──────────────────────────────────────────────────────
+
+MERGE_MATCH_DEG = 0.3   # ~33 km centroid bbox for duplicate merge (fires are small)
+
+def merge_duplicate_fires(session):
+    """Merge fires that directly overlap in both time and geometry.
+    No transitivity: A merges into B only if their perimeters physically intersect.
+    """
+    fires = session.query(FirmsFireIncident).filter(
+        FirmsFireIncident.perimeter.isnot(None),
+        FirmsFireIncident.centroid_lat.isnot(None),
+    ).order_by(FirmsFireIncident.first_detected).all()
+
+    logger.info(f"FIRMS merge: scanning {len(fires)} fires for duplicates")
+
+    absorbed = set()   # ids already merged into another fire
+    merged   = 0
+
+    for i, fa in enumerate(fires):
+        if fa.id in absorbed:
+            continue
+        geom_a    = None
+        did_merge = False
+
+        for fb in fires[i + 1:]:
+            if fb.id in absorbed:
+                continue
+            # Date ranges must actually overlap
+            if fa.last_detected < fb.first_detected or fb.last_detected < fa.first_detected:
+                continue
+            # Centroid must be close (fires are small — 0.3° ≈ 33 km)
+            if abs(fa.centroid_lat - fb.centroid_lat) > MERGE_MATCH_DEG:
+                continue
+            if abs(fa.centroid_lon - fb.centroid_lon) > MERGE_MATCH_DEG:
+                continue
+            # Shapely intersection — only runs for nearby, date-overlapping candidates
+            if geom_a is None:
+                geom_a = shape(json.loads(fa.perimeter))
+            if not geom_a.intersects(shape(json.loads(fb.perimeter))):
+                continue
+
+            # Merge fb → fa (fa is older, sorted by first_detected)
+            n = session.query(FirmsHotspot).filter(
+                FirmsHotspot.fire_id == fb.id
+            ).update({'fire_id': fa.id}, synchronize_session=False)
+            fb.status = 'closed'
+            absorbed.add(fb.id)
+            did_merge = True
+            merged += 1
+            logger.info(f"FIRMS merge: fire {fb.id} ({fb.first_detected}→{fb.last_detected}) → {fa.id} ({n} hotspots)")
+
+        if did_merge:
+            _recompute_perimeter(session, fa)
+            session.flush()
+            if merged % 50 == 0:
+                session.commit()
+
+    if merged:
+        session.commit()
+        logger.info(f"FIRMS merge: done — {merged} duplicate fires merged")
+    else:
+        logger.info("FIRMS merge: no duplicates found")
 
 
 # ── CSV file import ───────────────────────────────────────────────────────────
@@ -223,27 +301,42 @@ def import_firms_csv_files(paths):
             logger.info(f"FIRMS import: {len(rows)} rows in {path}")
             ok = skipped = updated = errors = pending = 0
             for row in rows:
-                try:
-                    result = process_hotspot(session, row)
-                    if result == 'updated':
-                        updated += 1
-                    elif result == 'skipped':
-                        skipped += 1
-                    else:
-                        ok += 1
-                    pending += 1
-                    if pending >= COMMIT_BATCH:
-                        session.commit()
+                for attempt in range(DEADLOCK_RETRIES):
+                    try:
+                        result = process_hotspot(session, row)
+                        if result == 'updated':
+                            updated += 1
+                        elif result == 'skipped':
+                            skipped += 1
+                        else:
+                            ok += 1
+                        pending += 1
+                        if pending >= COMMIT_BATCH:
+                            session.commit()
+                            pending = 0
+                        break
+                    except OperationalError as e:
+                        session.rollback()
                         pending = 0
-                except Exception as e:
-                    logger.warning(f"FIRMS import: hotspot error ({e})")
-                    session.rollback()
-                    pending = 0
-                    errors += 1
+                        if 'deadlock' in str(e).lower() and attempt < DEADLOCK_RETRIES - 1:
+                            time.sleep(random.uniform(0.1, 0.5) * (attempt + 1))
+                            continue
+                        logger.warning(f"FIRMS import: hotspot error ({e})")
+                        errors += 1
+                        break
+                    except Exception as e:
+                        logger.warning(f"FIRMS import: hotspot error ({e})")
+                        session.rollback()
+                        pending = 0
+                        errors += 1
+                        break
             if pending:
                 session.commit()
             logger.info(f"FIRMS import: {path} — {ok} new, {updated} updated, {skipped} skipped, {errors} errors")
-        close_stale_fires(session)
+        try:
+            close_stale_fires(session)
+        except Exception as e:
+            logger.warning(f"FIRMS import: close_stale_fires skipped ({e})")
         logger.info("FIRMS import: complete.")
     finally:
         session.close()

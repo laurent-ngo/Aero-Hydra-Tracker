@@ -1,6 +1,7 @@
 #!/bin/bash
 
-(sleep 1800; echo "watchdog is killing the script"; kill $$ 2>/dev/null) &
+# Watchdog disabled — re-enable for scheduled polling runs
+# (sleep 1800; echo "watchdog is killing the script"; kill $$ 2>/dev/null) &
 WATCHDOG_PID=$!
 
 # 1. Navigate to the project root so Python can find its imports
