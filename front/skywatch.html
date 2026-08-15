@@ -362,6 +362,12 @@
       <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-bottom:10px;line-height:1.6;" id="time-range-display"></div>
 
       <div class="section-label">Aircraft</div>
+      <div class="filter-row"><label>Show all</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" id="show-all-btn-on" onclick="setShowAllAircraft(true)">ON</button>
+          <button class="toggle-btn active" id="show-all-btn-off" onclick="setShowAllAircraft(false)">OFF</button>
+        </div>
+      </div>
       <div class="filter-row"><label>Reg / Owner</label><input type="text" id="filter-callsign" placeholder="e.g. HB-ZKF" oninput="applyFilters()"/></div>
       <div class="filter-row"><label>Type</label>
         <div style="display:flex;gap:10px;align-items:center;">
@@ -630,7 +636,7 @@ function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
-let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false;
+let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false,showAllAircraft=false;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -1147,7 +1153,7 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row"><span class="tooltip-key">AGL Alt</span><span class="tooltip-val">${ac.last_agl_alt_ft!=null?ac.last_agl_alt_ft.toLocaleString()+' ft':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Speed</span><span class="tooltip-val">${ac.last_speed_kt!=null?ac.last_speed_kt+' kt':'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Track</span><span class="tooltip-val">${ac.true_track!=null?ac.true_track+'°':'--'}</span></div>
-      <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(17,25)+' UTC':'--'}</span></div>`;
+      <div class="tooltip-row"><span class="tooltip-key">Last Seen</span><span class="tooltip-val">${ac.last_timestamp?new Date(ac.last_timestamp*1000).toUTCString().slice(0,25)+' UTC':'--'}</span></div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
   const afF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===airfieldLayer});
@@ -1727,13 +1733,22 @@ function renderActiveEvents(){
   });
 }
 
+function setShowAllAircraft(on){
+  showAllAircraft=on;
+  document.getElementById('show-all-btn-on').classList.toggle('active',on);
+  document.getElementById('show-all-btn-off').classList.toggle('active',!on);
+  applyFilters();
+  saveUIState();
+}
+
 // FILTERS & SELECTION
 function applyFilters(){
   const reg=document.getElementById('filter-callsign').value.toLowerCase();
   const wantAirplane=document.getElementById('filter-type-airplane').checked;
   const wantHelicopter=document.getElementById('filter-type-helicopter').checked;
   const selectedOwners=getSelectedOwners();
-  filteredAircraft=allAircraft.filter(ac=>{
+  const source=showAllAircraft?allAircraftFleet.filter(ac=>!ac.at_airfield):allAircraft;
+  filteredAircraft=source.filter(ac=>{
     if(reg&&!(ac.registration||'').toLowerCase().includes(reg)&&!(ac.icao24||'').toLowerCase().includes(reg)&&!(ac.owner||'').toLowerCase().includes(reg))return false;
     if(!wantAirplane&&ac.type==='airplane')return false;
     if(!wantHelicopter&&ac.type==='helicopter')return false;
@@ -1992,6 +2007,7 @@ function saveUIState(){
   state['filter-type-airplane']=document.getElementById('filter-type-airplane').checked;
   state['filter-type-helicopter']=document.getElementById('filter-type-helicopter').checked;
   ['frp-low','frp-medium','frp-high','frp-extreme'].forEach(id=>{state[id]=document.getElementById(id).checked;});
+  state['show-all-aircraft']=showAllAircraft;
   state['fires-visible']=firesVisible;
   state['hotspots-visible']=hotspotsVisible;
   state['events-visible']=eventsVisible;
@@ -2013,6 +2029,11 @@ function restoreUIState(){
     // Restore FRP checkboxes
     ['frp-low','frp-medium','frp-high','frp-extreme'].forEach(id=>{if(s[id]!=null)document.getElementById(id).checked=s[id];});
     // Restore toggle button states
+    if(s['show-all-aircraft']!=null){
+      showAllAircraft=s['show-all-aircraft'];
+      document.getElementById('show-all-btn-on').classList.toggle('active',showAllAircraft);
+      document.getElementById('show-all-btn-off').classList.toggle('active',!showAllAircraft);
+    }
     if(s['fires-visible']!=null){
       firesVisible=s['fires-visible'];
       document.getElementById('fires-btn-on').classList.toggle('active',firesVisible);
