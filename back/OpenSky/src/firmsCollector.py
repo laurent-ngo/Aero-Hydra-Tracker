@@ -224,6 +224,70 @@ def close_stale_fires(session):
         session.commit()
 
 
+# ── Duplicate fire merge ──────────────────────────────────────────────────────
+
+MERGE_MATCH_DEG = 0.3   # ~33 km centroid bbox for duplicate merge (fires are small)
+
+def merge_duplicate_fires(session):
+    """Merge fires that directly overlap in both time and geometry.
+    No transitivity: A merges into B only if their perimeters physically intersect.
+    """
+    fires = session.query(FirmsFireIncident).filter(
+        FirmsFireIncident.perimeter.isnot(None),
+        FirmsFireIncident.centroid_lat.isnot(None),
+    ).order_by(FirmsFireIncident.first_detected).all()
+
+    logger.info(f"FIRMS merge: scanning {len(fires)} fires for duplicates")
+
+    absorbed = set()   # ids already merged into another fire
+    merged   = 0
+
+    for i, fa in enumerate(fires):
+        if fa.id in absorbed:
+            continue
+        geom_a    = None
+        did_merge = False
+
+        for fb in fires[i + 1:]:
+            if fb.id in absorbed:
+                continue
+            # Date ranges must actually overlap
+            if fa.last_detected < fb.first_detected or fb.last_detected < fa.first_detected:
+                continue
+            # Centroid must be close (fires are small — 0.3° ≈ 33 km)
+            if abs(fa.centroid_lat - fb.centroid_lat) > MERGE_MATCH_DEG:
+                continue
+            if abs(fa.centroid_lon - fb.centroid_lon) > MERGE_MATCH_DEG:
+                continue
+            # Shapely intersection — only runs for nearby, date-overlapping candidates
+            if geom_a is None:
+                geom_a = shape(json.loads(fa.perimeter))
+            if not geom_a.intersects(shape(json.loads(fb.perimeter))):
+                continue
+
+            # Merge fb → fa (fa is older, sorted by first_detected)
+            n = session.query(FirmsHotspot).filter(
+                FirmsHotspot.fire_id == fb.id
+            ).update({'fire_id': fa.id}, synchronize_session=False)
+            fb.status = 'closed'
+            absorbed.add(fb.id)
+            did_merge = True
+            merged += 1
+            logger.info(f"FIRMS merge: fire {fb.id} ({fb.first_detected}→{fb.last_detected}) → {fa.id} ({n} hotspots)")
+
+        if did_merge:
+            _recompute_perimeter(session, fa)
+            session.flush()
+            if merged % 50 == 0:
+                session.commit()
+
+    if merged:
+        session.commit()
+        logger.info(f"FIRMS merge: done — {merged} duplicate fires merged")
+    else:
+        logger.info("FIRMS merge: no duplicates found")
+
+
 # ── CSV file import ───────────────────────────────────────────────────────────
 
 def import_firms_csv_files(paths):
