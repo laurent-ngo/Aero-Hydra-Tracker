@@ -1139,12 +1139,15 @@ map.on('moveend',()=>{
 
 
 const tooltip=document.getElementById('tooltip');
+function _tooltipPos(evt){
+  const r=map.getTargetElement().getBoundingClientRect();
+  return{left:(evt.originalEvent.clientX-r.left+16)+'px',top:(evt.originalEvent.clientY-r.top-10)+'px'};
+}
 map.on('pointermove',evt=>{
   const acF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===aircraftLayer});
   if(acF){
-    const ac=acF.get('aircraft');    tooltip.style.display='block';
-    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
-    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const ac=acF.get('aircraft');const{left,top}=_tooltipPos(evt);
+    tooltip.style.display='block';tooltip.style.left=left;tooltip.style.top=top;
     tooltip.innerHTML=`<div class="tooltip-callsign">${ac.registration||ac.icao24}</div>
       <div class="tooltip-row"><span class="tooltip-key">Model</span><span class="tooltip-val">${ac.model||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Owner</span><span class="tooltip-val">${ac.owner||'--'}</span></div>
@@ -1165,9 +1168,8 @@ map.on('pointermove',evt=>{
   if(hmF){
     const val=hmF.get('hmValue');
     const hmType=hmF.get('hmType');
-    tooltip.style.display='block';
-    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
-    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const{left,top}=_tooltipPos(evt);
+    tooltip.style.display='block';tooltip.style.left=left;tooltip.style.top=top;
     if(hmType==='coverage'){
       const band=hmF.get('altBand');
       let qual='excellent';
@@ -1193,8 +1195,7 @@ map.on('pointermove',evt=>{
     const firstPass=new Date(ev.first_pass*1000).toUTCString().slice(17,25);
     const age=Math.round((Date.now()/1000-ev.last_pass)/60);
     tooltip.style.display='block';
-    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
-    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const{left:_l,top:_t}=_tooltipPos(evt);tooltip.style.left=_l;tooltip.style.top=_t;
     tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff8040;">${ev.fire_location||'Active Activity'}</div>
       <div class="tooltip-row"><span class="tooltip-key">Aircraft</span><span class="tooltip-val">${ev.aircraft.join(', ')}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Passes</span><span class="tooltip-val">${ev.pass_count} passes by ${ev.aircraft_count} ac</span></div>
@@ -1207,8 +1208,7 @@ map.on('pointermove',evt=>{
   if(fireF&&fireF.get('fireData')){
     const fd=fireF.get('fireData');
     tooltip.style.display='block';
-    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
-    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const{left:_l,top:_t}=_tooltipPos(evt);tooltip.style.left=_l;tooltip.style.top=_t;
     const frpStr=fd.max_frp!=null?fd.max_frp.toFixed(0)+' MW':'--';
     const areaStr=fd.area_ha!=null?fd.area_ha.toLocaleString()+' ha':'--';
     tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff6600;">Fire #${fd.id}</div>
@@ -1226,8 +1226,7 @@ map.on('pointermove',evt=>{
     const isFire=roiF.get('roiType')==='fire';
     const detStr=det?new Date(det).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'--';
     tooltip.style.display='block';
-    tooltip.style.left=(evt.originalEvent.offsetX+16)+'px';
-    tooltip.style.top=(evt.originalEvent.offsetY-10)+'px';
+    const{left:_l,top:_t}=_tooltipPos(evt);tooltip.style.left=_l;tooltip.style.top=_t;
     tooltip.innerHTML=`<div class="tooltip-callsign">${name}</div>
       <div class="tooltip-row"><span class="tooltip-key">Detected</span><span class="tooltip-val">${detStr}</span></div>
       ${isFire?'<div class="tooltip-row" style="color:#ff6644;font-size:10px;margin-top:4px;">Click to name this fire</div>':''}`;
