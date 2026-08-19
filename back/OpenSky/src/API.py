@@ -248,6 +248,7 @@ def get_fires(
     max_lon: Optional[float] = None,
     frp_categories: Optional[str] = None,  # comma-separated: low,medium,high,extreme
     min_hotspots:   Optional[int] = None,
+    min_area_ha:    Optional[float] = None,
 ):
     q = db.query(FirmsFireIncident)
     if status:
@@ -275,6 +276,8 @@ def get_fires(
             q = q.filter(or_(*conds))
     if min_hotspots is not None:
         q = q.filter(FirmsFireIncident.hotspot_count >= min_hotspots)
+    if min_area_ha is not None:
+        q = q.filter(FirmsFireIncident.area_ha >= min_area_ha)
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
     return [
         {
