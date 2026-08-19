@@ -407,6 +407,7 @@
           </label>
         </div>
         <div class="filter-row"><label>Min spots</label><input type="number" id="fires-min-hotspots" min="1" placeholder="any" style="width:70px;" onchange="fetchFires()"/></div>
+        <div class="filter-row"><label>Min area</label><input type="number" id="fires-min-area" min="1" placeholder="any ha" style="width:70px;" onchange="fetchFires()"/></div>
         <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
         <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
         <div class="filter-row" style="margin-top:4px;"><label>Hotspots</label>
@@ -1615,6 +1616,7 @@ async function fetchFires(){
     if(!startDate&&!endDate)params.set('status','active');
     const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
     const minSpots=parseInt(document.getElementById('fires-min-hotspots').value);if(minSpots>0)params.set('min_hotspots',minSpots);
+    const minArea=parseFloat(document.getElementById('fires-min-area').value);if(minArea>0)params.set('min_area_ha',minArea);
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
@@ -1994,7 +1996,7 @@ const UI_PERSIST=[
   'filter-time-preset','filter-start','filter-stop',
   'filter-callsign',
   'toggle-tracks','toggle-rois','stale-threshold-days',
-  'fires-date-start','fires-date-end','fires-min-hotspots',
+  'fires-date-start','fires-date-end','fires-min-hotspots','fires-min-area',
   'filter-at-airfield','filter-is-full',
   'ev-window','ev-passes','ev-radius',
   'heatmap-select'
