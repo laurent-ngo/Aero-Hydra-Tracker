@@ -416,6 +416,12 @@
             <button class="toggle-btn active" id="hotspots-btn-off" onclick="setHotspotsVisible(false)">OFF</button>
           </div>
         </div>
+        <div class="filter-row"><label>Fire area</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="fire-area-btn-on" onclick="setFireAreaVisible(true)">ON</button>
+            <button class="toggle-btn" id="fire-area-btn-off" onclick="setFireAreaVisible(false)">OFF</button>
+          </div>
+        </div>
       </div>
       <div class="filter-row"><label>Water ROI</label>
         <select id="toggle-rois" onchange="renderROIs()"><option value="all">All</option><option value="water-named">Named only</option><option value="none">Hidden</option></select>
@@ -637,7 +643,7 @@ function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
-let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false,showAllAircraft=false;
+let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false,showAllAircraft=false,fireAreaVisible=true;
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -1359,11 +1365,18 @@ function onFrpFilterChange(){
   if(hotspotsVisible)fetchHotspots();
   saveUIState();
 }
+function setFireAreaVisible(on){
+  fireAreaVisible=on;
+  document.getElementById('fire-area-btn-on').classList.toggle('active',on);
+  document.getElementById('fire-area-btn-off').classList.toggle('active',!on);
+  renderFires();saveUIState();
+}
 function renderFires(firesOverride){
   const src=fireLayer.getSource();src.clear();
   if(!firesVisible)return;
   const data=firesOverride||firesData;
   data.forEach(fire=>{
+    if(!fireAreaVisible)return;
     if(!fire.perimeter)return;
     if(!_frpWanted(fire.max_frp))return;
     const geomType=fire.perimeter.type;
@@ -1644,11 +1657,15 @@ function renderHotspots(cursorTs=null){
   hotspotsData.forEach(h=>{
     if(!visibleFireIds.has(h.fire_id))return;
     if(cursorDate&&h.acq_date!==cursorDate)return;
-    const pt=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([h.lon,h.lat])),hotspotData:h});
     const frp=h.frp||0;
-    const r=frp>=500?'rgba(170,0,0,0.95)':frp>=100?'rgba(255,60,0,0.88)':frp>=30?'rgba(255,140,0,0.82)':'rgba(255,210,0,0.78)';
-    pt.setStyle(new ol.style.Style({image:new ol.style.Circle({radius:3.5,fill:new ol.style.Fill({color:r}),stroke:new ol.style.Stroke({color:'rgba(0,0,0,0.4)',width:0.5})})}));
-    src.addFeature(pt);
+    const fill=frp>=500?'rgba(170,0,0,0.55)':frp>=100?'rgba(255,60,0,0.50)':frp>=30?'rgba(255,140,0,0.45)':'rgba(255,210,0,0.40)';
+    const stroke=frp>=500?'rgba(120,0,0,0.8)':frp>=100?'rgba(200,30,0,0.75)':frp>=30?'rgba(200,90,0,0.70)':'rgba(180,140,0,0.65)';
+    // Radius in metres: mean of scan and track half-widths; default to VIIRS nadir ~375m if missing
+    const radiusM=((h.scan_km||0.375)+(h.track_km||0.375))/2/2*1000;
+    const feat=new ol.Feature({hotspotData:h});
+    feat.setGeometry(new ol.geom.Circle(ol.proj.fromLonLat([h.lon,h.lat]),radiusM));
+    feat.setStyle(new ol.style.Style({fill:new ol.style.Fill({color:fill}),stroke:new ol.style.Stroke({color:stroke,width:0.8})}));
+    src.addFeature(feat);
   });
 }
 async function fetchActiveEvents(){
@@ -2011,6 +2028,7 @@ function saveUIState(){
   state['show-all-aircraft']=showAllAircraft;
   state['fires-visible']=firesVisible;
   state['hotspots-visible']=hotspotsVisible;
+  state['fire-area-visible']=fireAreaVisible;
   state['events-visible']=eventsVisible;
   state['airfields-visible']=airfieldsVisible;
   localStorage.setItem('sw-ui',JSON.stringify(state));
@@ -2045,6 +2063,11 @@ function restoreUIState(){
       hotspotsVisible=s['hotspots-visible'];
       document.getElementById('hotspots-btn-on').classList.toggle('active',hotspotsVisible);
       document.getElementById('hotspots-btn-off').classList.toggle('active',!hotspotsVisible);
+    }
+    if(s['fire-area-visible']!=null){
+      fireAreaVisible=s['fire-area-visible'];
+      document.getElementById('fire-area-btn-on').classList.toggle('active',fireAreaVisible);
+      document.getElementById('fire-area-btn-off').classList.toggle('active',!fireAreaVisible);
     }
     if(s['events-visible']!=null){
       eventsVisible=s['events-visible'];
