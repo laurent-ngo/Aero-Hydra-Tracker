@@ -322,7 +322,7 @@ def get_hotspots(
         if 'extreme' in cats: conds.append(FirmsHotspot.frp >= 500)
         if conds:
             q = q.filter(or_(*conds))
-    return [{"fire_id":h.fire_id,"lat":h.lat,"lon":h.lon,"acq_date":h.acq_date,"frp":h.frp,"confidence":h.confidence,"satellite":h.satellite} for h in q.all()]
+    return [{"fire_id":h.fire_id,"lat":h.lat,"lon":h.lon,"acq_date":h.acq_date,"frp":h.frp,"confidence":h.confidence,"satellite":h.satellite,"scan_km":h.scan_km,"track_km":h.track_km} for h in q.all()]
 
 
 @app.get("/fires/{fire_id}/hotspots", dependencies=[Security(get_api_key)])
