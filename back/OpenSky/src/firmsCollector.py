@@ -226,7 +226,57 @@ def close_stale_fires(session):
 
 # ── Duplicate fire merge ──────────────────────────────────────────────────────
 
-MERGE_MATCH_DEG = 0.3   # ~33 km centroid bbox for duplicate merge (fires are small)
+MERGE_MATCH_DEG = 1.5   # centroid pre-filter (performance gate only; geometry intersection is the real guard)
+
+
+def backup_fires_for_merge(session):
+    """Snapshot firms_fire_incident and hotspot fire_id assignments into backup tables.
+    Safe to call multiple times — overwrites the previous backup.
+    """
+    session.execute(text("DROP TABLE IF EXISTS firms_fire_incident_bak"))
+    session.execute(text("CREATE TABLE firms_fire_incident_bak AS SELECT * FROM firms_fire_incident"))
+    session.execute(text("DROP TABLE IF EXISTS firms_hotspot_fire_id_bak"))
+    session.execute(text("CREATE TABLE firms_hotspot_fire_id_bak AS SELECT id, fire_id FROM firms_hotspot"))
+    session.commit()
+    n = session.execute(text("SELECT COUNT(*) FROM firms_fire_incident_bak")).scalar()
+    logger.info(f"FIRMS backup: {n} fire incidents saved to firms_fire_incident_bak")
+
+
+def restore_fires_from_backup(session):
+    """Restore fire incidents and hotspot assignments from the last backup."""
+    for tbl in ('firms_fire_incident_bak', 'firms_hotspot_fire_id_bak'):
+        exists = session.execute(text(f"SELECT to_regclass('{tbl}')")).scalar()
+        if not exists:
+            raise RuntimeError(f"Backup table '{tbl}' does not exist — run --firms-merge-backup first")
+
+    session.execute(text("""
+        UPDATE firms_hotspot h
+        SET fire_id = b.fire_id
+        FROM firms_hotspot_fire_id_bak b
+        WHERE h.id = b.id
+    """))
+    session.execute(text("""
+        DELETE FROM firms_fire_incident
+        WHERE id NOT IN (SELECT id FROM firms_fire_incident_bak)
+    """))
+    session.execute(text("""
+        UPDATE firms_fire_incident fi
+        SET status          = b.status,
+            first_detected  = b.first_detected,
+            last_detected   = b.last_detected,
+            centroid_lat    = b.centroid_lat,
+            centroid_lon    = b.centroid_lon,
+            perimeter       = b.perimeter,
+            max_frp         = b.max_frp,
+            hotspot_count   = b.hotspot_count,
+            area_ha         = b.area_ha
+        FROM firms_fire_incident_bak b
+        WHERE fi.id = b.id
+    """))
+    session.commit()
+    n = session.execute(text("SELECT COUNT(*) FROM firms_fire_incident")).scalar()
+    logger.info(f"FIRMS restore: done — {n} fire incidents restored")
+
 
 def merge_duplicate_fires(session):
     """Merge fires that directly overlap in both time and geometry.

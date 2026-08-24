@@ -783,7 +783,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--firms-merge",
         action="store_true",
-        help="Merge duplicate fires that overlap in both time and geometry"
+        help="Merge duplicate fires that overlap in both time and geometry (auto-backups first)"
+    )
+
+    parser.add_argument(
+        "--firms-merge-backup",
+        action="store_true",
+        help="Snapshot fire incidents and hotspot assignments to backup tables (for manual backup before merge)"
+    )
+
+    parser.add_argument(
+        "--firms-merge-restore",
+        action="store_true",
+        help="Restore fire incidents and hotspot assignments from the last backup"
     )
 
     parser.add_argument(
@@ -823,10 +835,29 @@ if __name__ == "__main__":
         import_firms_csv_files(args.firms_import)
         sys.exit(0)
 
-    if args.firms_merge:
-        from firmsCollector import merge_duplicate_fires
+    if args.firms_merge_backup:
+        from firmsCollector import backup_fires_for_merge
         session = __import__('migrate').SessionLocal()
         try:
+            backup_fires_for_merge(session)
+        finally:
+            session.close()
+        sys.exit(0)
+
+    if args.firms_merge_restore:
+        from firmsCollector import restore_fires_from_backup
+        session = __import__('migrate').SessionLocal()
+        try:
+            restore_fires_from_backup(session)
+        finally:
+            session.close()
+        sys.exit(0)
+
+    if args.firms_merge:
+        from firmsCollector import backup_fires_for_merge, merge_duplicate_fires
+        session = __import__('migrate').SessionLocal()
+        try:
+            backup_fires_for_merge(session)
             merge_duplicate_fires(session)
         finally:
             session.close()
