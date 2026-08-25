@@ -498,15 +498,35 @@
         <button class="map-btn" onclick="map.getView().setZoom(map.getView().getZoom()-1)">-</button>
         <button class="map-btn" onclick="fitMap()">&#x229F;</button>
       </div>
-      <div id="alt-legend" style="position:absolute;bottom:16px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
-        <div style="margin-bottom:4px;letter-spacing:1px;">AGL ALT</div>
-        <div class="leg-row" data-tier="ground"><span class="leg-swatch"></span> &lt; 100 ft</div>
-        <div class="leg-row" data-tier="taxi"><span class="leg-swatch"></span> &lt; 750 ft</div>
-        <div class="leg-row" data-tier="low"><span class="leg-swatch"></span> &lt; 5000 ft</div>
-        <div class="leg-row" data-tier="mid"><span class="leg-swatch"></span> &lt; 13000 ft</div>
-        <div class="leg-row" data-tier="high"><span class="leg-swatch"></span> &lt; 20000 ft</div>
-        <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft</div>
-        <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
+      <div id="map-legends" style="position:absolute;bottom:16px;right:16px;z-index:10;display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+
+        <div id="alt-legend" style="display:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+          <div style="margin-bottom:4px;letter-spacing:1px;">AGL ALT</div>
+          <div class="leg-row" data-tier="ground"><span class="leg-swatch"></span> &lt; 100 ft</div>
+          <div class="leg-row" data-tier="taxi"><span class="leg-swatch"></span> &lt; 750 ft</div>
+          <div class="leg-row" data-tier="low"><span class="leg-swatch"></span> &lt; 5000 ft</div>
+          <div class="leg-row" data-tier="mid"><span class="leg-swatch"></span> &lt; 13000 ft</div>
+          <div class="leg-row" data-tier="high"><span class="leg-swatch"></span> &lt; 20000 ft</div>
+          <div class="leg-row" data-tier="cruise"><span class="leg-swatch"></span> 20000+ ft</div>
+          <div class="leg-row" data-tier="unknown"><span class="leg-swatch"></span> Unknown</div>
+        </div>
+
+        <div id="fire-area-legend" style="display:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+          <div style="margin-bottom:4px;letter-spacing:1px;">FIRE AREA — FRP</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:22px;height:10px;border-radius:2px;background:rgba(255,210,0,0.18);border:1px solid rgba(255,190,0,0.75);flex-shrink:0;"></div><span>Low &lt; 30 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:22px;height:10px;border-radius:2px;background:rgba(255,150,0,0.20);border:1px solid rgba(255,110,0,0.80);flex-shrink:0;"></div><span>Med 30–100 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:22px;height:10px;border-radius:2px;background:rgba(255,80,0,0.22);border:1px solid rgba(255,40,0,0.85);flex-shrink:0;"></div><span>High 100–500 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;"><div style="width:22px;height:10px;border-radius:2px;background:rgba(200,0,0,0.28);border:1px solid rgba(170,0,0,0.92);flex-shrink:0;"></div><span>Ext &gt; 500 MW</span></div>
+        </div>
+
+        <div id="hotspots-legend" style="display:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
+          <div style="margin-bottom:4px;letter-spacing:1px;">HOTSPOTS — FRP</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:14px;height:14px;border-radius:50%;background:rgba(255,210,0,0.40);border:1px solid rgba(180,140,0,0.65);flex-shrink:0;"></div><span>Low &lt; 30 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:14px;height:14px;border-radius:50%;background:rgba(255,140,0,0.45);border:1px solid rgba(200,90,0,0.70);flex-shrink:0;"></div><span>Med 30–100 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><div style="width:14px;height:14px;border-radius:50%;background:rgba(255,60,0,0.50);border:1px solid rgba(200,30,0,0.75);flex-shrink:0;"></div><span>High 100–500 MW</span></div>
+          <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:14px;border-radius:50%;background:rgba(170,0,0,0.55);border:1px solid rgba(120,0,0,0.80);flex-shrink:0;"></div><span>Ext &gt; 500 MW</span></div>
+        </div>
+
       </div>
       <div id="heatmap-legend" style="display:none;position:absolute;top:56px;right:16px;z-index:10;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8;">
         <div id="hm-legend-inner">
@@ -638,6 +658,12 @@ function applyTheme(dark){
 function updateLegendSwatches(){
   const p=ALTITUDE_PALETTE[isDark?'dark':'light'];
   document.querySelectorAll('#alt-legend .leg-row').forEach(r=>{const t=r.dataset.tier;if(p[t])r.querySelector('.leg-swatch').style.background=p[t];});
+}
+function updateLegends(){
+  const tracksOn=document.getElementById('toggle-tracks')?.value!=='none';
+  document.getElementById('alt-legend').style.display=tracksOn?'':'none';
+  document.getElementById('fire-area-legend').style.display=(firesVisible&&fireAreaVisible)?'':'none';
+  document.getElementById('hotspots-legend').style.display=(firesVisible&&hotspotsVisible)?'':'none';
 }
 function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
@@ -1271,7 +1297,9 @@ function altColor(agl){
 }
 function renderTracks(){
   const src=trackLayer.getSource();src.clear();
-  const tm=document.getElementById('toggle-tracks').value;if(tm==='none')return;
+  const tm=document.getElementById('toggle-tracks').value;
+  updateLegends();
+  if(tm==='none')return;
   Object.entries(tracksCache).forEach(([icao24,pts])=>{
     if(tm==='selected'&&icao24!==selectedIcao)return;
     if(pts.length<2)return;
@@ -1326,7 +1354,7 @@ function setFiresVisible(on){
   document.getElementById('fires-date-sub').style.display=on?'':'none';
   if(on){fetchFires();if(hotspotsVisible)fetchHotspots();}
   else{fireLayer.getSource().clear();hotspotLayer.getSource().clear();}
-  saveUIState();
+  updateLegends();saveUIState();
 }
 function setHotspotsVisible(on){
   hotspotsVisible=on;
@@ -1334,7 +1362,7 @@ function setHotspotsVisible(on){
   document.getElementById('hotspots-btn-off').classList.toggle('active',!on);
   if(on)fetchHotspots();
   else hotspotLayer.getSource().clear();
-  saveUIState();
+  updateLegends();saveUIState();
 }
 function setEventsVisible(on){
   eventsVisible=on;
@@ -1369,7 +1397,7 @@ function setFireAreaVisible(on){
   fireAreaVisible=on;
   document.getElementById('fire-area-btn-on').classList.toggle('active',on);
   document.getElementById('fire-area-btn-off').classList.toggle('active',!on);
-  renderFires();saveUIState();
+  renderFires();updateLegends();saveUIState();
 }
 function renderFires(firesOverride){
   const src=fireLayer.getSource();src.clear();
@@ -2113,7 +2141,7 @@ document.addEventListener('input',saveUIState);
 
 initTimeRange();
 restoreUIState();   // before setMode so first fetch uses restored time range
-setTimeout(()=>{map.updateSize();updateLegendSwatches();updateScaleBar();navigateToHash();},100);
+setTimeout(()=>{map.updateSize();updateLegendSwatches();updateLegends();updateScaleBar();navigateToHash();},100);
 window.addEventListener('resize',()=>map.updateSize());
 setMode('live');
 </script>
