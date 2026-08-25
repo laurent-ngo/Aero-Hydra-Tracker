@@ -781,21 +781,35 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--firms-recompute",
+        action="store_true",
+        help="Recompute perimeter/centroid/area for all fire incidents (parallel)"
+    )
+
+    parser.add_argument(
         "--firms-merge",
         action="store_true",
-        help="Merge duplicate fires that overlap in both time and geometry (auto-backups first)"
+        help="Recompute all fires then merge duplicates that overlap in time and geometry (auto-backups first)"
     )
 
     parser.add_argument(
         "--firms-merge-backup",
         action="store_true",
-        help="Snapshot fire incidents and hotspot assignments to backup tables (for manual backup before merge)"
+        help="Snapshot fire incidents and hotspot assignments to backup tables"
     )
 
     parser.add_argument(
         "--firms-merge-restore",
         action="store_true",
         help="Restore fire incidents and hotspot assignments from the last backup"
+    )
+
+    parser.add_argument(
+        "--firms-workers",
+        type=int,
+        default=8,
+        metavar="N",
+        help="Number of parallel workers for --firms-recompute / --firms-merge (default: 8)"
     )
 
     parser.add_argument(
@@ -835,6 +849,11 @@ if __name__ == "__main__":
         import_firms_csv_files(args.firms_import)
         sys.exit(0)
 
+    if args.firms_recompute:
+        from firmsCollector import recompute_all_fire_perimeters
+        recompute_all_fire_perimeters(max_workers=args.firms_workers)
+        sys.exit(0)
+
     if args.firms_merge_backup:
         from firmsCollector import backup_fires_for_merge
         session = __import__('migrate').SessionLocal()
@@ -854,11 +873,16 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args.firms_merge:
-        from firmsCollector import backup_fires_for_merge, merge_duplicate_fires
+        from firmsCollector import backup_fires_for_merge, recompute_all_fire_perimeters, merge_duplicate_fires
         session = __import__('migrate').SessionLocal()
         try:
             backup_fires_for_merge(session)
-            merge_duplicate_fires(session)
+        finally:
+            session.close()
+        recompute_all_fire_perimeters(max_workers=args.firms_workers)
+        session = __import__('migrate').SessionLocal()
+        try:
+            merge_duplicate_fires(session, max_workers=args.firms_workers)
         finally:
             session.close()
         sys.exit(0)
