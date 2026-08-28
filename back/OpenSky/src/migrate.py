@@ -130,7 +130,7 @@ class OilGasFacility(Base):
     lat           = Column(Float, nullable=False)
     lon           = Column(Float, nullable=False)
     facility_type = Column(String(60))          # platform | refinery | lng | storage | well | other
-    country       = Column(String(3))           # ISO-3166 alpha-2/3
+    country       = Column(String(100))
     status        = Column(String(20), default='active')
     imported_at   = Column(Integer)             # unix timestamp
 
