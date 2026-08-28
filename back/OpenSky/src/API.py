@@ -12,7 +12,7 @@ from typing import List, Optional
 from typing_extensions import Annotated
 
 import migrate
-from migrate import FirmsFireIncident, FirmsHotspot
+from migrate import FirmsFireIncident, FirmsHotspot, OilGasFacility
 
 import time, os, json
 import glob
@@ -284,6 +284,11 @@ def get_fires(
     if fire_type:
         q = q.filter(FirmsFireIncident.fire_type == fire_type)
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
+    facility_ids = [f.nearest_facility_id for f in fires if f.nearest_facility_id]
+    facilities = {}
+    if facility_ids:
+        for fac in db.query(OilGasFacility).filter(OilGasFacility.id.in_(facility_ids)).all():
+            facilities[fac.id] = fac
     return [
         {
             "id":             f.id,
@@ -297,6 +302,12 @@ def get_fires(
             "max_frp":        f.max_frp,
             "fire_type":      f.fire_type or 'natural',
             "nearest_facility_km": f.nearest_facility_km,
+            "nearest_facility": (lambda fac: {
+                "name":     fac.name,
+                "operator": fac.operator,
+                "country":  fac.country,
+                "type":     fac.facility_type,
+            })(facilities[f.nearest_facility_id]) if f.nearest_facility_id and f.nearest_facility_id in facilities else None,
             "perimeter":      json.loads(f.perimeter) if f.perimeter else None,
         }
         for f in fires
