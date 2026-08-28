@@ -7,9 +7,8 @@ WATCHDOG_PID=$!
 # 1. Navigate to the project root so Python can find its imports
 cd $PROJECT_HOME/back/OpenSky/src
 
-# 4. Run the script using the full path to the virtualenv python
 . $PROJECT_HOME/back/OpenSky/back_end.sh token 2>&1
-python dataProcessor.py "$@" 2>&1
+$PROJECT_HOME/.venv/bin/python dataProcessor.py "$@" 2>&1
 
 # Kill the watchdog if the script finishes early
 

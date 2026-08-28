@@ -12,15 +12,17 @@ import math
 import logging
 import requests
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from migrate import SessionLocal, OilGasFacility
 
 logger = logging.getLogger(__name__)
 
 RIG_PROXIMITY_KM = 2.0   # fires within this distance of a facility → 'industrial'
 
-# OSM tags that identify significant oil/gas infrastructure (not individual wells)
+# OSM tags for significant oil/gas infrastructure only.
+# Individual wells (~100k+ in North America) and fuel stations are intentionally excluded.
 OSM_QUERY_TEMPLATE = """
-[out:json][timeout:180];
+[out:json][timeout:120];
 (
   node["man_made"="offshore_platform"]({bbox});
   node["industrial"="refinery"]({bbox});
@@ -28,31 +30,31 @@ OSM_QUERY_TEMPLATE = """
   node["industrial"="oil_refinery"]({bbox});
   way["industrial"="oil_refinery"]({bbox});
   node["man_made"="works"]["product"="refinery"]({bbox});
+  way["man_made"="works"]["product"="refinery"]({bbox});
   node["man_made"="works"]["product"="oil"]({bbox});
   node["man_made"="works"]["product"="gas"]({bbox});
   node["industrial"="gas"]({bbox});
-  node["man_made"="petroleum_well"]["status"!="abandoned"]["status"!="inactive"]({bbox});
-  node["amenity"="fuel_station"]["fuel:lpg"="yes"]({bbox});
-  node["industrial"="storage_tank"]["content"="oil"]({bbox});
-  node["man_made"="storage_tank"]["content"="oil"]({bbox});
-  node["man_made"="storage_tank"]["content"="gas"]({bbox});
   node["industrial"="lng_terminal"]({bbox});
   node["man_made"="lng_terminal"]({bbox});
+  way["man_made"="lng_terminal"]({bbox});
 );
 out center tags;
 """
 
 OSM_REGIONS = [
-    # Europe
-    ('EU', '34,−25,72,45'),
+    # Europe split into quadrants to stay under Overpass timeout
+    ('EU_NW', '47,-25,72,15'),
+    ('EU_NE', '47,15,72,45'),
+    ('EU_SW', '34,-25,47,15'),
+    ('EU_SE', '34,15,47,45'),
     # Continental US
-    ('US_W', '24,−125,50,−95'),
-    ('US_E', '24,−95,50,−65'),
+    ('US_W', '24,-125,50,-95'),
+    ('US_E', '24,-95,50,-65'),
     # Alaska
-    ('AK', '54,−170,72,−130'),
+    ('AK', '54,-170,72,-130'),
     # Canada
-    ('CA_W', '48,−140,70,−96'),
-    ('CA_E', '42,−96,70,−52'),
+    ('CA_W', '48,-140,70,-96'),
+    ('CA_E', '42,-96,70,-52'),
 ]
 
 # Fix: Overpass wants south,west,north,east — reorder from our west,south,east,north format
@@ -98,7 +100,7 @@ def fetch_emodnet(session):
         logger.error(f'RIGS: EMODNET fetch failed: {e}')
         return 0
 
-    added = skipped = 0
+    rows = []
     for feat in data.get('features', []):
         props = feat.get('properties', {})
         geom  = feat.get('geometry', {})
@@ -106,33 +108,30 @@ def fetch_emodnet(session):
             continue
         lon, lat = geom['coordinates'][:2]
         source_id = 'emodnet:' + str(props.get('id') or props.get('gml_id') or f'{lat:.5f},{lon:.5f}')
-
-        if session.query(OilGasFacility).filter_by(source_id=source_id).first():
-            skipped += 1
-            continue
-
         status_raw = str(props.get('status', '') or '').lower()
         status = 'inactive' if any(w in status_raw for w in ('decommission', 'abandon', 'removed')) else 'active'
+        rows.append({
+            'source':        'emodnet',
+            'source_id':     source_id,
+            'name':          props.get('name') or props.get('platform_name'),
+            'operator':      props.get('operator') or props.get('company'),
+            'lat':           round(lat, 6),
+            'lon':           round(lon, 6),
+            'facility_type': 'platform',
+            'country':       props.get('country') or props.get('country_code'),
+            'status':        status,
+            'imported_at':   int(time.time()),
+        })
 
-        fac = OilGasFacility(
-            source        = 'emodnet',
-            source_id     = source_id,
-            name          = props.get('name') or props.get('platform_name'),
-            operator      = props.get('operator') or props.get('company'),
-            lat           = round(lat, 6),
-            lon           = round(lon, 6),
-            facility_type = 'platform',
-            country       = props.get('country') or props.get('country_code'),
-            status        = status,
-            imported_at   = int(time.time()),
-        )
-        session.add(fac)
-        added += 1
-        if added % 200 == 0:
-            session.commit()
+    if rows:
+        stmt = pg_insert(OilGasFacility).values(rows).on_conflict_do_nothing(index_elements=['source_id'])
+        result = session.execute(stmt)
+        session.commit()
+        added = result.rowcount if result.rowcount >= 0 else len(rows)
+    else:
+        added = 0
 
-    session.commit()
-    logger.info(f'RIGS: EMODNET done — {added} added, {skipped} skipped')
+    logger.info(f'RIGS: EMODNET done — {added} inserted (duplicates skipped)')
     return added
 
 
@@ -140,18 +139,30 @@ def fetch_osm_region(session, region_name, bbox_str):
     """Fetch OSM oil/gas facilities for one bounding box (south,west,north,east)."""
     query = OSM_QUERY_TEMPLATE.replace('{bbox}', bbox_str)
     url = 'https://overpass-api.de/api/interpreter'
+    headers = {'User-Agent': 'aero-hydra-tracker/1.0 (fire-monitoring; contact: laurent.nnd@googlemail.com)'}
     logger.info(f'RIGS: OSM {region_name} ({bbox_str}) …')
-    try:
-        r = requests.post(url, data={'data': query}, timeout=240)
-        r.raise_for_status()
-        elements = r.json().get('elements', [])
-    except Exception as e:
-        logger.error(f'RIGS: OSM {region_name} failed: {e}')
+    for attempt in range(3):
+        try:
+            r = requests.post(url, data={'data': query}, headers=headers, timeout=180)
+            if r.status_code == 429:
+                wait = 60 * (attempt + 1)
+                logger.warning(f'RIGS: OSM {region_name} rate-limited, retrying in {wait}s …')
+                time.sleep(wait)
+                continue
+            if not r.ok:
+                logger.error(f'RIGS: OSM {region_name} failed: {r.status_code} — {r.text[:300]}')
+                return 0
+            elements = r.json().get('elements', [])
+            break
+        except Exception as e:
+            logger.error(f'RIGS: OSM {region_name} failed: {e}')
+            return 0
+    else:
+        logger.error(f'RIGS: OSM {region_name} gave up after 3 attempts')
         return 0
 
-    added = skipped = 0
+    rows = []
     for el in elements:
-        # Ways/relations come back with a 'center' key
         if el['type'] == 'way' or el['type'] == 'relation':
             center = el.get('center', {})
             lat, lon = center.get('lat'), center.get('lon')
@@ -160,32 +171,29 @@ def fetch_osm_region(session, region_name, bbox_str):
         if lat is None or lon is None:
             continue
 
-        source_id = f'osm:{el["type"]}:{el["id"]}'
-        if session.query(OilGasFacility).filter_by(source_id=source_id).first():
-            skipped += 1
-            continue
-
         tags = el.get('tags', {})
-        name = tags.get('name') or tags.get('operator') or tags.get('ref')
-        fac = OilGasFacility(
-            source        = 'osm',
-            source_id     = source_id,
-            name          = name,
-            operator      = tags.get('operator'),
-            lat           = round(lat, 6),
-            lon           = round(lon, 6),
-            facility_type = _osm_facility_type(tags),
-            country       = tags.get('addr:country'),
-            status        = 'active',
-            imported_at   = int(time.time()),
-        )
-        session.add(fac)
-        added += 1
-        if added % 200 == 0:
-            session.commit()
+        rows.append({
+            'source':        'osm',
+            'source_id':     f'osm:{el["type"]}:{el["id"]}',
+            'name':          tags.get('name') or tags.get('operator') or tags.get('ref'),
+            'operator':      tags.get('operator'),
+            'lat':           round(lat, 6),
+            'lon':           round(lon, 6),
+            'facility_type': _osm_facility_type(tags),
+            'country':       tags.get('addr:country'),
+            'status':        'active',
+            'imported_at':   int(time.time()),
+        })
 
-    session.commit()
-    logger.info(f'RIGS: OSM {region_name} done — {added} added, {skipped} skipped')
+    if rows:
+        stmt = pg_insert(OilGasFacility).values(rows).on_conflict_do_nothing(index_elements=['source_id'])
+        result = session.execute(stmt)
+        session.commit()
+        added = result.rowcount if result.rowcount >= 0 else len(rows)
+    else:
+        added = 0
+
+    logger.info(f'RIGS: OSM {region_name} done — {added} inserted (duplicates skipped)')
     time.sleep(2)   # be polite to Overpass
     return added
 
