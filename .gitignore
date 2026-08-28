@@ -51,3 +51,9 @@ back/OpenSky/src/tracked_icao_cache.json
 aero-hydra-ui/src/theme.js
 ~$*
 front/config.js
+
+back/OpenSky/data/FIRMS/
+back/OpenSky/data/heatmap/
+back/OpenSky/src/fr24_cache.json
+back/OpenSky/src/fr24_cache.json.test
+back/OpenSky/src/fr24_fetched_ids.json

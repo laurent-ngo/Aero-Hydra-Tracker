@@ -18,6 +18,8 @@ import time, os, json
 import glob
 import re
 import logging
+from datetime import datetime, timezone
+from shapely.geometry import shape, Point
 from datetime import datetime, timedelta
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -249,6 +251,7 @@ def get_fires(
     frp_categories: Optional[str] = None,  # comma-separated: low,medium,high,extreme
     min_hotspots:   Optional[int] = None,
     min_area_ha:    Optional[float] = None,
+    fire_type:      Optional[str] = None,  # 'natural' | 'industrial'
 ):
     q = db.query(FirmsFireIncident)
     if status:
@@ -278,6 +281,8 @@ def get_fires(
         q = q.filter(FirmsFireIncident.hotspot_count >= min_hotspots)
     if min_area_ha is not None:
         q = q.filter(FirmsFireIncident.area_ha >= min_area_ha)
+    if fire_type:
+        q = q.filter(FirmsFireIncident.fire_type == fire_type)
     fires = q.order_by(FirmsFireIncident.last_detected.desc()).all()
     return [
         {
@@ -290,9 +295,33 @@ def get_fires(
             "area_ha":        f.area_ha,
             "hotspot_count":  f.hotspot_count,
             "max_frp":        f.max_frp,
+            "fire_type":      f.fire_type or 'natural',
+            "nearest_facility_km": f.nearest_facility_km,
             "perimeter":      json.loads(f.perimeter) if f.perimeter else None,
         }
         for f in fires
+    ]
+
+
+@app.get("/rigs", dependencies=[Security(get_api_key)])
+def get_rigs(db: DbSession, status: Optional[str] = 'active'):
+    from migrate import OilGasFacility
+    q = db.query(OilGasFacility)
+    if status:
+        q = q.filter(OilGasFacility.status == status)
+    facilities = q.all()
+    return [
+        {
+            "id":            f.id,
+            "name":          f.name,
+            "operator":      f.operator,
+            "lat":           f.lat,
+            "lon":           f.lon,
+            "facility_type": f.facility_type,
+            "country":       f.country,
+            "source":        f.source,
+        }
+        for f in facilities
     ]
 
 @app.get("/hotspots", dependencies=[Security(get_api_key)])
@@ -342,6 +371,79 @@ def get_fire_hotspots(db: DbSession, fire_id: int):
         }
         for h in hotspots
     ]
+
+@app.get("/fires/{fire_id}/aircraft", dependencies=[Security(get_api_key)])
+def get_fire_aircraft(db: DbSession, fire_id: int):
+    """Aircraft that flew over a fire during its active period."""
+    fire = db.query(FirmsFireIncident).filter(FirmsFireIncident.id == fire_id).first()
+    if not fire:
+        raise HTTPException(status_code=404, detail="Fire not found")
+    if not fire.perimeter:
+        return []
+
+    ts_start = int(datetime.strptime(fire.first_detected, '%Y-%m-%d').replace(tzinfo=timezone.utc).timestamp())
+    ts_end   = int(datetime.strptime(fire.last_detected,  '%Y-%m-%d').replace(tzinfo=timezone.utc).timestamp()) + 86400
+
+    perim  = shape(json.loads(fire.perimeter))
+    min_lon, min_lat, max_lon, max_lat = perim.bounds
+    # Small bbox padding so aircraft grazing the edge are included
+    pad = 0.01
+    rows = db.query(
+        migrate.FlightTelemetry.icao24,
+        migrate.FlightTelemetry.timestamp,
+        migrate.FlightTelemetry.lat,
+        migrate.FlightTelemetry.lon,
+    ).filter(
+        migrate.FlightTelemetry.timestamp >= ts_start,
+        migrate.FlightTelemetry.timestamp <= ts_end,
+        migrate.FlightTelemetry.lat.between(min_lat - pad, max_lat + pad),
+        migrate.FlightTelemetry.lon.between(min_lon - pad, max_lon + pad),
+        migrate.FlightTelemetry.on_ground == False,
+        migrate.FlightTelemetry.lat.isnot(None),
+        migrate.FlightTelemetry.lon.isnot(None),
+    ).all()
+
+    # Precise perimeter test (buffered slightly to catch scooping runs nearby)
+    perim_buf = perim.buffer(0.005)
+    by_ac = {}
+    for r in rows:
+        if not perim_buf.contains(Point(r.lon, r.lat)):
+            continue
+        if r.icao24 not in by_ac:
+            by_ac[r.icao24] = []
+        by_ac[r.icao24].append(r.timestamp)
+
+    if not by_ac:
+        return []
+
+    aircraft_map = {
+        ac.icao24: ac
+        for ac in db.query(migrate.TrackedAircraft).filter(
+            migrate.TrackedAircraft.icao24.in_(list(by_ac.keys()))
+        ).all()
+    }
+
+    out = []
+    for icao24, timestamps in by_ac.items():
+        timestamps.sort()
+        # Count passes: gap > 30 min between consecutive points = new pass
+        passes = 1
+        for i in range(1, len(timestamps)):
+            if timestamps[i] - timestamps[i - 1] > 1800:
+                passes += 1
+        ac = aircraft_map.get(icao24)
+        out.append({
+            'icao24':       icao24,
+            'registration': ac.registration if ac else icao24,
+            'model':        ac.aircraft_model if ac else None,
+            'passes':       passes,
+            'first_seen':   datetime.utcfromtimestamp(timestamps[0]).strftime('%Y-%m-%d'),
+            'last_seen':    datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d'),
+        })
+
+    out.sort(key=lambda x: -x['passes'])
+    return out
+
 
 @app.get("/regions-of-interest", dependencies=[Security(get_api_key)]) # Updated to match your frontend fetch URL
 def get_rois(

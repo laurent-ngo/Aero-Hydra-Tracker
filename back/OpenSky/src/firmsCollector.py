@@ -207,6 +207,11 @@ def process_hotspot(session, row):
     fire.last_detected  = max(fire.last_detected,  row['acq_date'])
     fire.first_detected = min(fire.first_detected, row['acq_date'])
     _recompute_perimeter(session, fire)
+    try:
+        from rigsFetcher import classify_fire
+        classify_fire(session, fire)
+    except Exception:
+        pass  # no facilities imported yet — skip silently
     session.flush()
 
 

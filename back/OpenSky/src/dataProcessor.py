@@ -781,6 +781,18 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--rigs-import",
+        action="store_true",
+        help="Import oil/gas facilities from EMODNET + OSM into the DB"
+    )
+
+    parser.add_argument(
+        "--classify-fires",
+        action="store_true",
+        help="Classify all fires as natural or industrial based on proximity to oil/gas facilities"
+    )
+
+    parser.add_argument(
         "--firms-recompute",
         action="store_true",
         help="Recompute perimeter/centroid/area for all fire incidents (parallel)"
@@ -847,6 +859,16 @@ if __name__ == "__main__":
     if args.firms_import:
         from firmsCollector import import_firms_csv_files
         import_firms_csv_files(args.firms_import)
+        sys.exit(0)
+
+    if args.rigs_import:
+        from rigsFetcher import import_all_facilities
+        import_all_facilities()
+        sys.exit(0)
+
+    if args.classify_fires:
+        from rigsFetcher import classify_all_fires
+        classify_all_fires()
         sys.exit(0)
 
     if args.firms_recompute:

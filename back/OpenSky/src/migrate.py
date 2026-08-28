@@ -119,6 +119,22 @@ class WaterLocation(Base):
     lat = Column(Float)
     lon = Column(Float)
 
+class OilGasFacility(Base):
+    __tablename__ = 'oil_gas_facilities'
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    source        = Column(String(20))          # 'emodnet' | 'osm'
+    source_id     = Column(String(120), unique=True)
+    name          = Column(String(200))
+    operator      = Column(String(200))
+    lat           = Column(Float, nullable=False)
+    lon           = Column(Float, nullable=False)
+    facility_type = Column(String(60))          # platform | refinery | lng | storage | well | other
+    country       = Column(String(3))           # ISO-3166 alpha-2/3
+    status        = Column(String(20), default='active')
+    imported_at   = Column(Integer)             # unix timestamp
+
+
 class FirmsFireIncident(Base):
     __tablename__ = 'firms_fire_incident'
 
@@ -133,6 +149,9 @@ class FirmsFireIncident(Base):
     buffer_km      = Column(Float, default=1.0)
     hotspot_count  = Column(Integer, default=0)
     max_frp        = Column(Float)        # max fire radiative power across all hotspots
+    fire_type      = Column(String(20), default='natural')   # 'natural' | 'industrial'
+    nearest_facility_id = Column(Integer, ForeignKey('oil_gas_facilities.id'), nullable=True)
+    nearest_facility_km = Column(Float, nullable=True)
 
 
 class FirmsHotspot(Base):

@@ -134,6 +134,16 @@
     .marker-popup.type-waterfield::after { border-top: 8px solid #2196f3; }
     .marker-popup.type-event  { border: 1px solid #ff8040; }
     .marker-popup.type-event::after  { border-top: 8px solid #ff8040; }
+    .marker-popup.type-fire   { border: 1px solid #ff6600; max-width: 340px; }
+    .marker-popup.type-fire::after  { border-top: 8px solid #ff6600; }
+    .fire-popup-ac-table { width:100%; border-collapse:collapse; font-size:11px; margin-top:6px; }
+    .fire-popup-ac-table th { color:var(--text-dim); font-weight:normal; text-align:left; padding:2px 4px; border-bottom:1px solid var(--panel-border); letter-spacing:0.5px; }
+    .fire-popup-ac-table td { padding:3px 4px; color:var(--text); cursor:pointer; }
+    .fire-popup-ac-table tr:hover td { background:var(--panel-border); }
+    .fire-popup-ac-table td.reg { color:var(--accent); font-family:'Share Tech Mono',monospace; }
+    .fire-popup-meta { font-size:11px; color:var(--text-dim); display:grid; grid-template-columns:auto 1fr; gap:1px 8px; margin-bottom:6px; }
+    .fire-popup-meta span:nth-child(odd) { color:var(--text-dim); }
+    .fire-popup-meta span:nth-child(even){ color:var(--text); text-align:right; }
     .ap-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -408,6 +418,19 @@
         </div>
         <div class="filter-row"><label>Min spots</label><input type="number" id="fires-min-hotspots" min="1" placeholder="any" style="width:70px;" onchange="fetchFires()"/></div>
         <div class="filter-row"><label>Min area</label><input type="number" id="fires-min-area" min="1" placeholder="any ha" style="width:70px;" onchange="fetchFires()"/></div>
+        <div class="filter-row"><label>Type</label>
+          <select id="fires-type-filter" onchange="onFireTypeChange()" style="font-size:11px;">
+            <option value="all">All fires</option>
+            <option value="natural">Natural only</option>
+            <option value="industrial">Industrial only</option>
+          </select>
+        </div>
+        <div class="filter-row" style="margin-top:4px;"><label>O&amp;G Rigs</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" id="rigs-btn-on" onclick="setRigsVisible(true)">ON</button>
+            <button class="toggle-btn active" id="rigs-btn-off" onclick="setRigsVisible(false)">OFF</button>
+          </div>
+        </div>
         <div class="filter-row"><label>From</label><input type="date" id="fires-date-start" onchange="onFiresDateChange()"/></div>
         <div class="filter-row"><label>To</label><input type="date" id="fires-date-end" onchange="onFiresDateChange()"/></div>
         <div class="filter-row" style="margin-top:4px;"><label>Hotspots</label>
@@ -669,7 +692,8 @@ function toggleTheme(){applyTheme(!isDark);}
 applyTheme(isDark);
 
 let allAircraft=[],filteredAircraft=[],allAircraftFleet=[],selectedIcao=null,tracksCache={},roiData=[],activeEvents=[],firesData=[],hotspotsData=[],heatmapData=null,mode='live',pollTimer=null;
-let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false,showAllAircraft=false,fireAreaVisible=true;
+let firesVisible=true,eventsVisible=true,airfieldsVisible=true,hotspotsVisible=false,showAllAircraft=false,fireAreaVisible=true,rigsVisible=false,rigsData=[];
+let fireTypeFilter='all'; // 'all' | 'natural' | 'industrial'
 
 // MAP
 const map=new ol.Map({target:'map',layers:[tileLayer],view:new ol.View({center:ol.proj.fromLonLat([2.3,46.6]),zoom:6}),controls:ol.control.defaults.defaults({zoom:false,attribution:false})});
@@ -684,7 +708,8 @@ const airfieldCluster=new ol.source.Cluster({distance:40,minDistance:20,source:a
 const airfieldLayer  =new ol.layer.Vector({source:airfieldCluster,zIndex:4,style:airfieldClusterStyle});
 const waterfieldLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:5});
 const activeEventLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:6});
-map.addLayer(heatmapLayer);map.addLayer(fireLayer);map.addLayer(hotspotLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
+const rigLayer=new ol.layer.Vector({source:new ol.source.Vector(),zIndex:2,visible:false});
+map.addLayer(heatmapLayer);map.addLayer(fireLayer);map.addLayer(hotspotLayer);map.addLayer(rigLayer);map.addLayer(roiLayer);map.addLayer(trackLayer);map.addLayer(aircraftLayer);map.addLayer(airfieldLayer);map.addLayer(waterfieldLayer);map.addLayer(activeEventLayer);
 mapReady=true;
 
 // SPRITES
@@ -988,6 +1013,78 @@ function closeAllPopups(){
   Object.keys(openPopups).forEach(k=>closeMarkerPopup(k));
 }
 
+function showFirePopup(fd, pixel){
+  const key='fire-'+fd.id;
+  closeMarkerPopup(key);
+
+  const mapEl=document.getElementById('map');
+  const popup=document.createElement('div');
+  popup.className='marker-popup type-fire';
+
+  const header=document.createElement('div');
+  header.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;';
+  const titleEl=document.createElement('div');
+  titleEl.style.cssText="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff6600;letter-spacing:2px;";
+  titleEl.textContent='FIRE #'+fd.id;
+  const closeBtn=document.createElement('button');
+  closeBtn.style.cssText='background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0;pointer-events:auto;';
+  closeBtn.innerHTML='&#x2715;';
+  closeBtn.onclick=()=>closeMarkerPopup(key);
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+  popup.appendChild(header);
+
+  const frpStr = fd.max_frp!=null ? fd.max_frp.toFixed(0)+' MW' : '--';
+  const areaStr= fd.area_ha!=null ? fd.area_ha.toLocaleString()+' ha' : '--';
+  const meta=document.createElement('div');
+  meta.className='fire-popup-meta';
+  meta.innerHTML=
+    `<span>Period</span><span>${fd.first_detected} → ${fd.last_detected}</span>`+
+    `<span>Area</span><span>${areaStr}</span>`+
+    `<span>Max FRP</span><span>${frpStr}</span>`+
+    `<span>Hotspots</span><span>${fd.hotspot_count||'--'}</span>`;
+  popup.appendChild(meta);
+
+  const acSection=document.createElement('div');
+  acSection.style.cssText='border-top:1px solid var(--panel-border);padding-top:6px;';
+  acSection.innerHTML='<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;">AIRCRAFT OPERATIONS</div><div style="color:var(--text-dim);font-size:11px;">Loading…</div>';
+  popup.appendChild(acSection);
+
+  mapEl.appendChild(popup);
+  openPopups[key]=popup;
+  positionPopup(popup, pixel);
+
+  fetchFireAircraft(fd.id).then(aircraft=>{
+    if(!openPopups[key])return; // closed before response arrived
+    if(!aircraft||!aircraft.length){
+      acSection.innerHTML='<div style="font-size:11px;color:var(--text-dim);padding-top:4px;">No tracked aircraft found over this fire.</div>';
+      return;
+    }
+    const table=document.createElement('table');
+    table.className='fire-popup-ac-table';
+    table.innerHTML='<thead><tr><th>Reg</th><th>Model</th><th>Passes</th><th>First</th><th>Last</th></tr></thead>';
+    const tbody=document.createElement('tbody');
+    aircraft.forEach(ac=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="reg">${ac.registration}</td><td>${ac.model||'--'}</td><td style="text-align:center;">${ac.passes}</td><td>${ac.first_seen}</td><td>${ac.last_seen}</td>`;
+      tr.onclick=()=>{const found=allAircraftFleet.find(a=>a.icao24===ac.icao24);if(found)selectAircraft(ac.icao24);};
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    acSection.innerHTML='<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;">AIRCRAFT OPERATIONS</div>';
+    acSection.appendChild(table);
+    positionPopup(popup, pixel);
+  });
+}
+
+async function fetchFireAircraft(fireId){
+  try{
+    const r=await fetch(`${API_BASE}/fires/${fireId}/aircraft`,{headers:{'x-api-key':API_KEY}});
+    if(!r.ok)return [];
+    return await r.json();
+  }catch(e){return [];}
+}
+
 // Returns true if click was consumed by zooming into a multi-airfield cluster
 function handleAirfieldClusterClick(clusterFeat){
   const feats=clusterFeat.get('features')||[];
@@ -1237,6 +1334,17 @@ map.on('pointermove',evt=>{
       <div class="tooltip-row" style="color:#ff8040;font-size:10px;margin-top:4px;">Click to zoom in</div>`;
     map.getTargetElement().style.cursor='pointer';return;
   }
+  const rigF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===rigLayer});
+  if(rigF&&rigF.get('rigData')){
+    const rd=rigF.get('rigData');
+    tooltip.style.display='block';
+    const{left:_l,top:_t}=_tooltipPos(evt);tooltip.style.left=_l;tooltip.style.top=_t;
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#b060e0;">${rd.name||'Unnamed facility'}</div>
+      <div class="tooltip-row"><span class="tooltip-key">Type</span><span class="tooltip-val">${rd.facility_type||'--'}</span></div>
+      ${rd.operator?`<div class="tooltip-row"><span class="tooltip-key">Operator</span><span class="tooltip-val">${rd.operator}</span></div>`:''}
+      ${rd.country?`<div class="tooltip-row"><span class="tooltip-key">Country</span><span class="tooltip-val">${rd.country}</span></div>`:''}`;
+    map.getTargetElement().style.cursor='';return;
+  }
   const fireF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===fireLayer});
   if(fireF&&fireF.get('fireData')){
     const fd=fireF.get('fireData');
@@ -1244,7 +1352,8 @@ map.on('pointermove',evt=>{
     const{left:_l,top:_t}=_tooltipPos(evt);tooltip.style.left=_l;tooltip.style.top=_t;
     const frpStr=fd.max_frp!=null?fd.max_frp.toFixed(0)+' MW':'--';
     const areaStr=fd.area_ha!=null?fd.area_ha.toLocaleString()+' ha':'--';
-    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff6600;">Fire #${fd.id}</div>
+    const typeLabel=fd.fire_type==='industrial'?'<span style="color:#b060e0;">&#9670; Industrial</span>':'<span style="color:#ff8040;">&#9670; Natural</span>';
+    tooltip.innerHTML=`<div class="tooltip-callsign" style="color:#ff6600;">Fire #${fd.id} ${typeLabel}</div>
       <div class="tooltip-row"><span class="tooltip-key">First seen</span><span class="tooltip-val">${fd.first_detected||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Last seen</span><span class="tooltip-val">${fd.last_detected||'--'}</span></div>
       <div class="tooltip-row"><span class="tooltip-key">Area</span><span class="tooltip-val">${areaStr}</span></div>
@@ -1286,6 +1395,8 @@ map.on('click',evt=>{
   if(acF){selectAircraft(acF.get('aircraft').icao24);return;}
   const evF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===activeEventLayer});
   if(evF&&evF.get('eventData')){showActiveEventPopup(evF.get('eventData'),evt.pixel);return;}
+  const fireClickF=map.forEachFeatureAtPixel(evt.pixel,f=>f,{layerFilter:l=>l===fireLayer});
+  if(fireClickF&&fireClickF.get('fireData')){showFirePopup(fireClickF.get('fireData'),evt.pixel);return;}
   closeAllPopups();
 });
 
@@ -1341,11 +1452,54 @@ function _frpWanted(frp){
   const cat=_frpCategory(frp);
   return document.getElementById('frp-'+cat)?.checked!==false;
 }
-function _fireColor(maxFrp){
+function _fireColor(maxFrp, fireType){
+  if(fireType==='industrial'){
+    // Purple/magenta palette for industrial fires
+    if(!maxFrp||maxFrp<30)  return {fill:'rgba(180,100,220,0.20)', stroke:'rgba(160,80,200,0.80)'};
+    if(maxFrp<100)           return {fill:'rgba(160,60,210,0.22)',  stroke:'rgba(140,40,190,0.85)'};
+    if(maxFrp<500)           return {fill:'rgba(140,20,200,0.25)',  stroke:'rgba(120,0,180,0.90)'};
+                             return {fill:'rgba(100,0,160,0.30)',   stroke:'rgba(80,0,140,0.95)'};
+  }
+  // Natural fire — orange/red palette
   if(!maxFrp||maxFrp<30)  return {fill:'rgba(255,210,0,0.18)',  stroke:'rgba(255,190,0,0.75)'};
   if(maxFrp<100)           return {fill:'rgba(255,150,0,0.20)',  stroke:'rgba(255,110,0,0.80)'};
   if(maxFrp<500)           return {fill:'rgba(255,80,0,0.22)',   stroke:'rgba(255,40,0,0.85)'};
                            return {fill:'rgba(200,0,0,0.28)',    stroke:'rgba(170,0,0,0.92)'};
+}
+function onFireTypeChange(){
+  fireTypeFilter=document.getElementById('fires-type-filter').value;
+  fetchFires();saveUIState();
+}
+function setRigsVisible(on){
+  rigsVisible=on;
+  rigLayer.setVisible(on);
+  document.getElementById('rigs-btn-on').classList.toggle('active',on);
+  document.getElementById('rigs-btn-off').classList.toggle('active',!on);
+  if(on&&!rigsData.length)fetchRigs();
+  saveUIState();
+}
+async function fetchRigs(){
+  try{
+    const r=await fetch(`${config.baseUrl}/rigs`,{headers:apiHeaders()});
+    rigsData=r.ok?await r.json():[];
+    renderRigs();
+  }catch(e){rigsData=[];}
+}
+function renderRigs(){
+  const src=rigLayer.getSource();src.clear();
+  rigsData.forEach(rig=>{
+    const typeColors={platform:'#00bcd4',refinery:'#9c27b0',lng:'#ff9800',well:'#8bc34a',storage:'#607d8b'};
+    const col=typeColors[rig.facility_type]||'#78909c';
+    const feat=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([rig.lon,rig.lat])),rigData:rig});
+    feat.setStyle(new ol.style.Style({
+      image:new ol.style.RegularShape({
+        points:4,radius:6,angle:Math.PI/4,
+        fill:new ol.style.Fill({color:col+'cc'}),
+        stroke:new ol.style.Stroke({color:col,width:1.5})
+      })
+    }));
+    src.addFeature(feat);
+  });
 }
 function setFiresVisible(on){
   firesVisible=on;
@@ -1416,7 +1570,7 @@ function renderFires(firesOverride){
         olGeom=new ol.geom.MultiPolygon(fire.perimeter.coordinates).transform('EPSG:4326','EPSG:3857');
       else return;
     }catch(e){return;}
-    const c=_fireColor(fire.max_frp);
+    const c=_fireColor(fire.max_frp, fire.fire_type);
     const feat=new ol.Feature({geometry:olGeom,fireData:fire});
     feat.setStyle(new ol.style.Style({
       fill:new ol.style.Fill({color:c.fill}),
@@ -1658,6 +1812,7 @@ async function fetchFires(){
     const frpCats=_frpCategoryParams();if(frpCats)params.set('frp_categories',frpCats);
     const minSpots=parseInt(document.getElementById('fires-min-hotspots').value);if(minSpots>0)params.set('min_hotspots',minSpots);
     const minArea=parseFloat(document.getElementById('fires-min-area').value);if(minArea>0)params.set('min_area_ha',minArea);
+    if(fireTypeFilter&&fireTypeFilter!=='all')params.set('fire_type',fireTypeFilter);
     const res=await fetch(`${config.baseUrl}/fires?${params}`,{headers:apiHeaders()});
     firesData=res.ok?await res.json():[];
     renderFires();
@@ -2057,6 +2212,8 @@ function saveUIState(){
   state['fires-visible']=firesVisible;
   state['hotspots-visible']=hotspotsVisible;
   state['fire-area-visible']=fireAreaVisible;
+  state['fire-type-filter']=fireTypeFilter;
+  state['rigs-visible']=rigsVisible;
   state['events-visible']=eventsVisible;
   state['airfields-visible']=airfieldsVisible;
   localStorage.setItem('sw-ui',JSON.stringify(state));
@@ -2096,6 +2253,16 @@ function restoreUIState(){
       fireAreaVisible=s['fire-area-visible'];
       document.getElementById('fire-area-btn-on').classList.toggle('active',fireAreaVisible);
       document.getElementById('fire-area-btn-off').classList.toggle('active',!fireAreaVisible);
+    }
+    if(s['fire-type-filter']!=null){
+      fireTypeFilter=s['fire-type-filter'];
+      document.getElementById('fires-type-filter').value=fireTypeFilter;
+    }
+    if(s['rigs-visible']!=null){
+      rigsVisible=s['rigs-visible'];
+      rigLayer.setVisible(rigsVisible);
+      document.getElementById('rigs-btn-on').classList.toggle('active',rigsVisible);
+      document.getElementById('rigs-btn-off').classList.toggle('active',!rigsVisible);
     }
     if(s['events-visible']!=null){
       eventsVisible=s['events-visible'];
