@@ -6,6 +6,7 @@ import time
 import random
 import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
@@ -19,16 +20,26 @@ logger = logging.getLogger(__name__)
 FIRMS_API_KEY  = os.getenv('NASA_API_KEY')
 FIRMS_BASE_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv'
 
-# France + Italy bounding box (west,south,east,north). Add more entries to expand.
+# Bounding boxes (west,south,east,north) for FIRMS hotspot queries.
 SCAN_REGIONS = [
-    {'name': 'france_italy', 'bbox': '-5,36,19,51'},
+    # Europe
+    {'name': 'w_europe',  'bbox': '-25,34,15,72'},   # Portugal → central Germany, Med → Scandinavia
+    {'name': 'e_europe',  'bbox': '15,34,45,72'},    # central Germany → Turkey/Caucasus
+    # Continental United States
+    {'name': 'w_us',      'bbox': '-125,24,-95,50'},
+    {'name': 'e_us',      'bbox': '-95,24,-65,50'},
+    # Alaska
+    {'name': 'alaska',    'bbox': '-170,54,-130,72'},
+    # Canada
+    {'name': 'w_canada',  'bbox': '-140,48,-96,70'},
+    {'name': 'e_canada',  'bbox': '-96,42,-52,70'},
 ]
 
 FIRMS_SOURCES_NRT = ['VIIRS_NOAA20_NRT', 'VIIRS_SNPP_NRT']
 FIRMS_SOURCES_SP  = ['VIIRS_NOAA20_SP',  'VIIRS_SNPP_SP']   # standard/archive (>7 days old)
 NRT_CUTOFF_DAYS   = 7    # NRT date param is only reliable for the last 7 days
 
-FIRE_BUFFER_KM   = 1.0   # km buffer around union of hotspot geometries
+FIRE_BUFFER_KM   = 0.5   # km buffer around union of hotspot geometries
 FIRE_CLOSE_DAYS  = 3     # close fire if no hotspot detected for this many days
 COMMIT_BATCH     = 200   # flush to disk every N hotspots
 FIRE_MATCH_DEG   = 2.0   # ~220 km bbox pre-filter before shapely intersects()
@@ -196,6 +207,11 @@ def process_hotspot(session, row):
     fire.last_detected  = max(fire.last_detected,  row['acq_date'])
     fire.first_detected = min(fire.first_detected, row['acq_date'])
     _recompute_perimeter(session, fire)
+    try:
+        from rigsFetcher import classify_fire
+        classify_fire(session, fire)
+    except Exception:
+        pass  # no facilities imported yet — skip silently
     session.flush()
 
 
@@ -226,11 +242,111 @@ def close_stale_fires(session):
 
 # ── Duplicate fire merge ──────────────────────────────────────────────────────
 
-MERGE_MATCH_DEG = 0.3   # ~33 km centroid bbox for duplicate merge (fires are small)
+MERGE_MATCH_DEG = 1.5   # centroid pre-filter (performance gate only; geometry intersection is the real guard)
 
-def merge_duplicate_fires(session):
+
+def _parallel_recompute(fire_ids, max_workers=8):
+    """Recompute perimeter/centroid/area for a set of fire ids in parallel.
+    Each worker owns its own DB session so sessions are never shared across threads.
+    """
+    fire_ids = list(fire_ids)
+    total = len(fire_ids)
+    if not total:
+        return
+    done = 0; errors = 0
+
+    def _worker(fire_id):
+        s = SessionLocal()
+        try:
+            fire = s.query(FirmsFireIncident).get(fire_id)
+            if fire:
+                _recompute_perimeter(s, fire)
+                s.commit()
+            return True
+        except Exception as e:
+            s.rollback()
+            logger.warning(f"FIRMS recompute: fire {fire_id} failed: {e}")
+            return False
+        finally:
+            s.close()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_worker, fid): fid for fid in fire_ids}
+        for fut in as_completed(futures):
+            done += 1
+            if not fut.result():
+                errors += 1
+            if done % 200 == 0 or done == total:
+                logger.info(f"FIRMS recompute: {done}/{total}")
+    if errors:
+        logger.warning(f"FIRMS recompute: {errors} errors")
+
+
+def recompute_all_fire_perimeters(max_workers=8):
+    """Recompute perimeter, centroid, area, hotspot_count and max_frp for every fire."""
+    session = SessionLocal()
+    try:
+        fire_ids = [r[0] for r in session.query(FirmsFireIncident.id).all()]
+    finally:
+        session.close()
+    logger.info(f"FIRMS recompute: {len(fire_ids)} fires")
+    _parallel_recompute(fire_ids, max_workers)
+    logger.info("FIRMS recompute: done")
+
+
+def backup_fires_for_merge(session):
+    """Snapshot firms_fire_incident and hotspot fire_id assignments into backup tables.
+    Safe to call multiple times — overwrites the previous backup.
+    """
+    session.execute(text("DROP TABLE IF EXISTS firms_fire_incident_bak"))
+    session.execute(text("CREATE TABLE firms_fire_incident_bak AS SELECT * FROM firms_fire_incident"))
+    session.execute(text("DROP TABLE IF EXISTS firms_hotspot_fire_id_bak"))
+    session.execute(text("CREATE TABLE firms_hotspot_fire_id_bak AS SELECT id, fire_id FROM firms_hotspot"))
+    session.commit()
+    n = session.execute(text("SELECT COUNT(*) FROM firms_fire_incident_bak")).scalar()
+    logger.info(f"FIRMS backup: {n} fire incidents saved to firms_fire_incident_bak")
+
+
+def restore_fires_from_backup(session):
+    """Restore fire incidents and hotspot assignments from the last backup."""
+    for tbl in ('firms_fire_incident_bak', 'firms_hotspot_fire_id_bak'):
+        exists = session.execute(text(f"SELECT to_regclass('{tbl}')")).scalar()
+        if not exists:
+            raise RuntimeError(f"Backup table '{tbl}' does not exist — run --firms-merge-backup first")
+
+    session.execute(text("""
+        UPDATE firms_hotspot h
+        SET fire_id = b.fire_id
+        FROM firms_hotspot_fire_id_bak b
+        WHERE h.id = b.id
+    """))
+    session.execute(text("""
+        DELETE FROM firms_fire_incident
+        WHERE id NOT IN (SELECT id FROM firms_fire_incident_bak)
+    """))
+    session.execute(text("""
+        UPDATE firms_fire_incident fi
+        SET status          = b.status,
+            first_detected  = b.first_detected,
+            last_detected   = b.last_detected,
+            centroid_lat    = b.centroid_lat,
+            centroid_lon    = b.centroid_lon,
+            perimeter       = b.perimeter,
+            max_frp         = b.max_frp,
+            hotspot_count   = b.hotspot_count,
+            area_ha         = b.area_ha
+        FROM firms_fire_incident_bak b
+        WHERE fi.id = b.id
+    """))
+    session.commit()
+    n = session.execute(text("SELECT COUNT(*) FROM firms_fire_incident")).scalar()
+    logger.info(f"FIRMS restore: done — {n} fire incidents restored")
+
+
+def merge_duplicate_fires(session, max_workers=8):
     """Merge fires that directly overlap in both time and geometry.
     No transitivity: A merges into B only if their perimeters physically intersect.
+    Perimeters of merged fires are recomputed in parallel after all merges are committed.
     """
     fires = session.query(FirmsFireIncident).filter(
         FirmsFireIncident.perimeter.isnot(None),
@@ -239,8 +355,9 @@ def merge_duplicate_fires(session):
 
     logger.info(f"FIRMS merge: scanning {len(fires)} fires for duplicates")
 
-    absorbed = set()   # ids already merged into another fire
-    merged   = 0
+    absorbed     = set()   # ids already merged into another fire
+    recompute    = set()   # survivor fires that need perimeter update
+    merged       = 0
 
     for i, fa in enumerate(fires):
         if fa.id in absorbed:
@@ -251,21 +368,21 @@ def merge_duplicate_fires(session):
         for fb in fires[i + 1:]:
             if fb.id in absorbed:
                 continue
-            # Date ranges must actually overlap
             if fa.last_detected < fb.first_detected or fb.last_detected < fa.first_detected:
                 continue
-            # Centroid must be close (fires are small — 0.3° ≈ 33 km)
             if abs(fa.centroid_lat - fb.centroid_lat) > MERGE_MATCH_DEG:
                 continue
             if abs(fa.centroid_lon - fb.centroid_lon) > MERGE_MATCH_DEG:
                 continue
-            # Shapely intersection — only runs for nearby, date-overlapping candidates
             if geom_a is None:
                 geom_a = shape(json.loads(fa.perimeter))
-            if not geom_a.intersects(shape(json.loads(fb.perimeter))):
+            geom_b = shape(json.loads(fb.perimeter))
+            # Allow a gap up to 2× the buffer — catches fires whose perimeters
+            # no longer touch after a buffer reduction but are still the same incident.
+            proximity_deg = (2 * FIRE_BUFFER_KM) / 111.32
+            if not geom_a.intersects(geom_b) and geom_a.distance(geom_b) > proximity_deg:
                 continue
 
-            # Merge fb → fa (fa is older, sorted by first_detected)
             n = session.query(FirmsHotspot).filter(
                 FirmsHotspot.fire_id == fb.id
             ).update({'fire_id': fa.id}, synchronize_session=False)
@@ -276,14 +393,15 @@ def merge_duplicate_fires(session):
             logger.info(f"FIRMS merge: fire {fb.id} ({fb.first_detected}→{fb.last_detected}) → {fa.id} ({n} hotspots)")
 
         if did_merge:
-            _recompute_perimeter(session, fa)
-            session.flush()
+            recompute.add(fa.id)
             if merged % 50 == 0:
                 session.commit()
 
     if merged:
         session.commit()
-        logger.info(f"FIRMS merge: done — {merged} duplicate fires merged")
+        logger.info(f"FIRMS merge: {merged} fires merged — recomputing {len(recompute)} perimeters")
+        _parallel_recompute(recompute, max_workers)
+        logger.info("FIRMS merge: done")
     else:
         logger.info("FIRMS merge: no duplicates found")
 

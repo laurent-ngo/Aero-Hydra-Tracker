@@ -781,9 +781,47 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--rigs-import",
+        action="store_true",
+        help="Import oil/gas facilities from EMODNET + OSM into the DB"
+    )
+
+    parser.add_argument(
+        "--classify-fires",
+        action="store_true",
+        help="Classify all fires as natural or industrial based on proximity to oil/gas facilities"
+    )
+
+    parser.add_argument(
+        "--firms-recompute",
+        action="store_true",
+        help="Recompute perimeter/centroid/area for all fire incidents (parallel)"
+    )
+
+    parser.add_argument(
         "--firms-merge",
         action="store_true",
-        help="Merge duplicate fires that overlap in both time and geometry"
+        help="Recompute all fires then merge duplicates that overlap in time and geometry (auto-backups first)"
+    )
+
+    parser.add_argument(
+        "--firms-merge-backup",
+        action="store_true",
+        help="Snapshot fire incidents and hotspot assignments to backup tables"
+    )
+
+    parser.add_argument(
+        "--firms-merge-restore",
+        action="store_true",
+        help="Restore fire incidents and hotspot assignments from the last backup"
+    )
+
+    parser.add_argument(
+        "--firms-workers",
+        type=int,
+        default=8,
+        metavar="N",
+        help="Number of parallel workers for --firms-recompute / --firms-merge (default: 8)"
     )
 
     parser.add_argument(
@@ -823,11 +861,50 @@ if __name__ == "__main__":
         import_firms_csv_files(args.firms_import)
         sys.exit(0)
 
-    if args.firms_merge:
-        from firmsCollector import merge_duplicate_fires
+    if args.rigs_import:
+        from rigsFetcher import import_all_facilities
+        import_all_facilities()
+        sys.exit(0)
+
+    if args.classify_fires:
+        from rigsFetcher import classify_all_fires
+        classify_all_fires()
+        sys.exit(0)
+
+    if args.firms_recompute:
+        from firmsCollector import recompute_all_fire_perimeters
+        recompute_all_fire_perimeters(max_workers=args.firms_workers)
+        sys.exit(0)
+
+    if args.firms_merge_backup:
+        from firmsCollector import backup_fires_for_merge
         session = __import__('migrate').SessionLocal()
         try:
-            merge_duplicate_fires(session)
+            backup_fires_for_merge(session)
+        finally:
+            session.close()
+        sys.exit(0)
+
+    if args.firms_merge_restore:
+        from firmsCollector import restore_fires_from_backup
+        session = __import__('migrate').SessionLocal()
+        try:
+            restore_fires_from_backup(session)
+        finally:
+            session.close()
+        sys.exit(0)
+
+    if args.firms_merge:
+        from firmsCollector import backup_fires_for_merge, recompute_all_fire_perimeters, merge_duplicate_fires
+        session = __import__('migrate').SessionLocal()
+        try:
+            backup_fires_for_merge(session)
+        finally:
+            session.close()
+        recompute_all_fire_perimeters(max_workers=args.firms_workers)
+        session = __import__('migrate').SessionLocal()
+        try:
+            merge_duplicate_fires(session, max_workers=args.firms_workers)
         finally:
             session.close()
         sys.exit(0)
