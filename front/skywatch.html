@@ -1036,14 +1036,37 @@ function showFirePopup(fd, pixel){
 
   const frpStr = fd.max_frp!=null ? fd.max_frp.toFixed(0)+' MW' : '--';
   const areaStr= fd.area_ha!=null ? fd.area_ha.toLocaleString()+' ha' : '--';
+  const typeLabel = fd.fire_type==='industrial'
+    ? '<span style="color:#b060e0;">&#9670; Industrial</span>'
+    : '<span style="color:#ff8040;">&#9670; Natural</span>';
   const meta=document.createElement('div');
   meta.className='fire-popup-meta';
   meta.innerHTML=
+    `<span>Type</span><span>${typeLabel}</span>`+
     `<span>Period</span><span>${fd.first_detected} → ${fd.last_detected}</span>`+
     `<span>Area</span><span>${areaStr}</span>`+
     `<span>Max FRP</span><span>${frpStr}</span>`+
     `<span>Hotspots</span><span>${fd.hotspot_count||'--'}</span>`;
   popup.appendChild(meta);
+
+  if(fd.fire_type==='industrial' && fd.nearest_facility){
+    const fac=fd.nearest_facility;
+    const facDiv=document.createElement('div');
+    facDiv.style.cssText='border-top:1px solid var(--panel-border);padding-top:6px;margin-bottom:6px;';
+    const facLabel=document.createElement('div');
+    facLabel.style.cssText="font-family:'Share Tech Mono',monospace;font-size:10px;color:#b060e0;letter-spacing:1px;margin-bottom:4px;";
+    facLabel.textContent='NEAREST FACILITY';
+    const facMeta=document.createElement('div');
+    facMeta.className='fire-popup-meta';
+    facMeta.innerHTML=
+      `<span>Name</span><span>${fac.name||'--'}</span>`+
+      `<span>Operator</span><span>${fac.operator||'--'}</span>`+
+      `<span>Type</span><span>${fac.type||'--'}</span>`+
+      `<span>Country</span><span>${fac.country||'--'}</span>`;
+    facDiv.appendChild(facLabel);
+    facDiv.appendChild(facMeta);
+    popup.appendChild(facDiv);
+  }
 
   const acSection=document.createElement('div');
   acSection.style.cssText='border-top:1px solid var(--panel-border);padding-top:6px;';

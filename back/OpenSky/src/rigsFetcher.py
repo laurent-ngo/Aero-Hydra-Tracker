@@ -144,9 +144,9 @@ def fetch_osm_region(session, region_name, bbox_str):
     for attempt in range(3):
         try:
             r = requests.post(url, data={'data': query}, headers=headers, timeout=180)
-            if r.status_code == 429:
-                wait = 60 * (attempt + 1)
-                logger.warning(f'RIGS: OSM {region_name} rate-limited, retrying in {wait}s …')
+            if r.status_code in (429, 504):
+                wait = 90 * (attempt + 1)
+                logger.warning(f'RIGS: OSM {region_name} got {r.status_code}, retrying in {wait}s …')
                 time.sleep(wait)
                 continue
             if not r.ok:
