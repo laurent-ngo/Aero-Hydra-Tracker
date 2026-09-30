@@ -4,7 +4,7 @@ import argparse
 import sys
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 from migrate import SessionLocal
@@ -199,8 +199,18 @@ def update_fr24_cache(icao_filter=None, hours=3, dt_from_override=None, dt_to_ov
         except Exception:
             pass
 
-    # 1. Get all flight legs in the window
-    summaries = fr24.get_flight_summaries(all_reg_to_icao, dt_from, dt_to)
+    # 1. Get all flight legs in the window, chunked to 7 days (FR24 API limit)
+    FR24_MAX_WINDOW_DAYS = 7
+    _dt_from = datetime.strptime(dt_from, '%Y-%m-%dT%H:%M:%SZ')
+    _dt_to   = datetime.strptime(dt_to,   '%Y-%m-%dT%H:%M:%SZ')
+    summaries = []
+    chunk_start = _dt_from
+    while chunk_start < _dt_to:
+        chunk_end = min(chunk_start + timedelta(days=FR24_MAX_WINDOW_DAYS), _dt_to)
+        chunk_from = chunk_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+        chunk_to   = chunk_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+        summaries.extend(fr24.get_flight_summaries(all_reg_to_icao, chunk_from, chunk_to))
+        chunk_start = chunk_end
 
     # Merge in ongoing legs from previous cache not already covered by summaries
     summary_fr24_ids = {e['fr24_id'] for e in summaries if e.get('fr24_id')}
