@@ -60,6 +60,16 @@ logger.info(f"{len(providers)} elevation tile(s) ready")
 _pending: set[str] = set()
 _pending_lock = threading.Lock()
 
+# Tiles confirmed to have no COP30 data (ocean) → return elevation 0
+_sea_level: set[str] = set()
+_sea_level_lock = threading.Lock()
+
+# Load sea-level tiles from existing .nodata sentinels on startup
+for _nd in glob.glob(os.path.join(DATA_DIR, "*.nodata")):
+    _sea_level.add(os.path.basename(_nd)[:-len(".nodata")])
+if _sea_level:
+    logger.info(f"{len(_sea_level)} sea-level tile(s) loaded from sentinels")
+
 
 # ── COP30 tile helpers ────────────────────────────────────────────────────────
 def _cop30_filename(lat: float, lon: float) -> str:
@@ -75,6 +85,17 @@ def _tile_exists_locally(filename: str) -> bool:
     return os.path.isfile(os.path.join(DATA_DIR, filename))
 
 
+def _bounds_from_cop30_name(filename: str) -> Optional[dict]:
+    """Parse lat/lon bounds from a COP30 filename, e.g. Copernicus_DSM_10_N43_00_E004_00_DEM.tif"""
+    import re
+    m = re.search(r'([NS])(\d+)_00_([EW])(\d+)_00_DEM', filename)
+    if not m:
+        return None
+    lat = int(m.group(2)) * (1 if m.group(1) == 'N' else -1)
+    lon = int(m.group(4)) * (1 if m.group(3) == 'E' else -1)
+    return {"south": lat, "north": lat + 1, "west": lon, "east": lon + 1}
+
+
 async def _download_tile(filename: str) -> None:
     """Download a COP30 tile and register it with the running providers list."""
     url = f"{COP30_BASE}/{filename}"
@@ -85,9 +106,10 @@ async def _download_tile(filename: str) -> None:
         async with httpx.AsyncClient(timeout=300) as client:
             async with client.stream("GET", url) as r:
                 if r.status_code == 404:
-                    logger.warning(f"TILE: {filename} not found in COP30 (ocean / no data)")
-                    # Write a sentinel so we don't retry forever
+                    logger.warning(f"TILE: {filename} not found in COP30 — marking as sea level")
                     open(dest + ".nodata", "w").close()
+                    with _sea_level_lock:
+                        _sea_level.add(filename)
                     return
                 r.raise_for_status()
                 with open(tmp, "wb") as f:
@@ -110,6 +132,9 @@ async def _download_tile(filename: str) -> None:
 
 def _schedule_download(filename: str) -> None:
     """Fire-and-forget: queue a tile download if not already pending/done."""
+    with _sea_level_lock:
+        if filename in _sea_level:
+            return
     nodata_sentinel = os.path.join(DATA_DIR, filename + ".nodata")
     if _tile_exists_locally(filename) or os.path.exists(nodata_sentinel):
         return
@@ -133,6 +158,9 @@ def _query(lat: float, lon: float) -> Optional[float]:
             elev = p.get_elevation(lat, lon)
             if elev is not None:
                 return elev
+    with _sea_level_lock:
+        if _cop30_filename(lat, lon) in _sea_level:
+            return 0.0
     return None
 
 
@@ -188,7 +216,7 @@ def health():
 # ── Tiles list (for monitor UI) ───────────────────────────────────────────────
 @app.get("/tiles")
 def tiles():
-    with _providers_lock, _pending_lock:
+    with _providers_lock, _pending_lock, _sea_level_lock:
         loaded = [
             {
                 "name": os.path.basename(p.file_path),
@@ -203,7 +231,11 @@ def tiles():
             for p in providers
         ]
         pending = [{"name": name, "status": "downloading"} for name in _pending]
-    return {"tiles": loaded + pending}
+        sea = [
+            {"name": name, "bounds": _bounds_from_cop30_name(name), "status": "sea_level"}
+            for name in _sea_level
+        ]
+    return {"tiles": loaded + pending + sea}
 
 
 # ── Monitor UI ────────────────────────────────────────────────────────────────
@@ -224,6 +256,7 @@ _MONITOR_HTML = """<!doctype html>
   .pill{font-size:.75rem;padding:2px 8px;border-radius:999px;background:#2a2a4a}
   .pill.loaded{border:1px solid #4ade80;color:#4ade80}
   .pill.downloading{border:1px solid #facc15;color:#facc15;animation:pulse 1s infinite}
+  .pill.sea_level{border:1px solid #38bdf8;color:#38bdf8}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   #map{flex:1}
   .leaflet-container{background:#0d1b2a}
@@ -238,6 +271,7 @@ _MONITOR_HTML = """<!doctype html>
   .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
   .dot.loaded{background:#4ade80}
   .dot.downloading{background:#facc15;animation:pulse 1s infinite}
+  .dot.sea_level{background:#38bdf8}
   .tile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #status{font-size:.7rem;color:#888;margin-top:6px;text-align:right}
 </style>
@@ -247,6 +281,7 @@ _MONITOR_HTML = """<!doctype html>
   <h1>Elevation Tile Monitor</h1>
   <span class="pill loaded" id="cnt-loaded">— loaded</span>
   <span class="pill downloading" id="cnt-dl" style="display:none">— downloading</span>
+  <span class="pill sea_level" id="cnt-sl" style="display:none">— sea level</span>
 </header>
 <div id="map"></div>
 <div id="sidebar">
@@ -319,9 +354,9 @@ fetch('https://unpkg.com/world-atlas@2/countries-110m.json')
 const layers = {};
 
 function styleFor(status){
-  return status==='loaded'
-    ? {color:'#4ade80',fillColor:'#4ade80',fillOpacity:.15,weight:1}
-    : {color:'#facc15',fillColor:'#facc15',fillOpacity:.25,weight:1.5,dashArray:'4 4'};
+  if(status==='loaded')    return {color:'#4ade80',fillColor:'#4ade80',fillOpacity:.15,weight:1};
+  if(status==='sea_level') return {color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:.12,weight:0.6};
+  return {color:'#facc15',fillColor:'#facc15',fillOpacity:.25,weight:1.5,dashArray:'4 4'};
 }
 
 async function refresh(){
@@ -352,10 +387,14 @@ async function refresh(){
 
     const loaded = tiles.filter(t=>t.status==='loaded').length;
     const dl     = tiles.filter(t=>t.status==='downloading').length;
+    const sl     = tiles.filter(t=>t.status==='sea_level').length;
     document.getElementById('cnt-loaded').textContent = loaded+' loaded';
     const dlPill = document.getElementById('cnt-dl');
     if(dl>0){ dlPill.style.display=''; dlPill.textContent=dl+' downloading'; }
     else { dlPill.style.display='none'; }
+    const slPill = document.getElementById('cnt-sl');
+    if(sl>0){ slPill.style.display=''; slPill.textContent=sl+' sea level'; }
+    else { slPill.style.display='none'; }
 
     const list = document.getElementById('tile-list');
     list.innerHTML = tiles.map(t=>
