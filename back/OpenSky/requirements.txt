@@ -5,6 +5,7 @@ psycopg2-binary
 pydantic
 typing_extensions
 requests
+httpx
 numpy
 scikit-learn
 scipy
