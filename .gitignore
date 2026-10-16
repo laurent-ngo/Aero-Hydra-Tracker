@@ -46,6 +46,7 @@ back/OpenSky/logs/*
 back/OpenSky/src/migrate.py
 *.sql
 *.tif
+*.tif.*
 *.tar
 back/OpenSky/src/tracked_icao_cache.json
 aero-hydra-ui/src/theme.js
