@@ -215,6 +215,7 @@ _MONITOR_HTML = """<!doctype html>
 <title>Elevation Tile Monitor</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/topojson-client@3/dist/topojson-client.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;height:100vh}
@@ -225,6 +226,9 @@ _MONITOR_HTML = """<!doctype html>
   .pill.downloading{border:1px solid #facc15;color:#facc15;animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   #map{flex:1}
+  .leaflet-container{background:#0d1b2a}
+  .country-label{background:none;border:none;box-shadow:none;color:#6b8fa8;font-size:9px;
+                 white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #0d1b2a}
   #sidebar{position:absolute;top:56px;right:8px;z-index:1000;width:260px;max-height:calc(100vh - 70px);
            overflow-y:auto;background:#1a1a2ecc;backdrop-filter:blur(4px);
            border:1px solid #333;border-radius:6px;padding:8px;font-size:.72rem}
@@ -252,9 +256,65 @@ _MONITOR_HTML = """<!doctype html>
 </div>
 <script>
 const map = L.map('map',{center:[20,10],zoom:2,zoomControl:true});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-  attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:19
-}).addTo(map);
+
+// ISO numeric → [name, lat, lon]
+const COUNTRY_LABELS = {
+  '8':[43.5,20.2,'Albania'],'12':[28.0,2.6,'Algeria'],'36':[-25.3,133.8,'Australia'],
+  '40':[47.5,14.5,'Austria'],'56':[50.6,4.5,'Belgium'],'64':[27.5,90.4,'Bhutan'],
+  '68':[-16.3,-63.6,'Bolivia'],'76':[-14.2,-51.9,'Brazil'],'100':[42.7,25.5,'Bulgaria'],
+  '116':[12.6,104.9,'Cambodia'],'120':[5.7,12.3,'Cameroon'],'124':[56.1,-106.3,'Canada'],
+  '140':[6.6,20.9,'C.A.R.'],'144':[7.9,80.8,'Sri Lanka'],'152':[-35.7,-71.5,'Chile'],
+  '156':[35.9,104.2,'China'],'170':[4.1,-72.3,'Colombia'],'191':[45.1,15.2,'Croatia'],
+  '196':[35.1,33.4,'Cyprus'],'203':[49.8,15.5,'Czechia'],'208':[56.3,9.5,'Denmark'],
+  '818':[26.8,30.8,'Egypt'],'233':[58.6,25.0,'Estonia'],'231':[9.1,40.5,'Ethiopia'],
+  '246':[64.0,26.0,'Finland'],'250':[46.2,2.2,'France'],'276':[51.2,10.4,'Germany'],
+  '288':[7.9,-1.0,'Ghana'],'300':[39.1,22.0,'Greece'],'320':[15.8,-90.2,'Guatemala'],
+  '191':[45.1,15.2,'Croatia'],'191':[45.1,15.2,'Croatia'],
+  '348':[47.2,19.5,'Hungary'],'356':[20.6,78.9,'India'],'360':[-0.8,113.9,'Indonesia'],
+  '364':[32.4,53.7,'Iran'],'368':[33.2,43.7,'Iraq'],'372':[53.1,-8.2,'Ireland'],
+  '376':[31.1,34.9,'Israel'],'380':[42.8,12.6,'Italy'],'392':[36.2,138.3,'Japan'],
+  '400':[31.2,36.5,'Jordan'],'398':[48.0,66.9,'Kazakhstan'],'404':[-0.0,37.9,'Kenya'],
+  '410':[36.6,127.9,'South Korea'],'414':[29.3,47.5,'Kuwait'],'422':[33.9,35.5,'Lebanon'],
+  '434':[27.0,17.2,'Libya'],'440':[55.9,23.9,'Lithuania'],'442':[49.8,6.1,'Luxembourg'],
+  '450':[-20.3,46.9,'Madagascar'],'484':[23.6,-102.5,'Mexico'],'504':[31.8,-7.1,'Morocco'],
+  '528':[52.3,5.3,'Netherlands'],'554':[-40.9,174.9,'New Zealand'],
+  '566':[9.1,8.7,'Nigeria'],'578':[60.5,8.5,'Norway'],'512':[21.5,55.9,'Oman'],
+  '586':[30.4,69.3,'Pakistan'],'275':[31.9,35.2,'Palestine'],'591':[8.5,-80.8,'Panama'],
+  '604':[-9.2,-75.0,'Peru'],'608':[12.9,121.8,'Philippines'],'616':[52.1,19.1,'Poland'],
+  '620':[39.4,-8.2,'Portugal'],'634':[25.4,51.2,'Qatar'],'642':[45.9,24.9,'Romania'],
+  '643':[61.5,105.3,'Russia'],'682':[24.2,45.1,'Saudi Arabia'],'686':[14.5,-14.5,'Senegal'],
+  '694':[8.5,-11.8,'Sierra Leone'],'703':[48.7,19.7,'Slovakia'],'705':[46.2,14.8,'Slovenia'],
+  '706':[6.0,46.2,'Somalia'],'710':[-30.6,22.9,'South Africa'],'724':[40.5,-3.7,'Spain'],
+  '729':[15.6,32.5,'Sudan'],'752':[60.1,18.6,'Sweden'],'756':[47.0,8.2,'Switzerland'],
+  '760':[34.8,38.9,'Syria'],'762':[38.9,71.3,'Tajikistan'],'764':[15.9,100.9,'Thailand'],
+  '788':[34.0,9.0,'Tunisia'],'792':[38.9,35.2,'Turkey'],'800':[1.4,32.3,'Uganda'],
+  '804':[49.0,31.4,'Ukraine'],'784':[24.0,54.0,'UAE'],'826':[55.4,-3.4,'UK'],
+  '840':[37.1,-95.7,'USA'],'858':[-32.5,-55.8,'Uruguay'],'860':[41.4,64.6,'Uzbekistan'],
+  '862':[6.4,-66.6,'Venezuela'],'704':[14.1,108.3,'Vietnam'],
+  '887':[15.9,47.6,'Yemen'],'894':[-14.1,27.9,'Zambia'],'716':[-20.0,30.0,'Zimbabwe'],
+  '262':[11.8,42.6,'Djibouti'],'450':[-20.3,46.9,'Madagascar'],
+  '462':[3.2,73.2,'Maldives'],'480':[-20.3,57.6,'Mauritius'],
+};
+
+fetch('https://unpkg.com/world-atlas@2/countries-110m.json')
+  .then(r=>r.json())
+  .then(world=>{
+    const countries = topojson.feature(world, world.objects.countries);
+    L.geoJSON(countries,{
+      style:{color:'#2a3f55',weight:0.7,fillColor:'#152030',fillOpacity:1}
+    }).addTo(map);
+
+    // Add country name labels
+    countries.features.forEach(f=>{
+      const info = COUNTRY_LABELS[f.id];
+      if(!info) return;
+      const [lat,lon,name] = info;
+      L.marker([lat,lon],{
+        icon:L.divIcon({className:'country-label',html:name,iconAnchor:[0,0]}),
+        interactive:false,keyboard:false
+      }).addTo(map);
+    });
+  });
 
 const layers = {};
 
