@@ -183,3 +183,143 @@ def health():
     with _pending_lock:
         pending = list(_pending)
     return {"status": "ok", "tiles_loaded": len(providers), "tiles_downloading": pending}
+
+
+# ── Tiles list (for monitor UI) ───────────────────────────────────────────────
+@app.get("/tiles")
+def tiles():
+    with _providers_lock, _pending_lock:
+        loaded = [
+            {
+                "name": os.path.basename(p.file_path),
+                "bounds": {
+                    "west":  round(p.bounds.left,  4),
+                    "south": round(p.bounds.bottom, 4),
+                    "east":  round(p.bounds.right,  4),
+                    "north": round(p.bounds.top,    4),
+                },
+                "status": "loaded",
+            }
+            for p in providers
+        ]
+        pending = [{"name": name, "status": "downloading"} for name in _pending]
+    return {"tiles": loaded + pending}
+
+
+# ── Monitor UI ────────────────────────────────────────────────────────────────
+_MONITOR_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elevation Tile Monitor</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;height:100vh}
+  header{padding:10px 16px;background:#1a1a2e;display:flex;align-items:center;gap:16px;flex-shrink:0}
+  header h1{font-size:1rem;font-weight:600;letter-spacing:.05em}
+  .pill{font-size:.75rem;padding:2px 8px;border-radius:999px;background:#2a2a4a}
+  .pill.loaded{border:1px solid #4ade80;color:#4ade80}
+  .pill.downloading{border:1px solid #facc15;color:#facc15;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  #map{flex:1}
+  #sidebar{position:absolute;top:56px;right:8px;z-index:1000;width:260px;max-height:calc(100vh - 70px);
+           overflow-y:auto;background:#1a1a2ecc;backdrop-filter:blur(4px);
+           border:1px solid #333;border-radius:6px;padding:8px;font-size:.72rem}
+  #sidebar h2{font-size:.75rem;font-weight:600;margin-bottom:6px;color:#aaa;letter-spacing:.08em}
+  .tile-row{padding:3px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;display:flex;gap:6px;align-items:center}
+  .tile-row:hover{background:#ffffff18}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .dot.loaded{background:#4ade80}
+  .dot.downloading{background:#facc15;animation:pulse 1s infinite}
+  .tile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #status{font-size:.7rem;color:#888;margin-top:6px;text-align:right}
+</style>
+</head>
+<body>
+<header>
+  <h1>Elevation Tile Monitor</h1>
+  <span class="pill loaded" id="cnt-loaded">— loaded</span>
+  <span class="pill downloading" id="cnt-dl" style="display:none">— downloading</span>
+</header>
+<div id="map"></div>
+<div id="sidebar">
+  <h2>TILES</h2>
+  <div id="tile-list"></div>
+  <div id="status">refreshing…</div>
+</div>
+<script>
+const map = L.map('map',{center:[20,10],zoom:2,zoomControl:true});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:19
+}).addTo(map);
+
+const layers = {};
+
+function styleFor(status){
+  return status==='loaded'
+    ? {color:'#4ade80',fillColor:'#4ade80',fillOpacity:.15,weight:1}
+    : {color:'#facc15',fillColor:'#facc15',fillOpacity:.25,weight:1.5,dashArray:'4 4'};
+}
+
+async function refresh(){
+  try{
+    const r = await fetch('/tiles');
+    const {tiles} = await r.json();
+
+    const seen = new Set();
+    tiles.forEach(t=>{
+      seen.add(t.name);
+      if(!t.bounds) return;
+      const b = t.bounds;
+      const bounds = [[b.south,b.west],[b.north,b.east]];
+      if(layers[t.name]){
+        layers[t.name].setStyle(styleFor(t.status));
+      } else {
+        const rect = L.rectangle(bounds, styleFor(t.status))
+          .bindTooltip(t.name,{sticky:true})
+          .addTo(map);
+        layers[t.name] = rect;
+      }
+    });
+
+    // remove tiles no longer in list
+    Object.keys(layers).forEach(name=>{
+      if(!seen.has(name)){ map.removeLayer(layers[name]); delete layers[name]; }
+    });
+
+    const loaded = tiles.filter(t=>t.status==='loaded').length;
+    const dl     = tiles.filter(t=>t.status==='downloading').length;
+    document.getElementById('cnt-loaded').textContent = loaded+' loaded';
+    const dlPill = document.getElementById('cnt-dl');
+    if(dl>0){ dlPill.style.display=''; dlPill.textContent=dl+' downloading'; }
+    else { dlPill.style.display='none'; }
+
+    const list = document.getElementById('tile-list');
+    list.innerHTML = tiles.map(t=>
+      `<div class="tile-row" title="${t.name}">
+        <div class="dot ${t.status}"></div>
+        <span class="tile-name">${t.name}</span>
+       </div>`
+    ).join('');
+
+    document.getElementById('status').textContent =
+      'updated '+new Date().toLocaleTimeString();
+  } catch(e){
+    document.getElementById('status').textContent = 'error: '+e.message;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>"""
+
+
+@app.get("/monitor", response_class=None)
+async def monitor():
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(_MONITOR_HTML)
