@@ -130,9 +130,7 @@ def backfill_agl():
             resp.raise_for_status()
             elevations = resp.json()   # list of {lat, lon, elevation_m, elevation_ft}
         except Exception as e:
-            logger.error(f"Elevation API batch failed: {e} — marking batch as sentinel")
-            for p in batch:
-                p.altitude_agl_ft = 60000
+            logger.error(f"Elevation API batch failed: {e} — will retry on next run")
             continue
 
         for p, elev in zip(batch, elevations):
@@ -140,10 +138,6 @@ def backfill_agl():
             if ground_m is not None:
                 agl_m = max(0, p.baro_altitude - ground_m)
                 p.altitude_agl_ft = round(agl_m * 3.28084, 0)
-            else:
-                # Outside tile coverage — use sentinel so it can be reprocessed
-                # if tiles are added later
-                p.altitude_agl_ft = 60000
 
         logger.debug(f"AGL batch {batch_start}–{batch_start + len(batch)} done")
 
