@@ -262,18 +262,7 @@ _MONITOR_HTML = """<!doctype html>
   .leaflet-container{background:#0d1b2a}
   .country-label{background:none;border:none;box-shadow:none;color:#6b8fa8;font-size:9px;
                  white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #0d1b2a}
-  #sidebar{position:absolute;top:56px;right:8px;z-index:1000;width:260px;max-height:calc(100vh - 70px);
-           overflow-y:auto;background:#1a1a2ecc;backdrop-filter:blur(4px);
-           border:1px solid #333;border-radius:6px;padding:8px;font-size:.72rem}
-  #sidebar h2{font-size:.75rem;font-weight:600;margin-bottom:6px;color:#aaa;letter-spacing:.08em}
-  .tile-row{padding:3px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;display:flex;gap:6px;align-items:center}
-  .tile-row:hover{background:#ffffff18}
-  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-  .dot.loaded{background:#4ade80}
-  .dot.downloading{background:#facc15;animation:pulse 1s infinite}
-  .dot.sea_level{background:#38bdf8}
-  .tile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #status{font-size:.7rem;color:#888;margin-top:6px;text-align:right}
+  #status{font-size:.7rem;color:#888;padding:4px 16px;text-align:right}
 </style>
 </head>
 <body>
@@ -284,11 +273,7 @@ _MONITOR_HTML = """<!doctype html>
   <span class="pill sea_level" id="cnt-sl" style="display:none">— sea level</span>
 </header>
 <div id="map"></div>
-<div id="sidebar">
-  <h2>TILES</h2>
-  <div id="tile-list"></div>
-  <div id="status">refreshing…</div>
-</div>
+<div id="status">refreshing…</div>
 <script>
 const map = L.map('map',{center:[20,10],zoom:2,zoomControl:true});
 
@@ -401,14 +386,6 @@ async function refresh(){
     const slPill = document.getElementById('cnt-sl');
     if(sl>0){ slPill.style.display=''; slPill.textContent=sl+' sea level'; }
     else { slPill.style.display='none'; }
-
-    const list = document.getElementById('tile-list');
-    list.innerHTML = tiles.map(t=>
-      `<div class="tile-row" title="${t.name}">
-        <div class="dot ${t.status}"></div>
-        <span class="tile-name">${t.name}</span>
-       </div>`
-    ).join('');
 
     document.getElementById('status').textContent =
       'updated '+new Date().toLocaleTimeString();
