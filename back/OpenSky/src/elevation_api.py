@@ -331,11 +331,17 @@ const COUNTRY_LABELS = {
   '462':[3.2,73.2,'Maldives'],'480':[-20.3,57.6,'Mauritius'],
 };
 
+// Countries go in a pane below the overlay pane so tile rectangles always appear on top
+map.createPane('countries');
+map.getPane('countries').style.zIndex = 250;
+map.getPane('countries').style.pointerEvents = 'none';
+
 fetch('https://unpkg.com/world-atlas@2/countries-110m.json')
   .then(r=>r.json())
   .then(world=>{
     const countries = topojson.feature(world, world.objects.countries);
     L.geoJSON(countries,{
+      pane:'countries',
       style:{color:'#2a3f55',weight:0.7,fillColor:'#152030',fillOpacity:1}
     }).addTo(map);
 
