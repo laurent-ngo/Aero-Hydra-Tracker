@@ -399,14 +399,16 @@ def discover_new_aircraft():
     Scan for firefighting aircraft not yet in the DB using free ADSB sources.
     Returns list of newly discovered aircraft dicts.
     """
-    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'A139', 'EC45', 'S64', 'B214', 'T710',
-                        'AS33', 'AS32', 'EC25' ]
+    SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'EC45', 'S64', 'B214', 'T710',
+                        'AS33', 'AS32', 'EC25',
+                        'DH8A', 'DH8B', 'DH8C', 'DH8D' ]
     SCAN_KEYWORDS = [
         'canadair', 'bombardier 415', 'superscooper', 'air tractor',
-        'dhc-515', 'cl-215', 'cl-415', 'Leonardo AW139', 'Airbus Helicopters H145',
+        'dhc-515', 'cl-215', 'cl-415', 'Airbus Helicopters H145',
         'Airbus Helicopters H125', 'Erickson S-64F Skycrane', 'BELL 214',
         'Thrush 710', 'S2R-T710',
         'super puma', 'AS332', 'AS332L', 'EC225', 'H215', 'H225',
+        'dash 8', 'dhc-8',
     ]
     SCAN_RADIUS_NM  = 250
 
@@ -416,6 +418,8 @@ def discover_new_aircraft():
         (40.0,       -2.0),       # Spain
         (39.3,       22.7),       # Greece
         (38.3,       29.8),       # Turkey
+        (-33.0,      149.0),      # SE Australia (VIC, NSW, ACT, eastern SA)
+        (-25.0,      122.0),      # W Australia (WA, NT, QLD)
     ]
 
     blacklist = get_cached_icao_list() or []
