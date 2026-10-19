@@ -400,15 +400,13 @@ def discover_new_aircraft():
     Returns list of newly discovered aircraft dicts.
     """
     SCAN_TYPE_CODES = [ 'CL2P', 'CL2T', 'AT8T', 'EC45', 'S64', 'B214', 'T710',
-                        'AS33', 'AS32', 'EC25',
-                        'DH8A', 'DH8B', 'DH8C', 'DH8D' ]
+                        'AS33', 'AS32', 'EC25' ]
     SCAN_KEYWORDS = [
         'canadair', 'bombardier 415', 'superscooper', 'air tractor',
         'dhc-515', 'cl-215', 'cl-415', 'Airbus Helicopters H145',
         'Airbus Helicopters H125', 'Erickson S-64F Skycrane', 'BELL 214',
         'Thrush 710', 'S2R-T710',
         'super puma', 'AS332', 'AS332L', 'EC225', 'H215', 'H225',
-        'dash 8', 'dhc-8',
     ]
     SCAN_RADIUS_NM  = 250
 
